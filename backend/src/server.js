@@ -9,8 +9,44 @@ dotenv.config();
 connectDB();
 
 const app = express();
+
+// Debug middleware BEFORE body parsing
+app.use((req, res, next) => {
+  if (req.method === "POST" || req.method === "PUT") {
+    console.log("\n=== INCOMING REQUEST ===");
+    console.log(`${req.method} ${req.path}`);
+    console.log("Content-Type:", req.headers["content-type"]);
+    console.log("All headers:", JSON.stringify(req.headers, null, 2));
+  }
+  next();
+});
+
+// Middleware - order matters!
 app.use(cors());
-app.use(express.json());
+
+// Body parsing middleware with error handling
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Debug middleware AFTER body parsing
+app.use((req, res, next) => {
+  if (req.method === "POST" || req.method === "PUT") {
+    console.log("Body after parsing:", req.body);
+    console.log("Body type:", typeof req.body);
+    console.log("Body is object:", typeof req.body === "object");
+    console.log("===================\n");
+  }
+  next();
+});
+
+// Test endpoint to verify body parsing
+app.post("/test-body", (req, res) => {
+  res.json({
+    body: req.body,
+    bodyExists: !!req.body,
+    contentType: req.headers["content-type"],
+  });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/layouts", layoutRoutes);

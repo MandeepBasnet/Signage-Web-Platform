@@ -15,9 +15,9 @@
     "express",
     "mongodb"
   ],
-  "author": "Your Name",
+  "author": "Mandeep Basnet",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "axios": "^1.6.7",
     "bcryptjs": "^3.0.3",
