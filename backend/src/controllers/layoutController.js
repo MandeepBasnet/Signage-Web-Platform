@@ -2,60 +2,115 @@ import { xiboRequest } from "../utils/xiboClient.js";
 
 export const getLayouts = async (req, res) => {
   try {
-    // Use the user's Xibo token from JWT to get their layouts
-    const userXiboToken = req.user?.xiboToken;
-    if (!userXiboToken) {
-      return res.status(401).json({
-        message: "User Xibo token not found. Please login again.",
-      });
-    }
-
-    // Get user ID from JWT token
+    const token = req.user?.xiboToken;
     const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({
-        message: "User ID not found in token. Please login again.",
+    const username = req.user?.username;
+
+    if (!token) {
+      return res
+        .status(401)
+        .json({ message: "User Xibo token not found. Please login again." });
+    }
+
+    if (!userId && !username) {
+      return res
+        .status(401)
+        .json({
+          message:
+            "User ID or username not found in token. Please login again.",
+        });
+    }
+
+    const normalizeLayouts = (response) => {
+      if (!response) return { layouts: [], total: undefined };
+      if (Array.isArray(response))
+        return { layouts: response, total: response.length };
+
+      const { data, recordsTotal, recordsFiltered } = response;
+      const total = recordsFiltered ?? recordsTotal;
+
+      if (Array.isArray(data)) return { layouts: data, total };
+      if (data?.data && Array.isArray(data.data)) {
+        return {
+          layouts: data.data,
+          total: data.recordsFiltered ?? data.recordsTotal ?? total,
+        };
+      }
+      if (data) return { layouts: [data], total: total ?? 1 };
+
+      return { layouts: [], total };
+    };
+
+    const pageSize = 100;
+    const maxPages = 50;
+    const collectedLayouts = [];
+    let start = 0;
+    let page = 0;
+    let totalAvailable;
+
+    while (page < maxPages) {
+      const params = new URLSearchParams({
+        start: String(start),
+        length: String(pageSize),
+        draw: String(page + 1),
+        "order[0][column]": "modifiedDt",
+        "order[0][dir]": "desc",
       });
+
+      if (userId) {
+        params.append("ownerId", userId);
+        params.append("userId", userId);
+      }
+
+      const { layouts, total } = normalizeLayouts(
+        await xiboRequest(`/layout?${params.toString()}`, "GET", null, token)
+      );
+
+      if (!layouts.length) break;
+
+      collectedLayouts.push(...layouts);
+      start += pageSize;
+      page += 1;
+      if (totalAvailable === undefined && total !== undefined)
+        totalAvailable = total;
+      if (total !== undefined && collectedLayouts.length >= total) break;
     }
 
-    // Fetch layouts from Xibo API
-    const data = await xiboRequest("/layout", "GET", null, userXiboToken);
+    const dedupedLayouts = Array.from(
+      collectedLayouts.reduce((acc, layout) => {
+        const id = layout?.layoutId ?? layout?.layout_id;
+        if (id !== undefined && !acc.has(id)) acc.set(id, layout);
+        return acc;
+      }, new Map())
+    ).map(([, layout]) => layout);
 
-    // Filter layouts to only return those owned by the logged-in user
-    // Handle different response formats from Xibo API
-    let layouts = [];
-    if (Array.isArray(data)) {
-      layouts = data;
-    } else if (data?.data && Array.isArray(data.data)) {
-      layouts = data.data;
-    } else if (data?.data) {
-      layouts = [data.data];
-    }
+    const lowerUsername = username?.toLowerCase();
+    const userLayouts = dedupedLayouts.filter((layout) => {
+      const ownerId = parseInt(layout.ownerId ?? layout.owner_id, 10);
+      if (Number.isInteger(ownerId) && ownerId === userId) return true;
 
-    // Filter by ownerId matching the user's ID
-    const userLayouts = layouts.filter((layout) => {
-      // Convert both to numbers for comparison (Xibo returns ownerId as number)
-      const layoutOwnerId = parseInt(layout.ownerId || layout.owner_id);
-      const userXiboId = parseInt(userId);
-      return layoutOwnerId === userXiboId;
+      if (layout.owner && lowerUsername) {
+        const owner = layout.owner.toLowerCase().trim();
+        return (
+          owner === lowerUsername ||
+          owner === lowerUsername.replace(/_/g, "-") ||
+          owner === lowerUsername.replace(/-/g, "_")
+        );
+      }
+
+      return false;
     });
 
-    // Return filtered layouts in the same format as received
-    if (Array.isArray(data)) {
-      res.json(userLayouts);
-    } else {
-      res.json({
-        ...data,
-        data: userLayouts,
-      });
-    }
+    res.json({ data: userLayouts, total: userLayouts.length });
   } catch (err) {
     console.error("Get layouts error:", err.message);
     if (err.response) {
-      return res.status(err.response.status || 500).json({
-        message: err.response.data?.message || "Failed to fetch layouts",
-        error: err.message,
-      });
+      return res
+        .status(err.response.status || 500)
+        .json({
+          message: err.response.data?.message || "Failed to fetch layouts",
+          error: err.message,
+        });
     }
     res.status(500).json({ message: err.message });
   }
