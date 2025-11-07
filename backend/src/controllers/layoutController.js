@@ -10,8 +10,45 @@ export const getLayouts = async (req, res) => {
       });
     }
 
+    // Get user ID from JWT token
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        message: "User ID not found in token. Please login again.",
+      });
+    }
+
+    // Fetch layouts from Xibo API
     const data = await xiboRequest("/layout", "GET", null, userXiboToken);
-    res.json(data);
+
+    // Filter layouts to only return those owned by the logged-in user
+    // Handle different response formats from Xibo API
+    let layouts = [];
+    if (Array.isArray(data)) {
+      layouts = data;
+    } else if (data?.data && Array.isArray(data.data)) {
+      layouts = data.data;
+    } else if (data?.data) {
+      layouts = [data.data];
+    }
+
+    // Filter by ownerId matching the user's ID
+    const userLayouts = layouts.filter((layout) => {
+      // Convert both to numbers for comparison (Xibo returns ownerId as number)
+      const layoutOwnerId = parseInt(layout.ownerId || layout.owner_id);
+      const userXiboId = parseInt(userId);
+      return layoutOwnerId === userXiboId;
+    });
+
+    // Return filtered layouts in the same format as received
+    if (Array.isArray(data)) {
+      res.json(userLayouts);
+    } else {
+      res.json({
+        ...data,
+        data: userLayouts,
+      });
+    }
   } catch (err) {
     console.error("Get layouts error:", err.message);
     if (err.response) {

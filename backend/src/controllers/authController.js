@@ -73,6 +73,7 @@ export const login = async (req, res) => {
       await saveLoginAttempt(loginAttemptData);
       return res.status(401).json({
         message: authResult.message || "Invalid credentials",
+        details: authResult.details || null,
       });
     }
 
