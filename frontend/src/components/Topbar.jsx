@@ -1,22 +1,11 @@
-/* eslint-disable no-unused-vars */
-import "../styles/TopBar.css";
-
-export default function TopBar({ currentPage }) {
+export default function Topbar({ currentPage }) {
   return (
-    <div className="topbar">
-      <h2 className="page-title">Dashboard</h2>
-
-      <div className="topbar-logo">
-        <img src="/logo.png" alt="sigma logo" />
+    <header className="w-full border-b bg-white">
+      <div className="mx-auto max-w-7xl px-4 py-3">
+        <h1 className="text-xl font-semibold capitalize">
+          {(currentPage || "dashboard").replace("-", " ")}
+        </h1>
       </div>
-
-      <div className="topbar-user-profile">
-        <div className="profile-avatar">M</div>
-        <div className="profile-info">
-          <p className="profile-name">mandeep_basnet</p>
-          <p className="profile-time">15:21 +0545</p>
-        </div>
-      </div>
-    </div>
+    </header>
   );
 }
