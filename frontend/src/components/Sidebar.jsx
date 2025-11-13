@@ -47,15 +47,6 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
           </div>
         ))}
       </nav>
-
-      {/* User Profile */}
-      <div className="sidebar-user">
-        <div className="user-avatar">M</div>
-        <div className="user-info">
-          <p className="user-name">mandeep_basnet</p>
-          <p className="user-email">mandeep@gmail...</p>
-        </div>
-      </div>
     </aside>
   );
 }

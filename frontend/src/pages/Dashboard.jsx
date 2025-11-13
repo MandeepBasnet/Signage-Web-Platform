@@ -9,7 +9,7 @@ import "../styles/Dashboard.css";
 import { clearAuth } from "../utils/auth.js";
 
 export default function Dashboard() {
-  const [currentPage, setCurrentPage] = useState("library-media");
+  const [currentPage, setCurrentPage] = useState("library-playlist");
   const navigate = useNavigate();
 
   const handleLogout = useCallback(() => {
@@ -23,16 +23,13 @@ export default function Dashboard() {
       <div className="dashboard-main">
         <Topbar currentPage={currentPage} onLogout={handleLogout} />
         <div className="dashboard-content">
+          {currentPage === "library-playlist" && <LibraryContent />}
           {currentPage === "library-media" && <LibraryContent />}
           {currentPage === "design-layout" && (
             <div className="page-placeholder">Design Layout Page</div>
-          )}
-          {currentPage === "library-playlist" && (
-            <div className="page-placeholder">Playlist Page</div>
           )}
         </div>
       </div>
     </div>
   );
 }
-("use client");

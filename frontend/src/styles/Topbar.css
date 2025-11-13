@@ -1,22 +1,18 @@
 .topbar {
-  background: #f9fafb;
+  background: #ffffff;
   padding: 20px 30px;
   border-bottom: 1px solid #e5e7eb;
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 20px;
+  min-height: 70px;
 }
 
-.page-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0;
-  min-width: 100px;
+.topbar-left {
+  flex: 1;
 }
 
-/* Added logo styling for center topbar logo */
 .topbar-logo {
   flex: 1;
   display: flex;
@@ -25,74 +21,53 @@
 }
 
 .topbar-logo img {
-  height: 28px;
+  height: 32px;
   object-fit: contain;
 }
 
-.topbar-user-profile {
+.topbar-right {
+  flex: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  padding: 8px 12px;
-  border-radius: 8px;
-  transition: background 0.2s;
+  justify-content: flex-end;
+  gap: 20px;
+}
+
+.user-greeting {
+  font-size: 14px;
+  color: #666;
+  font-weight: 500;
+}
+
+.logout-btn {
+  padding: 8px 16px;
   background: white;
   border: 1px solid #e5e7eb;
-}
-
-.topbar-user-profile:hover {
-  background: #f3f4f6;
-}
-
-.profile-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: #fbbf24;
-  color: #1a1a1a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.profile-info {
-  text-align: right;
-  min-width: 120px;
-}
-
-.profile-name {
+  border-radius: 6px;
+  cursor: pointer;
   font-size: 14px;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0;
+  font-weight: 500;
+  color: #666;
+  transition: all 0.2s;
 }
 
-.profile-time {
-  font-size: 12px;
-  color: #999;
-  margin: 2px 0 0;
+.logout-btn:hover {
+  background: #f9fafb;
+  border-color: #d1d5db;
 }
 
 @media (max-width: 768px) {
   .topbar {
     padding: 15px 20px;
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
+    gap: 10px;
   }
 
-  .page-title {
-    font-size: 20px;
+  .topbar-logo img {
+    height: 24px;
   }
 
-  .topbar-logo {
-    display: none;
-  }
-
-  .profile-info {
-    text-align: left;
+  .logout-btn {
+    padding: 6px 12px;
+    font-size: 12px;
   }
 }
