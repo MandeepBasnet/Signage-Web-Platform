@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/Login.css";
+import { clearAuth, saveAuth } from "../utils/auth.js";
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -13,35 +17,75 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
 
+  const loginBody = useMemo(
+    () => ({
+      username: username.trim(),
+      password,
+    }),
+    [username, password]
+  );
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!loginBody.username) {
+      setError("Please enter your username or email.");
+      return;
+    }
+
+    if (!loginBody.password) {
+      setError("Please enter your password.");
+      return;
+    }
+
     setLoading(true);
 
-    // Simulate validation
-    if (!username) {
-      setError("Username not found");
-      setLoading(false);
-      return;
-    }
+    try {
+      clearAuth();
 
-    if (!password) {
-      setError("Please enter your password");
-      setLoading(false);
-      return;
-    }
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(loginBody),
+      });
 
-    // Simulate login delay
-    setTimeout(() => {
-      setLoading(false);
-      // Navigate to dashboard
-      try {
-        localStorage.setItem("auth", "1");
-      } catch (e) {
-        void e;
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const message =
+          data?.message ||
+          (response.status === 401
+            ? "Invalid username or password."
+            : "Unable to login. Please try again.");
+        throw new Error(message);
       }
-      navigate("/dashboard");
-    }, 1500);
+
+      if (!data?.token) {
+        throw new Error("Login succeeded but no token was returned.");
+      }
+
+      saveAuth(data.token, data.user ?? null);
+
+      if (!rememberMe) {
+        // If remember me is not selected, store a marker to clear on unload
+        window.addEventListener(
+          "beforeunload",
+          () => {
+            clearAuth();
+          },
+          { once: true }
+        );
+      }
+
+      navigate("/dashboard", { replace: true });
+    } catch (err) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
