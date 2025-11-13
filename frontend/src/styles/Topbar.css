@@ -1,0 +1,98 @@
+.topbar {
+  background: #f9fafb;
+  padding: 20px 30px;
+  border-bottom: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  min-width: 100px;
+}
+
+/* Added logo styling for center topbar logo */
+.topbar-logo {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.topbar-logo img {
+  height: 28px;
+  object-fit: contain;
+}
+
+.topbar-user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  background: white;
+  border: 1px solid #e5e7eb;
+}
+
+.topbar-user-profile:hover {
+  background: #f3f4f6;
+}
+
+.profile-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #fbbf24;
+  color: #1a1a1a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.profile-info {
+  text-align: right;
+  min-width: 120px;
+}
+
+.profile-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+}
+
+.profile-time {
+  font-size: 12px;
+  color: #999;
+  margin: 2px 0 0;
+}
+
+@media (max-width: 768px) {
+  .topbar {
+    padding: 15px 20px;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .page-title {
+    font-size: 20px;
+  }
+
+  .topbar-logo {
+    display: none;
+  }
+
+  .profile-info {
+    text-align: left;
+  }
+}
