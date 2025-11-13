@@ -5,7 +5,7 @@ export default function Topbar({ currentPage, onLogout }) {
   const title = (currentPage || "dashboard").replace("-", " ");
 
   return (
-    <header className="w-full border-b bg-white">
+    <header className="w-full border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3">
         <h1 className="text-xl font-semibold capitalize">{title}</h1>
         <div className="flex items-center gap-4">

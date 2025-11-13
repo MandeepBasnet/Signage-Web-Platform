@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "../styles/Login.css";
 import { clearAuth, saveAuth } from "../utils/auth.js";
 
 const API_BASE_URL =
@@ -70,7 +69,6 @@ export default function Login() {
       saveAuth(data.token, data.user ?? null);
 
       if (!rememberMe) {
-        // If remember me is not selected, store a marker to clear on unload
         window.addEventListener(
           "beforeunload",
           () => {
@@ -89,33 +87,47 @@ export default function Login() {
   };
 
   return (
-    <div className="login-page">
+    <div className="min-h-screen w-full flex items-stretch justify-center bg-white font-[Inter,system-ui,-apple-system,BlinkMacSystemFont,'Segoe_UI',sans-serif]">
       {/* Loading Overlay */}
       {loading && (
-        <div className="login-loading-overlay">
-          <div className="login-loading-message">
-            <div className="spinner"></div>
-            <p>Just a moment, logging you in...</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]">
+          <div className="flex flex-col items-center gap-4 bg-white p-10 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.2)]">
+            <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-900 rounded-full animate-spin"></div>
+            <p className="text-base text-[#1a1a1a] font-medium">
+              Just a moment, logging you in...
+            </p>
           </div>
         </div>
       )}
 
-      <div className="login-card">
+      <div className="flex flex-1 min-h-screen w-full bg-white rounded-none overflow-hidden border-none shadow-none flex-col md:flex-row">
         {/* Left Section - Form */}
-        <div className="login-form-section">
-          <div className="login-content">
-            <img src="/logo.png" alt="SigmaDS Logo" className="login-logo" />
+        <div className="flex-[0_0_42%] max-w-full md:max-w-[42%] flex items-center justify-center bg-white px-8 py-12 md:px-16 md:py-[72px] order-2 md:order-1">
+          <div className="w-full max-w-[360px]">
+            <img
+              src="/logo.png"
+              alt="SigmaDS Logo"
+              className="h-10 md:h-12 mb-9 md:mb-12 object-contain"
+            />
 
-            <div className="login-form-wrapper">
-              <h1 className="login-title">Login to your Account</h1>
-              <p className="login-subtitle">
+            <div className="mt-6">
+              <h1 className="text-[22px] md:text-[26px] font-semibold text-[#171717] mb-3 leading-[1.3]">
+                Login to your Account
+              </h1>
+              <p className="text-sm md:text-[15px] text-gray-500 mb-9 leading-[1.5]">
                 Please enter your details to login
               </p>
 
-              <form onSubmit={handleLogin} className="login-form">
+              <form
+                onSubmit={handleLogin}
+                className="flex flex-col gap-4 md:gap-5"
+              >
                 {/* Username Field */}
-                <div className="form-group">
-                  <label htmlFor="username" className="form-label">
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="username"
+                    className="text-sm font-medium text-[#1a1a1a]"
+                  >
                     Username
                   </label>
                   <input
@@ -127,29 +139,39 @@ export default function Login() {
                       setUsername(e.target.value);
                       if (error) setError("");
                     }}
-                    className={`form-input ${error ? "input-error" : ""}`}
+                    className={`p-3 border rounded-md text-[15px] transition-all duration-200 bg-white focus:outline-none focus:border-blue-900 focus:bg-blue-50 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.1)] ${
+                      error ? "border-red-600 bg-red-50" : "border-gray-300"
+                    }`}
                   />
-                  {error && <p className="error-message">{error}</p>}
+                  {error && (
+                    <p className="text-[13px] text-red-600 -mt-0.5 flex items-center gap-1">
+                      <span>⚠️</span>
+                      {error}
+                    </p>
+                  )}
                 </div>
 
                 {/* Password Field */}
-                <div className="form-group">
-                  <label htmlFor="password" className="form-label">
+                <div className="flex flex-col gap-2">
+                  <label
+                    htmlFor="password"
+                    className="text-sm font-medium text-[#1a1a1a]"
+                  >
                     Password
                   </label>
-                  <div className="password-input-wrapper">
+                  <div className="relative flex items-center">
                     <input
                       id="password"
                       type={showPassword ? "text" : "password"}
                       placeholder="Enter your password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="form-input"
+                      className="flex-1 p-3 pr-10 border border-gray-300 rounded-md text-[15px] transition-all duration-200 bg-white focus:outline-none focus:border-blue-900 focus:bg-blue-50 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.1)]"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="password-toggle"
+                      className="absolute right-3 bg-none border-none cursor-pointer text-lg text-gray-400 p-0 transition-colors duration-200 hover:text-gray-600"
                     >
                       {showPassword ? "👁️" : "👁️"}
                     </button>
@@ -157,16 +179,20 @@ export default function Login() {
                 </div>
 
                 {/* Checkbox and Link */}
-                <div className="form-footer">
-                  <label className="checkbox-label">
+                <div className="flex justify-between items-center mt-2.5 flex-wrap gap-3">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer text-[#1a1a1a]">
                     <input
                       type="checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
+                      className="cursor-pointer w-4 h-4 accent-blue-900"
                     />
                     <span>Remember Me</span>
                   </label>
-                  <a href="#" className="forgot-password-link">
+                  <a
+                    href="#"
+                    className="text-sm text-blue-900 underline cursor-pointer transition-colors duration-200 hover:text-blue-800"
+                  >
                     Forgot Password?
                   </a>
                 </div>
@@ -174,7 +200,7 @@ export default function Login() {
                 {/* Login Button */}
                 <button
                   type="submit"
-                  className="login-button"
+                  className="p-3 bg-gradient-to-br from-blue-700 to-blue-900 text-white border-none rounded-md text-sm font-semibold cursor-pointer transition-all duration-200 mt-5 md:mt-6 shadow-[0_12px_24px_rgba(30,58,138,0.25)] hover:bg-gradient-to-br hover:from-blue-600 hover:to-blue-800 hover:shadow-[0_16px_32px_rgba(30,58,138,0.35)] active:translate-y-px disabled:opacity-65 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none"
                   disabled={loading}
                 >
                   {loading ? "Logging in..." : "Login"}
@@ -185,11 +211,11 @@ export default function Login() {
         </div>
 
         {/* Right Section - Promotional */}
-        <div className="login-promo-section">
+        <div className="flex-1 bg-white flex items-center justify-center relative overflow-hidden p-6 md:p-12 h-[300px] md:h-auto order-1 md:order-2">
           <img
             src="/login_sideimg.png"
             alt="Promotional - Trust the Process"
-            className="promo-image"
+            className="w-full h-full object-cover object-center"
           />
         </div>
       </div>

@@ -5,7 +5,6 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import LibraryContent from "../components/LibraryContent";
-import "../styles/Dashboard.css";
 import { clearAuth } from "../utils/auth.js";
 
 export default function Dashboard() {
@@ -18,15 +17,17 @@ export default function Dashboard() {
   }, [navigate]);
 
   return (
-    <div className="dashboard-container">
+    <div className="flex min-h-screen w-screen bg-gray-100 overflow-hidden md:flex-row flex-col">
       <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} />
-      <div className="dashboard-main">
+      <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar currentPage={currentPage} onLogout={handleLogout} />
-        <div className="dashboard-content">
+        <div className="flex-1 overflow-y-auto p-5 bg-gray-100">
           {currentPage === "library-playlist" && <LibraryContent />}
           {currentPage === "library-media" && <LibraryContent />}
           {currentPage === "design-layout" && (
-            <div className="page-placeholder">Design Layout Page</div>
+            <div className="flex items-center justify-center h-full text-2xl text-gray-400 bg-white rounded-lg">
+              Design Layout Page
+            </div>
           )}
         </div>
       </div>
