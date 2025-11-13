@@ -4,6 +4,8 @@ import cors from "cors";
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import layoutRoutes from "./routes/layoutRoutes.js";
+import playlistRoutes from "./routes/playlistRoutes.js";
+import libraryRoutes from "./routes/libraryRoutes.js";
 
 dotenv.config();
 connectDB();
@@ -50,6 +52,8 @@ app.post("/test-body", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/layouts", layoutRoutes);
+app.use("/api/playlists", playlistRoutes);
+app.use("/api/library", libraryRoutes);
 
 app.listen(process.env.PORT, () =>
   console.log(`✅ Server running on port ${process.env.PORT}`)
