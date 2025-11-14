@@ -211,12 +211,99 @@ export default function Login() {
         </div>
 
         {/* Right Section - Promotional */}
-        <div className="flex-1 bg-white flex items-center justify-center relative overflow-hidden p-6 md:p-12 h-[300px] md:h-auto order-1 md:order-2">
-          <img
-            src="/login_sideimg.png"
-            alt="Promotional - Trust the Process"
-            className="w-full h-full object-cover object-center"
-          />
+        <div className="flex-1 bg-white flex flex-col items-center justify-center relative overflow-hidden p-6 md:p-12 h-[300px] md:h-auto order-1 md:order-2">
+          {/* Content above the background image */}
+          <div className="flex flex-col items-center justify-center gap-6 z-10 relative">
+            {/* Logo */}
+            <img
+              className="logo-img w-32 md:w-40 h-auto"
+              src="/logo.png"
+              alt="SigmaDS Logo"
+            />
+
+            {/* Screens/Cover Image */}
+            <img
+              className="screens w-full max-w-md md:max-w-lg h-auto"
+              src="/coverImage.png"
+              alt="Screens"
+            />
+
+            {/* Trust Text */}
+            <p className="text-sm md:text-base text-gray-600 font-medium">
+              Trusted by 1000+ customers globally
+            </p>
+
+            {/* Partner Container */}
+            <div className="partner-container w-full max-w-2xl mt-4">
+              {/* First Partner Row */}
+              <div className="partner-row flex items-center justify-center gap-4 md:gap-6 flex-wrap mb-4">
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/amazon.svg"
+                  alt="Amazon"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/deca.svg"
+                  alt="Deca"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/bosch.svg"
+                  alt="Bosch"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/uni.svg"
+                  alt="Uni"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/para.svg"
+                  alt="Para"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+              </div>
+
+              {/* Second Partner Row */}
+              <div className="partner-row flex items-center justify-center gap-4 md:gap-6 flex-wrap">
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/etisalat.svg"
+                  alt="Etisalat"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/uber.svg"
+                  alt="Uber"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/benz.svg"
+                  alt="Benz"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/tt.svg"
+                  alt="TT"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+                <img
+                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/ap.svg"
+                  alt="AP"
+                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
+                  style={{ transform: "scale(1)" }}
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
