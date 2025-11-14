@@ -144,6 +144,7 @@ async function fetchUserScopedCollection({
   orderDirection = "desc",
   pageSize = 100,
   maxPages = 50,
+  queryParams = {},
 }) {
   const { token, userId, username } = getUserContext(req);
 
@@ -164,6 +165,13 @@ async function fetchUserScopedCollection({
       params.append("ownerId", String(userId));
       params.append("userId", String(userId));
     }
+
+    Object.entries(queryParams || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      params.append(key, String(value));
+    });
 
     const { items, total } = normalizeListResponse(
       await xiboRequest(`${endpoint}?${params.toString()}`, "GET", null, token)

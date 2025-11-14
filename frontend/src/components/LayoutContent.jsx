@@ -10,10 +10,21 @@ export default function LayoutContent() {
   const [layouts, setLayouts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [layoutThumbs, setLayoutThumbs] = useState(new Map());
 
   useEffect(() => {
     fetchLayouts();
   }, []);
+
+  useEffect(() => {
+    return () => {
+      layoutThumbs.forEach((url) => {
+        if (url.startsWith("blob:")) {
+          URL.revokeObjectURL(url);
+        }
+      });
+    };
+  }, [layoutThumbs]);
 
   const fetchLayouts = async () => {
     try {
@@ -36,7 +47,9 @@ export default function LayoutContent() {
       }
 
       const data = await response.json();
-      setLayouts(data?.data || []);
+      const fetchedLayouts = data?.data || [];
+      setLayouts(fetchedLayouts);
+      preloadThumbnails(fetchedLayouts);
     } catch (err) {
       console.error("Error fetching layouts:", err);
       setError(err.message || "Failed to load layouts");
@@ -45,8 +58,50 @@ export default function LayoutContent() {
     }
   };
 
+  const preloadThumbnails = async (layoutList) => {
+    for (const layout of layoutList) {
+      const layoutId = getLayoutId(layout);
+      if (!layoutId) continue;
+      if (layoutThumbs.has(layoutId)) continue;
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/layouts/${layoutId}/thumbnail`,
+          {
+            headers: {
+              ...getAuthHeaders(),
+            },
+          }
+        );
+
+        if (!response.ok) {
+          continue;
+        }
+
+        const blob = await response.blob();
+        const blobUrl = URL.createObjectURL(blob);
+
+        setLayoutThumbs((prev) => {
+          if (prev.has(layoutId)) {
+            URL.revokeObjectURL(blobUrl);
+            return prev;
+          }
+          const next = new Map(prev);
+          next.set(layoutId, blobUrl);
+          return next;
+        });
+      } catch (thumbErr) {
+        console.warn(`Failed to load layout thumbnail ${layoutId}:`, thumbErr);
+      }
+    }
+  };
+
   const getLayoutId = (layout) => {
     return layout.layoutId || layout.layout_id || layout.id;
+  };
+
+  const getLayoutName = (layout) => {
+    return layout.name || layout.layout || layout.layoutName || "Layout";
   };
 
   const formatDate = (dateString) => {
@@ -56,6 +111,11 @@ export default function LayoutContent() {
     } catch {
       return dateString;
     }
+  };
+
+  const getThumbnailUrl = (layoutId) => {
+    if (!layoutId) return null;
+    return layoutThumbs.get(layoutId);
   };
 
   if (loading) {
@@ -129,6 +189,8 @@ export default function LayoutContent() {
               const regionCount = regions.length;
               const widgets = regions.flatMap((r) => r.widgets || []);
               const widgetCount = widgets.length;
+              const previewUrl = getThumbnailUrl(layoutId);
+              const layoutName = getLayoutName(layout);
 
               return (
                 <div
@@ -137,26 +199,41 @@ export default function LayoutContent() {
                 >
                   {/* Layout Visual Representation */}
                   <div
-                    className="w-full bg-gradient-to-br from-blue-50 to-indigo-50 flex items-center justify-center overflow-hidden"
+                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden"
                     style={{ minHeight: "200px", maxHeight: "300px" }}
                   >
-                    <div className="flex flex-col items-center justify-center p-8 text-gray-600">
+                    {previewUrl ? (
+                      <img
+                        src={previewUrl}
+                        alt={`${layoutName} preview`}
+                        className="w-full h-full object-contain bg-black"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.style.display = "none";
+                          const fallback = e.currentTarget.nextElementSibling;
+                          if (fallback) {
+                            fallback.classList.remove("hidden");
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <div
+                      className={`${
+                        previewUrl ? "hidden" : "flex"
+                      } flex-col items-center justify-center p-8 text-gray-600 text-center`}
+                    >
                       <span className="text-6xl mb-3">📄</span>
-                      <div className="text-center">
-                        <p className="font-semibold text-lg mb-1">
-                          {layout.name || layout.layoutName || "Layout"}
+                      <p className="font-semibold text-lg mb-1">{layoutName}</p>
+                      {regionCount > 0 && (
+                        <p className="text-sm text-gray-500">
+                          {regionCount}{" "}
+                          {regionCount === 1 ? "region" : "regions"}
+                          {widgetCount > 0 &&
+                            ` • ${widgetCount} ${
+                              widgetCount === 1 ? "widget" : "widgets"
+                            }`}
                         </p>
-                        {regionCount > 0 && (
-                          <p className="text-sm text-gray-500">
-                            {regionCount}{" "}
-                            {regionCount === 1 ? "region" : "regions"}
-                            {widgetCount > 0 &&
-                              ` • ${widgetCount} ${
-                                widgetCount === 1 ? "widget" : "widgets"
-                              }`}
-                          </p>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
 
@@ -164,7 +241,7 @@ export default function LayoutContent() {
                   <div className="p-4 flex-1 flex flex-col">
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-semibold text-gray-900 text-base truncate flex-1">
-                        {layout.name || layout.layoutName || "Unnamed Layout"}
+                        {layoutName || "Unnamed Layout"}
                       </h3>
                     </div>
                     {layout.description && (
