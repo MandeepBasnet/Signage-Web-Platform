@@ -18,7 +18,23 @@ export default function PlaylistContent() {
 
   // Helper functions
   const getMediaId = (item) => {
-    return item.mediaId || item.media_id || item.id;
+    return (
+      item.mediaId ||
+      item.media_id ||
+      item.id ||
+      item.media?.mediaId ||
+      item.media?.media_id ||
+      item.media?.id
+    );
+  };
+
+  const getWidgetId = (item) => {
+    return (
+      item.widgetId ||
+      item.widget_id ||
+      item.widget?.widgetId ||
+      item.widget?.widget_id
+    );
   };
 
   const isImage = (mediaType) => {
@@ -119,6 +135,79 @@ export default function PlaylistContent() {
     }
   };
 
+  const normalizeMediaItems = (playlist, mediaItems = []) => {
+    const widgets = playlist?.widgets || [];
+    const hasValidMedia = mediaItems?.some((item) => getMediaId(item));
+
+    if (hasValidMedia) {
+      return mediaItems.map((item) => {
+        const widgetId = getWidgetId(item);
+        const mediaId = getMediaId(item);
+        return {
+          ...item,
+          mediaId,
+          widgetId,
+          mediaType:
+            item.mediaType ||
+            item.type ||
+            item.widgetType ||
+            item.moduleName ||
+            "",
+          name:
+            item.name ||
+            item.mediaName ||
+            item.media?.name ||
+            item.fileName ||
+            (widgetId ? `Widget ${widgetId}` : "Playlist Item"),
+        };
+      });
+    }
+
+    const derivedItems = [];
+    widgets.forEach((widget) => {
+      const widgetId = widget.widgetId || widget.widget_id || widget.id;
+      const baseInfo = {
+        widgetId,
+        mediaType:
+          widget.type ||
+          widget.moduleName ||
+          widget.mediaType ||
+          widget.media?.mediaType,
+        name:
+          widget.name ||
+          widget.media?.name ||
+          (widgetId ? `Widget ${widgetId}` : "Playlist Widget"),
+        duration: widget.duration,
+        displayOrder: widget.displayOrder,
+        widget,
+      };
+
+      const widgetMediaIds = widget.mediaIds || widget.media_ids || [];
+      const ids =
+        widgetMediaIds.length > 0
+          ? widgetMediaIds
+          : [widget.mediaId || widget.media_id].filter(Boolean);
+
+      if (!ids.length) {
+        derivedItems.push({
+          ...baseInfo,
+          mediaId: null,
+        });
+        return;
+      }
+
+      ids.forEach((mediaId, idx) => {
+        derivedItems.push({
+          ...baseInfo,
+          mediaId,
+          orderIndex: idx,
+        });
+      });
+    });
+
+    return derivedItems;
+  };
+
   const fetchPlaylistDetails = async (playlistId) => {
     try {
       setPlaylistLoading(true);
@@ -142,14 +231,22 @@ export default function PlaylistContent() {
 
       const data = await response.json();
       setSelectedPlaylist(data.playlist);
-      const mediaItems = data.media || [];
+      const normalizedMediaItems = normalizeMediaItems(
+        data.playlist,
+        data.media || []
+      );
 
       // Pre-fetch media URLs for images/videos/audio
       const urlMap = new Map();
-      for (const item of mediaItems) {
+      for (const item of normalizedMediaItems) {
         const mediaId = getMediaId(item);
         if (mediaId) {
-          const mediaType = item.mediaType || item.type || "";
+          const mediaType =
+            item.mediaType ||
+            item.type ||
+            item.widgetType ||
+            item.moduleName ||
+            "";
           const isImageType = isImage(mediaType);
           const isVideoType = isVideo(mediaType);
           const isAudioType = isAudio(mediaType);
@@ -179,7 +276,7 @@ export default function PlaylistContent() {
       }
 
       setMediaUrls(urlMap);
-      setPlaylistMedia(mediaItems);
+      setPlaylistMedia(normalizedMediaItems);
     } catch (err) {
       console.error("Error fetching playlist details:", err);
       setPlaylistError(err.message || "Failed to load playlist details");
@@ -301,15 +398,21 @@ export default function PlaylistContent() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {playlistMedia.map((item) => {
                 const mediaId = getMediaId(item);
+                const widgetId = getWidgetId(item);
                 const mediaUrl = getMediaUrl(item);
-                const mediaType = item.mediaType || item.type || "";
+                const mediaType =
+                  item.mediaType ||
+                  item.type ||
+                  item.widgetType ||
+                  item.moduleName ||
+                  "";
                 const isImageType = isImage(mediaType);
                 const isVideoType = isVideo(mediaType);
                 const isAudioType = isAudio(mediaType);
 
                 return (
                   <div
-                    key={mediaId}
+                    key={`${widgetId || "widget"}-${mediaId || "media"}`}
                     className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col"
                   >
                     {/* Media Preview */}
@@ -418,6 +521,8 @@ export default function PlaylistContent() {
                         </p>
                       )}
                       <div className="flex flex-col gap-1 text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
+                        {widgetId && <span>Widget ID: {widgetId}</span>}
+                        {mediaId && <span>Media ID: {mediaId}</span>}
                         {item.mediaType && (
                           <span className="capitalize">
                             Type: {item.mediaType}
