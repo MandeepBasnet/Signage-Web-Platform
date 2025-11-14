@@ -29,13 +29,16 @@ export const getPlaylistDetails = async (req, res) => {
       return res.status(400).json({ message: "Playlist ID is required" });
     }
 
+    const EMBED_FIELDS = "widgets,widget_validity,tags,permissions";
+
     // Get the playlist by searching the list
-    // Since Xibo doesn't have a direct GET /playlist/{id}, we search the list
+    // Xibo playlists are retrieved via filtered list queries with embed params
     let playlist;
     try {
       // Try with playlistId filter first
       const params = new URLSearchParams({
         playlistId: String(playlistId),
+        embed: EMBED_FIELDS,
       });
 
       let response;
@@ -52,7 +55,12 @@ export const getPlaylistDetails = async (req, res) => {
           "Filter search failed, fetching all playlists:",
           filterError.message
         );
-        response = await xiboRequest(`/playlist`, "GET", null, token);
+        response = await xiboRequest(
+          `/playlist?embed=${encodeURIComponent(EMBED_FIELDS)}`,
+          "GET",
+          null,
+          token
+        );
       }
 
       // Handle different response formats
