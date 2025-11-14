@@ -6,22 +6,59 @@ let token = null;
 export async function getAccessToken() {
   if (token) return token;
 
+  // Check if XIBO_API_URL is configured
+  if (!process.env.XIBO_API_URL) {
+    throw new Error(
+      "XIBO_API_URL is not configured. Please set the XIBO_API_URL environment variable."
+    );
+  }
+
   // Xibo API uses form data for authentication
   const formData = new FormData();
   formData.append("client_id", process.env.XIBO_CLIENT_ID);
   formData.append("client_secret", process.env.XIBO_CLIENT_SECRET);
   formData.append("grant_type", "client_credentials");
 
-  const res = await axios.post(
-    `${process.env.XIBO_API_URL}/authorize/access_token`,
-    formData,
-    {
-      headers: formData.getHeaders(),
+  try {
+    const res = await axios.post(
+      `${process.env.XIBO_API_URL}/authorize/access_token`,
+      formData,
+      {
+        headers: formData.getHeaders(),
+        timeout: 10000, // 10 second timeout
+      }
+    );
+    token = res.data.access_token;
+    setTimeout(() => (token = null), res.data.expires_in * 900);
+    return token;
+  } catch (error) {
+    // Handle network/DNS errors
+    if (
+      error.code === "ENOTFOUND" ||
+      error.code === "ECONNREFUSED" ||
+      error.code === "ETIMEDOUT"
+    ) {
+      const apiUrl = process.env.XIBO_API_URL;
+      throw new Error(
+        `Cannot connect to Xibo API server (${apiUrl}). Please check:\n` +
+          `1. The XIBO_API_URL is correct: ${apiUrl}\n` +
+          `2. The server is accessible from this network\n` +
+          `3. Your internet connection is working\n` +
+          `Error: ${error.message}`
+      );
     }
-  );
-  token = res.data.access_token;
-  setTimeout(() => (token = null), res.data.expires_in * 900);
-  return token;
+
+    // Handle authentication errors
+    if (error.response) {
+      throw new Error(
+        `Xibo API authentication failed: ${error.response.status} ${error.response.statusText}. ` +
+          `Please check your XIBO_CLIENT_ID and XIBO_CLIENT_SECRET.`
+      );
+    }
+
+    // Re-throw other errors
+    throw error;
+  }
 }
 
 // Authenticate user with Xibo credentials
@@ -109,8 +146,38 @@ export async function authenticateUser(username, password) {
       statusText: error.response?.statusText,
       data: error.response?.data,
       message: error.message,
+      code: error.code,
       url: error.config?.url,
     });
+
+    // Handle network/DNS errors - these are critical and should fail login
+    if (
+      error.code === "ENOTFOUND" ||
+      error.code === "ECONNREFUSED" ||
+      error.code === "ETIMEDOUT"
+    ) {
+      return {
+        success: false,
+        message: `Cannot connect to Xibo API server. ${error.message}`,
+        details: {
+          error: "Network connection failed",
+          apiUrl: process.env.XIBO_API_URL,
+          suggestion:
+            "Please check your network connection and XIBO_API_URL configuration.",
+        },
+      };
+    }
+
+    // If getAccessToken failed with a clear error, return that
+    if (error.message && error.message.includes("XIBO_API_URL")) {
+      return {
+        success: false,
+        message: error.message,
+        details: {
+          error: "Configuration error",
+        },
+      };
+    }
 
     // If user search fails due to permissions, we'll accept the login anyway
     // since Xibo API doesn't support password verification
@@ -119,20 +186,30 @@ export async function authenticateUser(username, password) {
       console.warn(
         "⚠️  Cannot verify user via Xibo API (insufficient permissions). Accepting login without verification."
       );
-      // Return success with limited user info
-      // The login will be logged in the database for audit purposes
-      return {
-        success: true,
-        access_token: await getAccessToken(), // Use app token
-        user: {
-          userName: username,
-          email: username.includes("@") ? username : null,
-          userId: null,
-        },
-        note: "User verification skipped - API permissions insufficient. Login accepted without Xibo user verification.",
-        warning:
-          "The application token does not have permission to search users in Xibo. Please check your Xibo API application permissions.",
-      };
+      // Try to get access token, but handle errors
+      try {
+        const appToken = await getAccessToken();
+        return {
+          success: true,
+          access_token: appToken,
+          user: {
+            userName: username,
+            email: username.includes("@") ? username : null,
+            userId: null,
+          },
+          note: "User verification skipped - API permissions insufficient. Login accepted without Xibo user verification.",
+          warning:
+            "The application token does not have permission to search users in Xibo. Please check your Xibo API application permissions.",
+        };
+      } catch (tokenError) {
+        return {
+          success: false,
+          message: `Failed to get access token: ${tokenError.message}`,
+          details: {
+            error: "Token retrieval failed",
+          },
+        };
+      }
     }
 
     if (error.response && error.response.status === 404) {
@@ -143,22 +220,36 @@ export async function authenticateUser(username, password) {
       };
     }
 
-    // For other errors, still try to proceed
-    console.warn(
-      "⚠️  Error during user verification, proceeding with login:",
-      error.message
-    );
-    return {
-      success: true,
-      access_token: await getAccessToken(),
-      user: {
-        userName: username,
-        email: username.includes("@") ? username : null,
-        userId: null,
-      },
-      note: "User verification failed but login accepted",
-      warning: error.message,
-    };
+    // For other errors, check if we can still get a token
+    // If token retrieval fails, fail the login
+    try {
+      const appToken = await getAccessToken();
+      console.warn(
+        "⚠️  Error during user verification, proceeding with login:",
+        error.message
+      );
+      return {
+        success: true,
+        access_token: appToken,
+        user: {
+          userName: username,
+          email: username.includes("@") ? username : null,
+          userId: null,
+        },
+        note: "User verification failed but login accepted",
+        warning: error.message,
+      };
+    } catch (tokenError) {
+      // If we can't get a token, fail the login
+      return {
+        success: false,
+        message: `Authentication failed: ${tokenError.message}`,
+        details: {
+          error: "Token retrieval failed",
+          originalError: error.message,
+        },
+      };
+    }
   }
 }
 
