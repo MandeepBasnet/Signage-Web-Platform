@@ -11,6 +11,16 @@ export default function MediaContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [mediaUrls, setMediaUrls] = useState(new Map());
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadFolder, setUploadFolder] = useState("1");
+  const [uploadDuration, setUploadDuration] = useState(10);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null);
+  const [folderOptions, setFolderOptions] = useState([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -134,6 +144,154 @@ export default function MediaContent() {
     }
   };
 
+  const flattenFolders = (nodes = [], parentPath = []) => {
+    const list = [];
+    nodes.forEach((node) => {
+      if (!node) return;
+      const folderId = node.folderId || node.id;
+      const label =
+        node.folderName || node.text || node.name || `Folder ${folderId || ""}`;
+      const currentPath = [...parentPath, label];
+
+      if (folderId) {
+        list.push({
+          id: String(folderId),
+          label,
+          path: currentPath.join(" / "),
+        });
+      }
+
+      if (Array.isArray(node.children) && node.children.length > 0) {
+        list.push(...flattenFolders(node.children, currentPath));
+      }
+    });
+    return list;
+  };
+
+  const fetchFolders = async () => {
+    try {
+      setFoldersLoading(true);
+      const response = await fetch(`${API_BASE_URL}/library/folders`, {
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData?.message || `Failed to fetch folders: ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+      const flat = flattenFolders(data?.folders || []);
+      setFolderOptions(flat);
+      if (!uploadFolder && flat.length > 0) {
+        setUploadFolder(flat[0].id);
+      }
+    } catch (err) {
+      console.error("Error fetching folders:", err);
+      setUploadError(err.message || "Failed to fetch folders");
+    } finally {
+      setFoldersLoading(false);
+    }
+  };
+
+  const openUploadModal = () => {
+    setUploadError(null);
+    setUploadProgress(null);
+    setIsUploadOpen(true);
+    if (!folderOptions.length) {
+      fetchFolders();
+    }
+  };
+
+  const closeUploadModal = () => {
+    setIsUploadOpen(false);
+    setUploadFile(null);
+    setUploadName("");
+    setUploadDuration(10);
+    setUploadError(null);
+    setUploadProgress(null);
+  };
+
+  const handleFileChange = (event) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+      if (!uploadName) {
+        setUploadName(file.name);
+      }
+      setUploadError(null);
+    }
+  };
+
+  const handleUploadSubmit = async (event) => {
+    event.preventDefault();
+    if (!uploadFile) {
+      setUploadError("Please select a media file to upload.");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setUploadError(null);
+      setUploadProgress("Preparing upload...");
+
+      const formData = new FormData();
+      formData.append("media", uploadFile);
+      formData.append("folderId", uploadFolder || "1");
+      formData.append("duration", uploadDuration || 10);
+      if (uploadName) {
+        formData.append("name", uploadName);
+      }
+
+      console.log("Uploading file:", {
+        name: uploadFile.name,
+        type: uploadFile.type,
+        size: uploadFile.size,
+        folder: uploadFolder,
+        duration: uploadDuration,
+      });
+
+      setUploadProgress("Uploading to server...");
+
+      const response = await fetch(`${API_BASE_URL}/library/upload`, {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+        },
+        body: formData,
+      });
+
+      const result = await response.json();
+      console.log("Upload response:", result);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.message ||
+            result?.error ||
+            `Upload failed: ${response.status}`
+        );
+      }
+
+      setUploadProgress("Upload successful!");
+
+      // Wait a moment to show success message
+      setTimeout(() => {
+        closeUploadModal();
+        fetchMedia();
+      }, 1000);
+    } catch (err) {
+      console.error("Error uploading media:", err);
+      setUploadError(err.message || "Failed to upload media");
+      setUploadProgress(null);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const getMediaIcon = (mediaType) => {
     const type = mediaType?.toLowerCase() || "";
     if (type.includes("image")) return "🖼️";
@@ -209,12 +367,20 @@ export default function MediaContent() {
               {media.length} {media.length === 1 ? "file" : "files"} found
             </p>
           </div>
-          <button
-            onClick={fetchMedia}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openUploadModal}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add Media
+            </button>
+            <button
+              onClick={fetchMedia}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {media.length === 0 ? (
@@ -367,6 +533,143 @@ export default function MediaContent() {
           </div>
         )}
       </div>
+
+      {isUploadOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Upload Media
+                </h3>
+                <p className="text-sm text-gray-500">
+                  Select a file and destination folder
+                </p>
+              </div>
+              <button
+                onClick={closeUploadModal}
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close upload modal"
+                disabled={uploading}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="px-6 py-4 space-y-4" onSubmit={handleUploadSubmit}>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Media File *
+                </label>
+                <input
+                  type="file"
+                  accept="image/*,video/*,audio/*,application/pdf"
+                  onChange={handleFileChange}
+                  className="block w-full text-sm text-gray-700"
+                  disabled={uploading}
+                  required
+                />
+                {uploadFile && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selected: {uploadFile.name} (
+                    {formatFileSize(uploadFile.size)})
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Display Name
+                </label>
+                <input
+                  type="text"
+                  value={uploadName}
+                  onChange={(e) => setUploadName(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder="Optional name"
+                  disabled={uploading}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Folder
+                </label>
+                <select
+                  value={uploadFolder}
+                  onChange={(e) => setUploadFolder(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  disabled={uploading}
+                >
+                  {folderOptions.length === 0 ? (
+                    <option value="1">
+                      {foldersLoading ? "Loading folders..." : "Root Folder"}
+                    </option>
+                  ) : (
+                    folderOptions.map((folder) => (
+                      <option key={folder.id} value={folder.id}>
+                        {folder.path}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <button
+                  type="button"
+                  className="mt-2 text-xs text-blue-600 hover:underline disabled:opacity-50"
+                  onClick={fetchFolders}
+                  disabled={foldersLoading || uploading}
+                >
+                  {foldersLoading ? "Refreshing folders..." : "Refresh folders"}
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Duration (seconds)
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={uploadDuration}
+                  onChange={(e) => setUploadDuration(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  disabled={uploading}
+                />
+              </div>
+
+              {uploadProgress && (
+                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
+                  {uploadProgress}
+                </div>
+              )}
+
+              {uploadError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {uploadError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeUploadModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50"
+                  disabled={uploading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-70"
+                  disabled={uploading || !uploadFile}
+                >
+                  {uploading ? "Uploading..." : "Upload"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
