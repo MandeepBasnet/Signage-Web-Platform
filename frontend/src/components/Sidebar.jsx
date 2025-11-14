@@ -8,7 +8,7 @@ const menuItems = [
   {
     section: "LIBRARY",
     items: [
-      { id: "library-playlist", label: "Playlists", icon: "🎵" },
+      { id: "library-playlist", label: "Playlists", icon: "📂" },
       { id: "library-media", label: "Media", icon: "📹" },
     ],
   },
@@ -30,16 +30,16 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
       <nav className="flex-1 overflow-y-auto py-4">
         {menuItems.map((section) => (
           <div key={section.section} className="px-3 pb-4">
-            <h3 className="text-[11px] font-semibold uppercase text-gray-500 tracking-wider mb-2 px-2 md:block sm:hidden">
+            <h3 className="text-base font-semibold uppercase text-gray-500 tracking-wider mb-2 px-2 md:block sm:hidden">
               {section.section}
             </h3>
-            <ul className="list-none p-0 m-0 flex flex-col gap-1">
+            <ul className="list-none p-0 m-0 flex flex-col gap-1 pl-4 md:pl-4 sm:pl-0">
               {section.items.map((item) => (
                 <li key={item.id}>
                   <button
                     className={`flex items-center gap-3 md:gap-3 sm:gap-2 p-2.5 md:px-3 md:py-2.5 sm:p-2.5 bg-transparent border-none rounded-md cursor-pointer text-sm transition-all duration-200 w-full font-[inherit] ${
                       currentPage === item.id
-                        ? "bg-blue-600 text-white font-semibold"
+                        ? "bg-blue-600 text-black font-semibold"
                         : "text-gray-600 hover:bg-blue-50 hover:text-gray-800"
                     }`}
                     onClick={() => setCurrentPage(item.id)}
