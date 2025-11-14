@@ -15,14 +15,12 @@ const isNumeric = (value) =>
   String(value).trim() !== "" &&
   !Number.isNaN(Number(value));
 
-const extractMediaName = (item) =>
-  item?.name ||
-  item?.mediaName ||
-  item?.media_name ||
-  item?.fileName ||
-  item?.filename ||
-  item?.originalFilename ||
-  null;
+// Extract the display name field that Xibo uses for duplicate checking
+// Xibo checks the "name" field (display name), not fileName
+const extractMediaName = (item) => {
+  // Only check the name field - this is what Xibo uses for duplicate detection
+  return item?.name || item?.mediaName || item?.media_name || null;
+};
 
 const ensureExtension = (desiredName, fallbackName) => {
   const fallbackExt = path.extname(fallbackName || "");
@@ -37,38 +35,86 @@ const generateUniqueMediaName = async (req, desiredName) => {
   if (!target) return desiredName;
 
   try {
-    const media = await fetchUserScopedCollection({
-      req,
-      endpoint: "/library",
-      idKeys: ["mediaId", "media_id", "id"],
-    });
+    const userXiboToken = req.user?.xiboToken;
+    const userXiboUserId = req.user?.id || req.user?.userId;
 
+    if (!userXiboToken || !userXiboUserId) {
+      console.warn(
+        "User Xibo token or ID missing for duplicate checking. Skipping pre-check."
+      );
+      // Return with timestamp to ensure uniqueness
+      const ext = path.extname(target);
+      const base =
+        target.substring(0, target.length - ext.length).trim() || "Media";
+      const timestamp = Date.now();
+      return `${base}_${timestamp}${ext}`;
+    }
+
+    // Query ONLY the user's own media using ownerId filter
+    // Include retired/hidden media by not filtering them out
+    // Use pagination to get all media
+    const ownedMediaResponse = await xiboRequest(
+      `/library?length=10000&ownerId=${userXiboUserId}&retired=`,
+      "GET",
+      null,
+      userXiboToken
+    );
+
+    // Handle different response formats from Xibo
+    let mediaList = [];
+    if (Array.isArray(ownedMediaResponse)) {
+      mediaList = ownedMediaResponse;
+    } else if (
+      ownedMediaResponse?.data &&
+      Array.isArray(ownedMediaResponse.data)
+    ) {
+      mediaList = ownedMediaResponse.data;
+    }
+
+    console.log(
+      `Duplicate check: Found ${mediaList.length} media items (including retired) owned by user ${userXiboUserId}`
+    );
+
+    // Extract all existing media names (case-insensitive comparison as Xibo does)
     const existingNames = new Set(
-      media
+      mediaList
         .map((item) => extractMediaName(item))
         .filter((name) => typeof name === "string" && name.trim().length)
         .map((name) => name.trim().toLowerCase())
     );
 
-    if (!existingNames.has(target.toLowerCase())) {
+    const targetLower = target.toLowerCase();
+
+    // If name doesn't exist in user's media, use it as-is (preserve user's requested name)
+    if (!existingNames.has(targetLower)) {
+      console.log(
+        `Name "${target}" is unique for user. Found ${existingNames.size} existing media items owned by user.`
+      );
       return target;
     }
 
+    // Name exists in user's media, need to generate unique variant
+    console.log(
+      `Duplicate name detected in user's media: "${target}". Found ${existingNames.size} items. Generating unique variant...`
+    );
+
+    // Use timestamp for guaranteed uniqueness
     const ext = path.extname(target);
     const base =
       target.substring(0, target.length - ext.length).trim() || "Media";
+    const timestamp = Date.now();
+    const uniqueName = `${base}_${timestamp}${ext}`;
 
-    let counter = 1;
-    let candidate = `${base} (${counter})${ext}`;
-    while (existingNames.has(candidate.toLowerCase()) && counter < 1000) {
-      counter += 1;
-      candidate = `${base} (${counter})${ext}`;
-    }
-
-    return candidate;
+    console.log(`Generated unique name with timestamp: "${uniqueName}"`);
+    return uniqueName;
   } catch (err) {
     console.warn("Failed to check existing media names:", err.message);
-    return target;
+    // On error, use timestamp to ensure uniqueness
+    const ext = path.extname(target);
+    const base =
+      target.substring(0, target.length - ext.length).trim() || "Media";
+    const timestamp = Date.now();
+    return `${base}_${timestamp}${ext}`;
   }
 };
 
@@ -138,7 +184,15 @@ export const getLibraryFolders = async (req, res) => {
 
 export const uploadMedia = async (req, res) => {
   try {
-    const token = await getAccessToken();
+    // Use user's Xibo token instead of app token to ensure correct ownership
+    const userXiboToken = req.user?.xiboToken;
+    if (!userXiboToken) {
+      throw new HttpError(
+        401,
+        "User Xibo token not found. Please login again."
+      );
+    }
+
     const file = req.file;
     const {
       folderId = 1,
@@ -154,6 +208,15 @@ export const uploadMedia = async (req, res) => {
       throw new HttpError(400, "Media file is required");
     }
 
+    // Get user's Xibo userId from token
+    const userXiboUserId = req.user?.id || req.user?.userId;
+    if (!userXiboUserId) {
+      throw new HttpError(
+        401,
+        "User ID not found in token. Please login again."
+      );
+    }
+
     console.log("Upload request:", {
       filename: file.originalname,
       mimetype: file.mimetype,
@@ -161,99 +224,143 @@ export const uploadMedia = async (req, res) => {
       folderId,
       duration,
       name: name || file.originalname,
+      userId: userXiboUserId,
     });
 
+    // Use user's requested name, or fallback to filename
     const requestedName =
       typeof name === "string" && name.trim().length
         ? name.trim()
         : file.originalname;
     const desiredName = ensureExtension(requestedName, file.originalname);
+
+    // Check for duplicates and generate unique name if needed
+    // This preserves the user's requested name unless a duplicate exists
     const uniqueName = await generateUniqueMediaName(req, desiredName);
 
-    // Create FormData for Xibo upload
-    const formData = new FormData();
-
-    // Convert buffer to stream for axios/form-data
-    const fileStream = Readable.from(file.buffer);
-
-    // Append file with proper options
-    formData.append("files[]", fileStream, {
-      filename: uniqueName,
-      contentType: file.mimetype,
-      knownLength: file.size, // Important for proper upload
-    });
-
-    // Add required parameters
-    formData.append("folderId", String(folderId));
-    formData.append("duration", String(duration));
-    formData.append("forceDuplicateCheck", "0"); // Required by Xibo API
-
-    // Get user's ownerId
-    const userOwnerId = isNumeric(req.user?.id)
-      ? String(req.user.id)
-      : isNumeric(req.user?.userId)
-      ? String(req.user.userId)
-      : null;
-
-    const resolvedOwnerId =
-      ownerId !== undefined && ownerId !== null && String(ownerId).length
-        ? ownerId
-        : userOwnerId;
-
-    if (resolvedOwnerId !== null) {
-      formData.append("ownerId", String(resolvedOwnerId));
+    if (uniqueName !== desiredName) {
+      console.log(
+        `Name modified due to duplicate: "${desiredName}" -> "${uniqueName}"`
+      );
+    } else {
+      console.log(`Using user's requested name: "${uniqueName}"`);
     }
 
-    // Add optional parameters
-    formData.append("name", uniqueName);
-    if (tags) formData.append("tags", String(tags));
-    if (enableStat !== undefined)
-      formData.append("enableStat", String(enableStat));
-    if (retired !== undefined) formData.append("retired", String(retired));
+    // Always use the logged-in user's ID as owner
+    // Only override if explicitly provided and different
+    const resolvedOwnerId =
+      ownerId !== undefined && ownerId !== null && String(ownerId).length
+        ? String(ownerId)
+        : String(userXiboUserId);
 
-    console.log(
-      "Uploading to Xibo CMS:",
-      `${process.env.XIBO_API_URL}/library`
-    );
+    // Helper function to attempt upload with a given name
+    const attemptUpload = async (nameToUse) => {
+      const uploadFormData = new FormData();
+      // Create a new stream from the buffer for each attempt
+      const fileStream = Readable.from(file.buffer);
 
-    // Upload to Xibo
-    const response = await axios.post(
-      `${process.env.XIBO_API_URL}/library`,
-      formData,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          ...formData.getHeaders(),
-        },
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
+      uploadFormData.append("files[]", fileStream, {
+        filename: file.originalname,
+        contentType: file.mimetype,
+        knownLength: file.size,
+      });
+
+      uploadFormData.append("folderId", String(folderId));
+      uploadFormData.append("duration", String(duration));
+      uploadFormData.append("forceDuplicateCheck", "1");
+      // Don't set ownerId - let Xibo assign it to the authenticated user
+      // uploadFormData.append("ownerId", resolvedOwnerId);
+      uploadFormData.append("name", nameToUse);
+      if (tags) uploadFormData.append("tags", String(tags));
+      if (enableStat !== undefined)
+        uploadFormData.append("enableStat", String(enableStat));
+      if (retired !== undefined)
+        uploadFormData.append("retired", String(retired));
+
+      try {
+        const response = await axios.post(
+          `${process.env.XIBO_API_URL}/library`,
+          uploadFormData,
+          {
+            headers: {
+              Authorization: `Bearer ${userXiboToken}`,
+              ...uploadFormData.getHeaders(),
+            },
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+            validateStatus: (status) => {
+              // Don't throw on 400 - we'll handle it in the retry logic
+              return status < 500;
+            },
+          }
+        );
+
+        // Check if response has error status
+        if (response.status >= 400) {
+          const errorData = response.data;
+          const errorMessage =
+            errorData?.message || errorData?.error || "Upload failed";
+          const error = new Error(errorMessage);
+          error.response = response;
+          throw error;
+        }
+
+        return response.data;
+      } catch (err) {
+        // Re-throw to be handled by retry logic
+        throw err;
       }
-    );
+    };
 
-    console.log("Xibo response:", response.data);
+    // Try upload with the unique name (single attempt since we use timestamps)
+    let uploadResult;
 
-    const uploadResult = response.data;
+    try {
+      console.log(`Uploading to Xibo CMS with name "${uniqueName}"`);
 
-    // Check for errors in the files array
-    if (uploadResult?.files && Array.isArray(uploadResult.files)) {
-      const fileErrors = uploadResult.files
-        .filter((file) => file?.error)
-        .map((file) => file.error);
+      uploadResult = await attemptUpload(uniqueName);
 
-      if (fileErrors.length > 0) {
-        console.error("Upload errors:", fileErrors);
-        throw new HttpError(400, fileErrors[0]);
+      // Check for errors in the files array
+      if (uploadResult?.files && Array.isArray(uploadResult.files)) {
+        const fileErrors = uploadResult.files
+          .filter((file) => file?.error)
+          .map((file) => file.error);
+
+        if (fileErrors.length > 0) {
+          const errorMessage = fileErrors[0];
+          throw new HttpError(400, errorMessage);
+        }
+
+        // Success!
+        const uploadedFile = uploadResult.files[0];
+        if (uploadedFile && uploadedFile.mediaId) {
+          console.log("Upload successful:", {
+            mediaId: uploadedFile.mediaId,
+            name: uploadedFile.name,
+            size: uploadedFile.fileSize,
+          });
+        }
+      } else {
+        // No files array, assume success
+        console.log("Upload completed successfully");
       }
+    } catch (err) {
+      // Check if it's a duplicate error in the response
+      const errorData = err.response?.data;
+      const errorMessage =
+        errorData?.message ||
+        errorData?.error ||
+        (typeof errorData === "string" ? errorData : "") ||
+        err.message ||
+        "";
 
-      // Extract uploaded media info
-      const uploadedFile = uploadResult.files[0];
-      if (uploadedFile && uploadedFile.mediaId) {
-        console.log("Upload successful:", {
-          mediaId: uploadedFile.mediaId,
-          name: uploadedFile.name,
-          size: uploadedFile.fileSize,
-        });
-      }
+      console.error("Upload error:", {
+        status: err.response?.status,
+        errorMessage,
+        errorData,
+      });
+
+      throw err;
     }
 
     res.status(201).json({
