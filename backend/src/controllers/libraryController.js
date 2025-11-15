@@ -217,22 +217,22 @@ export const uploadMedia = async (req, res) => {
       );
     }
 
+    // Always set the name field to the actual filename unless the user specifies otherwise
+    let requestedName = file.originalname;
+    if (typeof name === "string" && name.trim().length) {
+      requestedName = name.trim();
+    }
+    const desiredName = ensureExtension(requestedName, file.originalname);
+
     console.log("Upload request:", {
       filename: file.originalname,
       mimetype: file.mimetype,
       size: file.size,
       folderId,
       duration,
-      name: name || file.originalname,
+      name: desiredName,
       userId: userXiboUserId,
     });
-
-    // Use user's requested name, or fallback to filename
-    const requestedName =
-      typeof name === "string" && name.trim().length
-        ? name.trim()
-        : file.originalname;
-    const desiredName = ensureExtension(requestedName, file.originalname);
 
     // Check for duplicates and generate unique name if needed
     // This preserves the user's requested name unless a duplicate exists
