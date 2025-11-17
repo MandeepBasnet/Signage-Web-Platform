@@ -363,6 +363,67 @@ export const uploadMedia = async (req, res) => {
       throw err;
     }
 
+    // CRITICAL: Transfer ownership to authenticated user (same as playlist creation)
+    // When uploading with user token, Xibo may still assign ownership to app account
+    // We need to explicitly transfer ownership to the authenticated user
+    if (uploadResult?.files && Array.isArray(uploadResult.files)) {
+      const uploadedFile = uploadResult.files[0];
+      const mediaId = uploadedFile?.mediaId || uploadedFile?.media_id;
+
+      if (mediaId && userXiboUserId) {
+        try {
+          console.log(
+            `Transferring media ${mediaId} ownership to user ${userXiboUserId}`
+          );
+
+          // Try the permissions endpoint with different entity names
+          // Xibo uses different entity names for permissions: Playlist, Layout, etc.
+          // For media/library, try "Media" first (not "Library")
+          let ownershipTransferred = false;
+          const entityNames = ["Media", "LibraryMedia", "Library"];
+
+          for (const entityName of entityNames) {
+            try {
+              console.log(
+                `Attempting ownership transfer with entity: ${entityName}`
+              );
+              await xiboRequest(
+                `/user/permissions/${entityName}/${mediaId}`,
+                "POST",
+                {
+                  ownerId: String(userXiboUserId),
+                },
+                userXiboToken
+              );
+              console.log(
+                `Media ${mediaId} ownership successfully transferred using ${entityName}`
+              );
+              ownershipTransferred = true;
+              break;
+            } catch (err) {
+              console.warn(
+                `Ownership transfer failed with entity ${entityName}:`,
+                err.message
+              );
+              // Try next entity name
+            }
+          }
+
+          if (!ownershipTransferred) {
+            console.warn(
+              `Could not transfer ownership for media ${mediaId} using any entity name`
+            );
+          }
+        } catch (ownershipErr) {
+          console.warn(
+            `Error during ownership transfer for media ${mediaId}:`,
+            ownershipErr.message
+          );
+          // Continue anyway - media is uploaded even if ownership transfer fails
+        }
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: uploadResult,
