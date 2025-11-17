@@ -5,6 +5,105 @@ import {
 } from "../utils/xiboDataHelpers.js";
 import { xiboRequest } from "../utils/xiboClient.js";
 
+export const createPlaylist = async (req, res) => {
+  try {
+    const { name, description } = req.body;
+    const { token, userId } = getUserContext(req);
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Playlist name is required" });
+    }
+
+    const playlistName = name.trim();
+
+    // Check if a playlist with the same name already exists for this user
+    try {
+      const existingParams = new URLSearchParams({
+        name: playlistName,
+        userId: String(userId),
+      });
+
+      const existingPlaylists = await xiboRequest(
+        `/playlist?${existingParams.toString()}`,
+        "GET",
+        null,
+        token
+      );
+
+      // If playlists exist, check if any match exactly by name
+      if (
+        Array.isArray(existingPlaylists) &&
+        existingPlaylists.some((p) => p.name === playlistName)
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: `A playlist named '${playlistName}' already exists for your account. Please choose another name.`,
+        });
+      }
+    } catch (checkErr) {
+      // If check fails, continue with creation (it might fail anyway)
+      console.warn("Could not check for existing playlists:", checkErr.message);
+    }
+
+    const playlistData = {
+      name: playlistName,
+      description: description?.trim() || "",
+      isDynamic: 0, // Create as static playlist by default
+    };
+
+    const response = await xiboRequest(
+      "/playlist",
+      "POST",
+      playlistData,
+      token
+    );
+
+    // CRITICAL: Set ownership to authenticated user
+    // Since we use app token to create, Xibo assigns it to app account
+    // We need to change ownership to the actual user
+    if (response && (response.playlistId || response.id)) {
+      const playlistId = response.playlistId || response.id;
+
+      try {
+        // Set ownership by changing owner via permissions API
+        // POST /user/permissions/{entity}/{objectId}
+        // We pass ownerId to transfer ownership to authenticated user
+        await xiboRequest(
+          `/user/permissions/Playlist/${playlistId}`,
+          "POST",
+          {
+            ownerId: String(userId), // Transfer ownership to authenticated user
+          },
+          token
+        );
+        console.log(`Playlist ${playlistId} ownership set to user ${userId}`);
+      } catch (ownershipErr) {
+        console.warn(
+          `Could not set ownership for playlist ${playlistId}:`,
+          ownershipErr.message
+        );
+        // Continue anyway - playlist is created even if ownership change fails
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Playlist created successfully",
+      playlist: response,
+    });
+  } catch (err) {
+    // Handle 409 Conflict error from Xibo API
+    if (err.message && err.message.includes("409")) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "A playlist with this name already exists. Please choose another name.",
+      });
+    }
+    handleControllerError(res, err, "Failed to create playlist");
+  }
+};
+
 export const getPlaylists = async (req, res) => {
   try {
     const playlists = await fetchUserScopedCollection({

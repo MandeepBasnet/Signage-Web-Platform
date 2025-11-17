@@ -15,6 +15,11 @@ export default function PlaylistContent() {
   const [playlistLoading, setPlaylistLoading] = useState(false);
   const [playlistError, setPlaylistError] = useState(null);
   const [mediaUrls, setMediaUrls] = useState(new Map());
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -315,6 +320,61 @@ export default function PlaylistContent() {
     setPlaylistError(null);
   };
 
+  const handleCreatePlaylist = async (e) => {
+    e.preventDefault();
+    if (!newPlaylistName.trim()) {
+      setCreateError("Playlist name is required");
+      return;
+    }
+
+    try {
+      setIsCreating(true);
+      setCreateError(null);
+
+      const response = await fetch(`${API_BASE_URL}/playlists`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          name: newPlaylistName.trim(),
+          description: newPlaylistDescription.trim(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+
+        // Handle duplicate playlist error (409 Conflict)
+        if (response.status === 409) {
+          setCreateError(
+            errorData?.message ||
+              `A playlist named '${newPlaylistName.trim()}' already exists. Please choose a different name.`
+          );
+          setIsCreating(false);
+          return;
+        }
+
+        throw new Error(
+          errorData?.message || `Failed to create playlist: ${response.status}`
+        );
+      }
+
+      await response.json();
+      setShowCreateModal(false);
+      setNewPlaylistName("");
+      setNewPlaylistDescription("");
+      // Refresh the playlist list
+      fetchPlaylists();
+    } catch (err) {
+      console.error("Error creating playlist:", err);
+      setCreateError(err.message || "Failed to create playlist");
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const getMediaUrl = (item) => {
     const mediaId = getMediaId(item);
     if (!mediaId) return null;
@@ -596,16 +656,24 @@ export default function PlaylistContent() {
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">Playlists</h2>
             <p className="text-sm text-gray-500 mt-1">
-              {playlists.length}{" "}
-              {playlists.length === 1 ? "playlist" : "playlists"} found
+              {playlists.length}
+              {playlists.length === 1 ? " playlist" : " playlists"} found
             </p>
           </div>
-          <button
-            onClick={fetchPlaylists}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={fetchPlaylists}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowCreateModal(true)}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              + Add Playlist
+            </button>
+          </div>
         </div>
 
         {playlists.length === 0 ? (
@@ -667,6 +735,75 @@ export default function PlaylistContent() {
           </div>
         )}
       </div>
+
+      {/* Create Playlist Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg p-8 w-full max-w-md">
+            <h3 className="text-xl font-semibold text-gray-900 mb-6">
+              Create New Playlist
+            </h3>
+
+            {createError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+                {createError}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Playlist Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newPlaylistName}
+                  onChange={(e) => setNewPlaylistName(e.target.value)}
+                  placeholder="Enter playlist name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isCreating}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={newPlaylistDescription}
+                  onChange={(e) => setNewPlaylistDescription(e.target.value)}
+                  placeholder="Enter playlist description (optional)"
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isCreating}
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setNewPlaylistName("");
+                  setNewPlaylistDescription("");
+                  setCreateError("");
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50"
+                disabled={isCreating}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreatePlaylist}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-50"
+                disabled={isCreating || !newPlaylistName.trim()}
+              >
+                {isCreating ? "Creating..." : "Create Playlist"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
