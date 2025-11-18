@@ -1,3 +1,5 @@
+import axios from "axios";
+import FormData from "form-data";
 import {
   fetchUserScopedCollection,
   handleControllerError,
@@ -161,6 +163,67 @@ export const getPlaylists = async (req, res) => {
     res.json({ data: playlists, total: playlists.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch playlists");
+  }
+};
+
+const isNumeric = (value) =>
+  value !== undefined &&
+  value !== null &&
+  String(value).trim() !== "" &&
+  !Number.isNaN(Number(value));
+
+export const addMediaToPlaylist = async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { mediaIds, duration, useDuration, displayOrder } = req.body || {};
+    const { token } = getUserContext(req);
+
+    if (!playlistId) {
+      return res.status(400).json({ message: "Playlist ID is required" });
+    }
+
+    if (!Array.isArray(mediaIds) || mediaIds.length === 0) {
+      return res
+        .status(400)
+        .json({ message: "At least one mediaId is required" });
+    }
+
+    const formData = new FormData();
+    mediaIds.forEach((mediaId) => {
+      if (mediaId !== undefined && mediaId !== null) {
+        formData.append("media[]", String(mediaId));
+      }
+    });
+
+    if (isNumeric(duration)) {
+      formData.append("duration", String(duration));
+      formData.append("useDuration", "1");
+    } else if (useDuration !== undefined) {
+      formData.append("useDuration", useDuration ? "1" : "0");
+    }
+
+    if (isNumeric(displayOrder)) {
+      formData.append("displayOrder", String(displayOrder));
+    }
+
+    const response = await axios.post(
+      `${process.env.XIBO_API_URL}/playlist/library/assign/${playlistId}`,
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...formData.getHeaders(),
+        },
+      }
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Media added to playlist",
+      data: response.data,
+    });
+  } catch (err) {
+    handleControllerError(res, err, "Failed to add media to playlist");
   }
 };
 

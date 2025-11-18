@@ -5,6 +5,7 @@ import { Readable } from "stream";
 import { getAccessToken, xiboRequest } from "../utils/xiboClient.js";
 import {
   fetchUserScopedCollection,
+  fetchLibraryCollection,
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
@@ -167,6 +168,20 @@ export const validateMediaName = async (req, res) => {
 export const getLibraryMedia = async (req, res) => {
   try {
     const media = await fetchUserScopedCollection({
+      req,
+      endpoint: "/library",
+      idKeys: ["mediaId", "media_id", "id"],
+    });
+
+    res.json({ data: media, total: media.length });
+  } catch (err) {
+    handleControllerError(res, err, "Failed to fetch library media");
+  }
+};
+
+export const getAllLibraryMedia = async (req, res) => {
+  try {
+    const media = await fetchLibraryCollection({
       req,
       endpoint: "/library",
       idKeys: ["mediaId", "media_id", "id"],

@@ -3,6 +3,7 @@ import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import {
   getLibraryMedia,
+  getAllLibraryMedia,
   downloadMedia,
   getLibraryFolders,
   uploadMedia,
@@ -19,6 +20,7 @@ const upload = multer({
 
 router.get("/", verifyToken, getLibraryMedia);
 router.get("/folders", verifyToken, getLibraryFolders);
+router.get("/all", verifyToken, getAllLibraryMedia);
 router.post("/validate-name", verifyToken, validateMediaName);
 router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);

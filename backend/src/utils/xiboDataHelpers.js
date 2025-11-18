@@ -197,6 +197,61 @@ async function fetchUserScopedCollection({
   return filterOwnedByUser(deduped, userId, username);
 }
 
+async function fetchLibraryCollection({
+  req,
+  endpoint,
+  idKeys,
+  orderColumn = "modifiedDt",
+  orderDirection = "desc",
+  pageSize = 100,
+  maxPages = 50,
+  queryParams = {},
+}) {
+  const { token } = getUserContext(req);
+
+  const collected = [];
+  let start = 0;
+  let totalAvailable;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const params = new URLSearchParams({
+      start: String(start),
+      length: String(pageSize),
+      draw: String(page + 1),
+      "order[0][column]": orderColumn,
+      "order[0][dir]": orderDirection,
+    });
+
+    Object.entries(queryParams || {}).forEach(([key, value]) => {
+      if (value === undefined || value === null) {
+        return;
+      }
+      params.append(key, String(value));
+    });
+
+    const { items, total } = normalizeListResponse(
+      await xiboRequest(`${endpoint}?${params.toString()}`, "GET", null, token)
+    );
+
+    if (!items.length) {
+      break;
+    }
+
+    collected.push(...items);
+    start += pageSize;
+
+    if (totalAvailable === undefined && total !== undefined) {
+      totalAvailable = total;
+    }
+
+    if (total !== undefined && collected.length >= total) {
+      break;
+    }
+  }
+
+  return dedupeById(collected, idKeys);
+}
+
 function handleControllerError(res, err, fallbackMessage) {
   if (err instanceof HttpError) {
     return res.status(err.status).json({ message: err.message });
@@ -223,6 +278,7 @@ export {
   HttpError,
   dedupeById,
   fetchUserScopedCollection,
+  fetchLibraryCollection,
   filterOwnedByUser,
   getUserContext,
   handleControllerError,
