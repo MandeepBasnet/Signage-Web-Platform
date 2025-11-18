@@ -37,6 +37,7 @@ export default function MediaContent() {
   const [folderOptions, setFolderOptions] = useState([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [nameSuggestion, setNameSuggestion] = useState(null);
+  const [nameChangeNotice, setNameChangeNotice] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -354,14 +355,15 @@ export default function MediaContent() {
 
       setUploadProgress("Upload successful!");
 
-      // Show name change notification if applicable
       if (result.nameInfo?.wasChanged) {
-        alert(
-          `⚠️ Duplicate Name Detected\n\n` +
-            `Your requested name: "${result.nameInfo.originalName}"\n\n` +
-            `Already exists in your library.\n\n` +
-            `File has been saved as: "${result.nameInfo.finalName}"`
-        );
+        setNameChangeNotice({
+          entity: "media",
+          originalName: result.nameInfo.originalName,
+          finalName: result.nameInfo.finalName,
+          changeReason:
+            result.nameInfo.changeReason ||
+            "The media name was adjusted to keep it unique.",
+        });
       }
 
       // Wait a moment to show success message
@@ -779,6 +781,39 @@ export default function MediaContent() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {nameChangeNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {nameChangeNotice.entity === "media"
+                ? "Media Name Updated"
+                : "Name Updated"}
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {nameChangeNotice.changeReason}
+            </p>
+            <div className="rounded-md bg-gray-50 border border-gray-200 p-4 text-sm text-gray-800 space-y-1">
+              <p>
+                <span className="font-semibold">Original:</span>{" "}
+                {nameChangeNotice.originalName || "N/A"}
+              </p>
+              <p>
+                <span className="font-semibold">Saved As:</span>{" "}
+                {nameChangeNotice.finalName || "N/A"}
+              </p>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setNameChangeNotice(null)}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Got it
+              </button>
+            </div>
           </div>
         </div>
       )}

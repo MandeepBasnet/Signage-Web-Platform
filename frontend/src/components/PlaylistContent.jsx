@@ -20,6 +20,7 @@ export default function PlaylistContent() {
   const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState(null);
+  const [nameChangeNotice, setNameChangeNotice] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -361,10 +362,20 @@ export default function PlaylistContent() {
         );
       }
 
-      await response.json();
+      const data = await response.json();
       setShowCreateModal(false);
       setNewPlaylistName("");
       setNewPlaylistDescription("");
+      if (data?.nameInfo?.wasChanged) {
+        setNameChangeNotice({
+          entity: "playlist",
+          originalName: data.nameInfo.originalName,
+          finalName: data.nameInfo.finalName,
+          changeReason:
+            data.nameInfo.changeReason ||
+            "The playlist name was adjusted to keep it unique.",
+        });
+      }
       // Refresh the playlist list
       fetchPlaylists();
     } catch (err) {
@@ -799,6 +810,37 @@ export default function PlaylistContent() {
                 disabled={isCreating || !newPlaylistName.trim()}
               >
                 {isCreating ? "Creating..." : "Create Playlist"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {nameChangeNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              Playlist Name Updated
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">
+              {nameChangeNotice.changeReason}
+            </p>
+            <div className="rounded-md bg-gray-50 border border-gray-200 p-4 text-sm text-gray-800 space-y-1">
+              <p>
+                <span className="font-semibold">Original:</span>{" "}
+                {nameChangeNotice.originalName || "N/A"}
+              </p>
+              <p>
+                <span className="font-semibold">Saved As:</span>{" "}
+                {nameChangeNotice.finalName || "N/A"}
+              </p>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setNameChangeNotice(null)}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Got it
               </button>
             </div>
           </div>

@@ -499,15 +499,37 @@ export const uploadMedia = async (req, res) => {
       }
     }
 
+    let finalStoredName = availability.originalName;
+    let finalNameChanged = false;
+
+    if (uploadResult?.files && Array.isArray(uploadResult.files)) {
+      const uploadedFile = uploadResult.files[0];
+      const storedName =
+        uploadedFile?.name ||
+        uploadedFile?.fileName ||
+        uploadedFile?.mediaName ||
+        uploadedFile?.originalName;
+      if (
+        storedName &&
+        storedName.trim().length > 0 &&
+        storedName !== availability.originalName
+      ) {
+        finalStoredName = storedName;
+        finalNameChanged = true;
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: uploadResult,
       message: "Media uploaded successfully",
       nameInfo: {
         originalName: availability.originalName,
-        finalName: availability.originalName,
-        wasChanged: false,
-        changeReason: null,
+        finalName: finalStoredName,
+        wasChanged: finalNameChanged,
+        changeReason: finalNameChanged
+          ? `Xibo saved this media as "${finalStoredName}" instead of "${availability.originalName}".`
+          : null,
       },
     });
   } catch (err) {
