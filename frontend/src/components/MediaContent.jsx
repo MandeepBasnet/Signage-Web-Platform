@@ -278,6 +278,16 @@ export default function MediaContent() {
 
       setUploadProgress("Upload successful!");
 
+      // Show name change notification if applicable
+      if (result.nameInfo?.wasChanged) {
+        alert(
+          `⚠️ Duplicate Name Detected\n\n` +
+            `Your requested name: "${result.nameInfo.originalName}"\n\n` +
+            `Already exists in your library.\n\n` +
+            `File has been saved as: "${result.nameInfo.finalName}"`
+        );
+      }
+
       // Wait a moment to show success message
       setTimeout(() => {
         closeUploadModal();

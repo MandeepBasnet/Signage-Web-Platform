@@ -16,11 +16,16 @@ export const createPlaylist = async (req, res) => {
 
     const playlistName = name.trim();
 
-    // Check if a playlist with the same name already exists for this user
+    // Check if a playlist with the same name already exists for THIS USER
+    let nameWasChanged = false;
+    let finalPlaylistName = playlistName;
+    let nameExists = false;
+
     try {
+      // Query ONLY playlists owned by the current user
       const existingParams = new URLSearchParams({
-        name: playlistName,
-        userId: String(userId),
+        length: "10000",
+        ownerId: String(userId), // Only get playlists owned by this user
       });
 
       const existingPlaylists = await xiboRequest(
@@ -30,23 +35,51 @@ export const createPlaylist = async (req, res) => {
         token
       );
 
-      // If playlists exist, check if any match exactly by name
-      if (
-        Array.isArray(existingPlaylists) &&
-        existingPlaylists.some((p) => p.name === playlistName)
+      // Handle different response formats
+      let playlistList = [];
+      if (Array.isArray(existingPlaylists)) {
+        playlistList = existingPlaylists;
+      } else if (
+        existingPlaylists?.data &&
+        Array.isArray(existingPlaylists.data)
       ) {
-        return res.status(409).json({
-          success: false,
-          message: `A playlist named '${playlistName}' already exists for your account. Please choose another name.`,
-        });
+        playlistList = existingPlaylists.data;
+      }
+
+      // Check if any of user's playlists match this name (case-insensitive)
+      nameExists = playlistList.some(
+        (p) =>
+          p.name && p.name.trim().toLowerCase() === playlistName.toLowerCase()
+      );
+
+      if (nameExists) {
+        // Generate unique name with timestamp
+        const timestamp = Date.now();
+        finalPlaylistName = `${playlistName}_${timestamp}`;
+        nameWasChanged = true;
+        console.log(
+          `Playlist name duplicate detected: "${playlistName}" → "${finalPlaylistName}"`
+        );
       }
     } catch (checkErr) {
-      // If check fails, continue with creation (it might fail anyway)
+      // If check fails, continue with original name
       console.warn("Could not check for existing playlists:", checkErr.message);
     }
 
+    if (nameExists && nameWasChanged) {
+      return res.status(409).json({
+        success: false,
+        message: `A playlist named '${playlistName}' already exists in your library.`,
+        nameInfo: {
+          originalName: playlistName,
+          suggestedName: finalPlaylistName,
+          changeReason: `A playlist with the name "${playlistName}" already exists for your account. Would you like to save as "${finalPlaylistName}" instead?`,
+        },
+      });
+    }
+
     const playlistData = {
-      name: playlistName,
+      name: finalPlaylistName,
       description: description?.trim() || "",
       isDynamic: 0, // Create as static playlist by default
     };
@@ -90,6 +123,19 @@ export const createPlaylist = async (req, res) => {
       success: true,
       message: "Playlist created successfully",
       playlist: response,
+      nameInfo: nameWasChanged
+        ? {
+            originalName: playlistName,
+            finalName: finalPlaylistName,
+            wasChanged: true,
+            changeReason: `A playlist named "${playlistName}" already exists in your library. This playlist has been saved as "${finalPlaylistName}"`,
+          }
+        : {
+            originalName: playlistName,
+            finalName: finalPlaylistName,
+            wasChanged: false,
+            changeReason: null,
+          },
     });
   } catch (err) {
     // Handle 409 Conflict error from Xibo API

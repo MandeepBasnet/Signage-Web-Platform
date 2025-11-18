@@ -32,7 +32,12 @@ const ensureExtension = (desiredName, fallbackName) => {
 
 const generateUniqueMediaName = async (req, desiredName) => {
   const target = desiredName?.trim();
-  if (!target) return desiredName;
+  if (!target)
+    return {
+      finalName: desiredName,
+      wasChanged: false,
+      originalName: desiredName,
+    };
 
   try {
     const userXiboToken = req.user?.xiboToken;
@@ -42,12 +47,7 @@ const generateUniqueMediaName = async (req, desiredName) => {
       console.warn(
         "User Xibo token or ID missing for duplicate checking. Skipping pre-check."
       );
-      // Return with timestamp to ensure uniqueness
-      const ext = path.extname(target);
-      const base =
-        target.substring(0, target.length - ext.length).trim() || "Media";
-      const timestamp = Date.now();
-      return `${base}_${timestamp}${ext}`;
+      return { finalName: target, wasChanged: false, originalName: target };
     }
 
     // Query ONLY the user's own media using ownerId filter
@@ -90,7 +90,7 @@ const generateUniqueMediaName = async (req, desiredName) => {
       console.log(
         `Name "${target}" is unique for user. Found ${existingNames.size} existing media items owned by user.`
       );
-      return target;
+      return { finalName: target, wasChanged: false, originalName: target };
     }
 
     // Name exists in user's media, need to generate unique variant
@@ -106,15 +106,10 @@ const generateUniqueMediaName = async (req, desiredName) => {
     const uniqueName = `${base}_${timestamp}${ext}`;
 
     console.log(`Generated unique name with timestamp: "${uniqueName}"`);
-    return uniqueName;
+    return { finalName: uniqueName, wasChanged: true, originalName: target };
   } catch (err) {
     console.warn("Failed to check existing media names:", err.message);
-    // On error, use timestamp to ensure uniqueness
-    const ext = path.extname(target);
-    const base =
-      target.substring(0, target.length - ext.length).trim() || "Media";
-    const timestamp = Date.now();
-    return `${base}_${timestamp}${ext}`;
+    return { finalName: target, wasChanged: false, originalName: target };
   }
 };
 
@@ -236,11 +231,12 @@ export const uploadMedia = async (req, res) => {
 
     // Check for duplicates and generate unique name if needed
     // This preserves the user's requested name unless a duplicate exists
-    const uniqueName = await generateUniqueMediaName(req, desiredName);
+    const nameCheckResult = await generateUniqueMediaName(req, desiredName);
+    const { finalName: uniqueName, wasChanged, originalName } = nameCheckResult;
 
-    if (uniqueName !== desiredName) {
+    if (wasChanged) {
       console.log(
-        `Name modified due to duplicate: "${desiredName}" -> "${uniqueName}"`
+        `Name modified due to duplicate: "${originalName}" -> "${uniqueName}"`
       );
     } else {
       console.log(`Using user's requested name: "${uniqueName}"`);
@@ -428,6 +424,14 @@ export const uploadMedia = async (req, res) => {
       success: true,
       data: uploadResult,
       message: "Media uploaded successfully",
+      nameInfo: {
+        originalName: originalName,
+        finalName: uniqueName,
+        wasChanged: wasChanged,
+        changeReason: wasChanged
+          ? `A media with the name "${originalName}" already exists in your library. The file has been saved as "${uniqueName}"`
+          : null,
+      },
     });
   } catch (err) {
     console.error("Error uploading media:", {
