@@ -6,6 +6,7 @@ import {
   downloadMedia,
   getLibraryFolders,
   uploadMedia,
+  validateMediaName,
 } from "../controllers/libraryController.js";
 
 const router = express.Router();
@@ -18,6 +19,7 @@ const upload = multer({
 
 router.get("/", verifyToken, getLibraryMedia);
 router.get("/folders", verifyToken, getLibraryFolders);
+router.post("/validate-name", verifyToken, validateMediaName);
 router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);
 

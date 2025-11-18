@@ -6,6 +6,21 @@ import { getAuthHeaders } from "../utils/auth.js";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
+const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
+  const trimmed = desiredName?.trim() ?? "";
+  if (!trimmed) return trimmed;
+
+  const fallbackMatch = (fallbackName || "").match(/(\.[^./\\]+)$/);
+  const fallbackExtension = fallbackMatch ? fallbackMatch[0] : "";
+  const hasExtension = /\.[^./\\]+$/.test(trimmed);
+
+  if (hasExtension || !fallbackExtension) {
+    return trimmed;
+  }
+
+  return `${trimmed}${fallbackExtension}`;
+};
+
 export default function MediaContent() {
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,6 +36,7 @@ export default function MediaContent() {
   const [uploadProgress, setUploadProgress] = useState(null);
   const [folderOptions, setFolderOptions] = useState([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
+  const [nameSuggestion, setNameSuggestion] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -214,6 +230,7 @@ export default function MediaContent() {
     setUploadDuration(10);
     setUploadError(null);
     setUploadProgress(null);
+    setNameSuggestion(null);
   };
 
   const handleFileChange = (event) => {
@@ -224,6 +241,51 @@ export default function MediaContent() {
         setUploadName(file.name);
       }
       setUploadError(null);
+      setNameSuggestion(null);
+    }
+  };
+
+  const validateMediaNameAvailability = async (nameToValidate) => {
+    if (!nameToValidate) {
+      setUploadError("Media name is required.");
+      return false;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/library/validate-name`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({ name: nameToValidate }),
+      });
+
+      if (response.status === 409) {
+        const errorData = await response.json().catch(() => ({}));
+        setUploadError(
+          errorData?.message ||
+            `A media named '${nameToValidate}' already exists. Please choose another name.`
+        );
+        setNameSuggestion(errorData?.nameInfo || null);
+        return false;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData?.message ||
+            `Failed to validate media name: ${response.status}`
+        );
+      }
+
+      setNameSuggestion(null);
+      return true;
+    } catch (err) {
+      console.error("Error validating media name:", err);
+      setUploadError(err.message || "Failed to validate media name");
+      setNameSuggestion(null);
+      return false;
     }
   };
 
@@ -237,14 +299,27 @@ export default function MediaContent() {
     try {
       setUploading(true);
       setUploadError(null);
+      const derivedName = ensureNameHasExtension(
+        uploadName?.trim() || uploadFile.name,
+        uploadFile.name
+      );
+
+      setUploadProgress("Checking media name...");
+      const nameIsValid = await validateMediaNameAvailability(derivedName);
+      if (!nameIsValid) {
+        setUploading(false);
+        setUploadProgress(null);
+        return;
+      }
+
       setUploadProgress("Preparing upload...");
 
       const formData = new FormData();
       formData.append("media", uploadFile);
       formData.append("folderId", uploadFolder || "1");
       formData.append("duration", uploadDuration || 10);
-      if (uploadName) {
-        formData.append("name", uploadName);
+      if (derivedName) {
+        formData.append("name", derivedName);
       }
 
       console.log("Uploading file:", {
@@ -253,6 +328,7 @@ export default function MediaContent() {
         size: uploadFile.size,
         folder: uploadFolder,
         duration: uploadDuration,
+        targetName: derivedName,
       });
 
       setUploadProgress("Uploading to server...");
@@ -594,7 +670,11 @@ export default function MediaContent() {
                 <input
                   type="text"
                   value={uploadName}
-                  onChange={(e) => setUploadName(e.target.value)}
+                  onChange={(e) => {
+                    setUploadName(e.target.value);
+                    setNameSuggestion(null);
+                    setUploadError(null);
+                  }}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   placeholder="Optional name"
                   disabled={uploading}
@@ -656,6 +736,28 @@ export default function MediaContent() {
               {uploadError && (
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {uploadError}
+                </div>
+              )}
+
+              {nameSuggestion?.suggestedName && (
+                <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-800 space-y-2">
+                  <p>
+                    Suggested name:{" "}
+                    <span className="font-semibold">
+                      {nameSuggestion.suggestedName}
+                    </span>
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setUploadName(nameSuggestion.suggestedName);
+                      setNameSuggestion(null);
+                      setUploadError(null);
+                    }}
+                    className="rounded-md bg-yellow-600 px-3 py-1 text-xs font-medium text-white hover:bg-yellow-700 transition-colors"
+                  >
+                    Use suggested name
+                  </button>
                 </div>
               )}
 
