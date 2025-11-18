@@ -19,6 +19,13 @@ export async function getAccessToken() {
   formData.append("client_secret", process.env.XIBO_CLIENT_SECRET);
   formData.append("grant_type", "client_credentials");
 
+  console.log(`[xiboClient] Authenticating with:`);
+  console.log(`  - URL: ${process.env.XIBO_API_URL}/authorize/access_token`);
+  console.log(`  - Client ID: ${process.env.XIBO_CLIENT_ID}`);
+  console.log(
+    `  - Client Secret length: ${process.env.XIBO_CLIENT_SECRET?.length || 0}`
+  );
+
   try {
     const res = await axios.post(
       `${process.env.XIBO_API_URL}/authorize/access_token`,
@@ -28,6 +35,7 @@ export async function getAccessToken() {
         timeout: 10000, // 10 second timeout
       }
     );
+    console.log(`[xiboClient] ✓ Authentication successful`);
     token = res.data.access_token;
     setTimeout(() => (token = null), res.data.expires_in * 900);
     return token;
@@ -50,6 +58,11 @@ export async function getAccessToken() {
 
     // Handle authentication errors
     if (error.response) {
+      console.error(`[xiboClient] ✗ Authentication failed:`, {
+        status: error.response.status,
+        statusText: error.response.statusText,
+        data: error.response.data,
+      });
       throw new Error(
         `Xibo API authentication failed: ${error.response.status} ${error.response.statusText}. ` +
           `Please check your XIBO_CLIENT_ID and XIBO_CLIENT_SECRET.`
