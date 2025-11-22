@@ -57,10 +57,10 @@ const checkMediaNameAvailability = async (req, desiredName) => {
     }
 
     // Query ONLY the user's own media using ownerId filter
-    // Include retired/hidden media by not filtering them out
-    // Use pagination to get all media
+    // Xibo checks duplicates per user, not globally
+    // Include retired media in the check
     const ownedMediaResponse = await xiboRequest(
-      `/library?length=10000&ownerId=${userXiboUserId}&retired=`,
+      `/library?length=10000&ownerId=${userXiboUserId}`,
       "GET",
       null,
       userXiboToken
@@ -78,22 +78,28 @@ const checkMediaNameAvailability = async (req, desiredName) => {
     }
 
     console.log(
-      `Duplicate check: Found ${mediaList.length} media items (including retired) owned by user ${userXiboUserId}`
+      `Duplicate check: Found ${mediaList.length} media items owned by user ${userXiboUserId}`
     );
 
     // Extract all existing media names (case-insensitive comparison as Xibo does)
+    // Check the primary "name" field which Xibo uses for duplicate detection
     const existingNames = new Set(
       mediaList
         .map((item) => extractMediaName(item))
-        .filter((name) => typeof name === "string" && name.trim().length)
+        .filter((name) => typeof name === "string" && name.trim().length > 0)
         .map((name) => name.trim().toLowerCase())
     );
+
+    console.log(`Existing media names sample:`, {
+      totalUnique: existingNames.size,
+      sample: Array.from(existingNames).slice(0, 10),
+    });
 
     const targetLower = target.toLowerCase();
 
     if (!existingNames.has(targetLower)) {
       console.log(
-        `Name "${target}" is unique for user. Found ${existingNames.size} existing media items owned by user.`
+        `Name "${target}" is unique for user ${userXiboUserId}. Found ${existingNames.size} existing names.`
       );
       return {
         hasConflict: false,
@@ -240,6 +246,53 @@ export const getLibraryFolders = async (req, res) => {
     res.json({ folders });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch folders");
+  }
+};
+
+/**
+ * Update media name after upload using PUT /library/{mediaId}
+ * This ensures the name is explicitly set as Xibo may ignore the name during upload
+ */
+const updateMediaName = async (
+  mediaId,
+  desiredName,
+  duration,
+  userXiboToken
+) => {
+  try {
+    console.log(`Updating media ${mediaId} name to: "${desiredName}"`);
+
+    // Use xiboRequest with proper form-data format
+    // According to Xibo API, PUT /library/{id} requires: name, duration, retired
+    const updateData = {
+      name: desiredName,
+      duration: String(duration || 10),
+      retired: "0",
+    };
+
+    console.log(`Sending PUT request with data:`, updateData);
+
+    const response = await xiboRequest(
+      `/library/${mediaId}`,
+      "PUT",
+      updateData,
+      userXiboToken
+    );
+
+    console.log(`Media ${mediaId} name updated successfully:`, {
+      requestedName: desiredName,
+      responseName: response?.name || response?.fileName || "unknown",
+      fullResponse: response,
+    });
+
+    return response;
+  } catch (err) {
+    console.error(`Failed to update media ${mediaId} name:`, {
+      error: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+    });
+    throw err;
   }
 };
 
@@ -433,21 +486,80 @@ export const uploadMedia = async (req, res) => {
         typeof errorMessage === "string" &&
         errorMessage.toLowerCase().includes("already own media")
       ) {
-        const fallbackSuggestion = await checkMediaNameAvailability(
-          req,
-          availability.originalName
+        console.log(
+          `Duplicate detected during upload. Pre-check returned: ${availability.originalName}, Suggested: ${availability.suggestedName}`
         );
 
-        return res.status(409).json({
-          success: false,
-          message: errorMessage,
-          nameInfo: {
-            originalName: fallbackSuggestion.originalName,
-            suggestedName: fallbackSuggestion.suggestedName,
-            wasChanged: true,
-            changeReason: `The name "${fallbackSuggestion.originalName}" is already in use. Suggested alternative: "${fallbackSuggestion.suggestedName}".`,
-          },
-        });
+        // If our pre-check missed a duplicate, try with the suggested name
+        if (availability.suggestedName !== availability.originalName) {
+          console.log(
+            `Retrying upload with suggested name: "${availability.suggestedName}"`
+          );
+          try {
+            uploadResult = await attemptUpload(availability.suggestedName);
+            console.log(
+              `Retry successful with suggested name: "${availability.suggestedName}"`
+            );
+
+            // Check for errors in retry
+            if (uploadResult?.files && Array.isArray(uploadResult.files)) {
+              const fileErrors = uploadResult.files
+                .filter((file) => file?.error)
+                .map((file) => file.error);
+
+              if (fileErrors.length === 0) {
+                // Retry succeeded - continue with normal flow
+                // Don't throw, let it proceed to ownership/name update
+              } else {
+                // Retry also failed
+                throw new HttpError(400, fileErrors[0]);
+              }
+            }
+          } catch (retryErr) {
+            // Retry failed - return error to user
+            const retryErrorMessage =
+              retryErr.response?.data?.message ||
+              retryErr.response?.data?.error ||
+              retryErr.message ||
+              "Upload failed with both original and suggested name";
+
+            console.error("Retry failed:", retryErrorMessage);
+
+            // Get a new suggestion
+            const newSuggestion = await checkMediaNameAvailability(
+              req,
+              availability.suggestedName
+            );
+
+            return res.status(409).json({
+              success: false,
+              message: `Upload failed: ${retryErrorMessage}. Please try again with a different name.`,
+              nameInfo: {
+                originalName: availability.originalName,
+                suggestedName: newSuggestion.suggestedName,
+                wasChanged: true,
+                changeReason: `The name "${availability.originalName}" and the suggested alternative "${availability.suggestedName}" are both unavailable. Please try: "${newSuggestion.suggestedName}".`,
+              },
+            });
+          }
+        } else {
+          // Already using suggested name, can't retry further
+          const newSuggestion = await checkMediaNameAvailability(
+            req,
+            availability.originalName
+          );
+
+          return res.status(409).json({
+            success: false,
+            message: errorMessage,
+            nameInfo: {
+              originalName: newSuggestion.originalName,
+              suggestedName: newSuggestion.suggestedName,
+              wasChanged: true,
+              changeReason: `The name "${newSuggestion.originalName}" is already in use. Suggested alternative: "${newSuggestion.suggestedName}".`,
+            },
+          });
+        }
       }
 
       throw err;
@@ -514,23 +626,71 @@ export const uploadMedia = async (req, res) => {
       }
     }
 
+    // CRITICAL: Explicitly update the media name after upload
+    // Xibo's upload endpoint may ignore or truncate the name field
+    // We must use PUT /library/{mediaId} to ensure the name is correctly set
     let finalStoredName = availability.originalName;
     let finalNameChanged = false;
 
     if (uploadResult?.files && Array.isArray(uploadResult.files)) {
       const uploadedFile = uploadResult.files[0];
-      const storedName =
-        uploadedFile?.name ||
-        uploadedFile?.fileName ||
-        uploadedFile?.mediaName ||
-        uploadedFile?.originalName;
-      if (
-        storedName &&
-        storedName.trim().length > 0 &&
-        storedName !== availability.originalName
-      ) {
-        finalStoredName = storedName;
-        finalNameChanged = true;
+      const mediaId = uploadedFile?.mediaId || uploadedFile?.media_id;
+
+      if (mediaId) {
+        try {
+          console.log(
+            `Explicitly updating media ${mediaId} name to: "${availability.originalName}"`
+          );
+
+          // Call PUT /library/{mediaId} to explicitly set the name
+          const updateResponse = await updateMediaName(
+            mediaId,
+            availability.originalName,
+            duration,
+            userXiboToken
+          );
+
+          // Extract the actual stored name from the update response
+          const confirmedName =
+            updateResponse?.name ||
+            updateResponse?.fileName ||
+            updateResponse?.mediaName ||
+            null;
+
+          if (confirmedName) {
+            finalStoredName = confirmedName;
+            if (confirmedName !== availability.originalName) {
+              console.warn(
+                `Media name mismatch: requested "${availability.originalName}", got "${confirmedName}"`
+              );
+              finalNameChanged = true;
+            } else {
+              console.log(
+                `Media ${mediaId} name confirmed as: "${confirmedName}"`
+              );
+            }
+          }
+        } catch (nameUpdateErr) {
+          console.error(
+            `Failed to update media ${mediaId} name:`,
+            nameUpdateErr.message
+          );
+          // Don't fail the upload - just log the error
+          // Try to get the name from the upload response
+          const storedName =
+            uploadedFile?.name ||
+            uploadedFile?.fileName ||
+            uploadedFile?.mediaName ||
+            uploadedFile?.originalName;
+          if (
+            storedName &&
+            storedName.trim().length > 0 &&
+            storedName !== availability.originalName
+          ) {
+            finalStoredName = storedName;
+            finalNameChanged = true;
+          }
+        }
       }
     }
 
