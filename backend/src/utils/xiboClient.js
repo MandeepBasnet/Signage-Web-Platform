@@ -305,16 +305,13 @@ export async function xiboRequest(
       // Convert data to form data for PUT requests
       const formData = new FormData();
       Object.keys(data).forEach((key) => {
-        const value = data[key];
-        console.log(`[xiboRequest PUT] Adding to FormData: ${key} = ${value}`);
-        formData.append(key, String(value));
+        formData.append(key, String(data[key]));
       });
       requestConfig.data = formData;
       requestConfig.headers = {
         ...requestConfig.headers,
         ...formData.getHeaders(),
       };
-      console.log(`[xiboRequest PUT] FormData headers:`, requestConfig.headers);
     } else {
       // Use JSON for other methods
       requestConfig.data = data;

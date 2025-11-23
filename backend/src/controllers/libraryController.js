@@ -10,12 +10,6 @@ import {
   HttpError,
 } from "../utils/xiboDataHelpers.js";
 
-const isNumeric = (value) =>
-  value !== undefined &&
-  value !== null &&
-  String(value).trim() !== "" &&
-  !Number.isNaN(Number(value));
-
 // Extract the display name field that Xibo uses for duplicate checking
 // Xibo checks the "name" field (display name), not fileName
 const extractMediaName = (item) => {
@@ -365,16 +359,10 @@ const updateMediaName = async (
       retired: "0",
     };
 
-    console.log(`Sending PUT request with data:`, {
-      ...updateData,
+    console.log(`Sending PUT request for media ${mediaId}:`, {
+      name: updateData.name,
       nameLength: updateData.name.length,
-      nameChars: Array.from(updateData.name).map((c) => c.charCodeAt(0)),
-    });
-
-    console.log(`Calling xiboRequest for PUT /library/${mediaId}`, {
-      endpoint: `/library/${mediaId}`,
-      method: "PUT",
-      dataKeys: Object.keys(updateData),
+      duration: updateData.duration,
       hasUserToken: !!userXiboToken,
     });
 
@@ -384,11 +372,6 @@ const updateMediaName = async (
       updateData,
       userXiboToken
     );
-
-    console.log(`PUT request successful`, {
-      responseKeys: Object.keys(response || {}),
-      responsePreview: JSON.stringify(response).substring(0, 300),
-    });
 
     // Properly extract the stored name from the response
     // Xibo may return the full object or just an empty success response
@@ -494,13 +477,6 @@ export const uploadMedia = async (req, res) => {
 
     console.log(`Using user's requested name: "${availability.originalName}"`);
 
-    // Always use the logged-in user's ID as owner
-    // Only override if explicitly provided and different
-    const resolvedOwnerId =
-      ownerId !== undefined && ownerId !== null && String(ownerId).length
-        ? String(ownerId)
-        : String(userXiboUserId);
-
     // Helper function to attempt upload with a given name
     const attemptUpload = async (nameToUse) => {
       const uploadFormData = new FormData();
@@ -516,8 +492,6 @@ export const uploadMedia = async (req, res) => {
       uploadFormData.append("folderId", String(folderId));
       uploadFormData.append("duration", String(duration));
       uploadFormData.append("forceDuplicateCheck", "1");
-      // Don't set ownerId - let Xibo assign it to the authenticated user
-      // uploadFormData.append("ownerId", resolvedOwnerId);
 
       // CRITICAL: Always set a proper name
       // Xibo may use only the first character if name is not set properly
