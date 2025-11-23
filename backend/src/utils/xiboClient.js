@@ -302,16 +302,16 @@ export async function xiboRequest(
 
   if (data) {
     if (isPutRequest) {
-      // Convert data to form data for PUT requests
-      const formData = new FormData();
+      // Xibo requires application/x-www-form-urlencoded for PUT requests
+      // We need to use URLSearchParams to properly format the data
+      const params = new URLSearchParams();
       Object.keys(data).forEach((key) => {
-        formData.append(key, String(data[key]));
+        params.append(key, String(data[key]));
       });
-      requestConfig.data = formData;
-      requestConfig.headers = {
-        ...requestConfig.headers,
-        ...formData.getHeaders(),
-      };
+
+      requestConfig.data = params;
+      requestConfig.headers["Content-Type"] =
+        "application/x-www-form-urlencoded";
     } else {
       // Use JSON for other methods
       requestConfig.data = data;
