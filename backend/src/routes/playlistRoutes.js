@@ -14,6 +14,7 @@ import {
   getMediaPreview,
 } from "../controllers/addMediaPlaylistController.js";
 import { deleteMediaPlaylist } from "../controllers/deleteMediaPlaylist.js";
+import { deletePlaylist } from "../controllers/deletePlaylist.js";
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ const upload = multer({
 router.post("/", verifyToken, createPlaylist);
 router.get("/", verifyToken, getPlaylists);
 router.get("/:playlistId", verifyToken, getPlaylistDetails);
+router.delete("/:playlistId", verifyToken, deletePlaylist);
 
 // Media management for playlists
 router.post("/:playlistId/media", verifyToken, addMediaToPlaylist);

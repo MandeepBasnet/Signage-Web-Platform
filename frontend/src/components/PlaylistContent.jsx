@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -24,6 +25,7 @@ export default function PlaylistContent() {
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [deleteHoveredWidgetId, setDeleteHoveredWidgetId] = useState(null);
+  const [deleteHoveredPlaylistId, setDeleteHoveredPlaylistId] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -426,6 +428,42 @@ export default function PlaylistContent() {
     }
   };
 
+  const handleDeletePlaylist = async (playlistId) => {
+    if (!confirm("Are you sure you want to delete this playlist?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
+        method: "DELETE",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (response.status === 409) {
+        const data = await response.json();
+        alert(
+          `Cannot delete playlist:\n\n${data.message}\n\n${data.details || ""}`
+        );
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(
+          data.message || `Failed to delete playlist: ${response.status}`
+        );
+      }
+
+      // Refresh playlists
+      fetchPlaylists();
+    } catch (err) {
+      console.error("Error deleting playlist:", err);
+      alert(`Failed to delete playlist: ${err.message}`);
+    }
+  };
+
   const getMediaUrl = (item) => {
     const mediaId = getMediaId(item);
     if (!mediaId) return null;
@@ -787,53 +825,82 @@ export default function PlaylistContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {playlists.map((playlist) => (
-              <div
-                key={playlist.playlistId || playlist.playlist_id || playlist.id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow bg-white cursor-pointer"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  handlePlaylistClick(playlist);
-                }}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
+            {playlists.map((playlist) => {
+              const playlistId =
+                playlist.playlistId || playlist.playlist_id || playlist.id;
+              const isDeleteHovered = deleteHoveredPlaylistId === playlistId;
+
+              return (
+                <div
+                  key={playlistId}
+                  className={`border border-gray-200 rounded-lg p-4 hover:shadow-md transition-all bg-white cursor-pointer group relative ${
+                    isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
+                  }`}
+                  onClick={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     handlePlaylistClick(playlist);
-                  }
-                }}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <h3 className="font-semibold text-gray-900 text-lg truncate flex-1">
-                    {playlist.name ||
-                      playlist.playlistName ||
-                      "Unnamed Playlist"}
-                  </h3>
-                  <span className="text-2xl ml-2">📂</span>
-                </div>
-                {playlist.description && (
-                  <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                    {playlist.description}
-                  </p>
-                )}
-                <div className="flex items-center justify-between text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-                  {playlist.modifiedDt && (
-                    <span>
-                      Modified:{" "}
-                      {new Date(playlist.modifiedDt).toLocaleDateString()}
-                    </span>
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handlePlaylistClick(playlist);
+                    }
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-gray-900 text-lg truncate flex-1">
+                      {playlist.name ||
+                        playlist.playlistName ||
+                        "Unnamed Playlist"}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <span className="text-2xl">📂</span>
+                      {/* Delete Button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePlaylist(playlistId);
+                        }}
+                        onMouseEnter={() =>
+                          setDeleteHoveredPlaylistId(playlistId)
+                        }
+                        onMouseLeave={() => setDeleteHoveredPlaylistId(null)}
+                        className="p-1 rounded-full hover:bg-red-100 transition-colors flex-shrink-0"
+                        title="Delete playlist"
+                      >
+                        <img
+                          src="/trash-svgrepo-com.svg"
+                          alt="Delete"
+                          className="w-6 h-6"
+                        />
+                      </button>
+                    </div>
+                  </div>
+                  {playlist.description && (
+                    <p className="text-sm text-gray-600 mb-3 line-clamp-2">
+                      {playlist.description}
+                    </p>
                   )}
-                  {playlist.duration && (
-                    <span className="ml-auto">
-                      Duration: {playlist.duration}s
-                    </span>
-                  )}
+                  <div className="flex items-center justify-between text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
+                    {playlist.modifiedDt && (
+                      <span>
+                        Modified:{" "}
+                        {new Date(playlist.modifiedDt).toLocaleDateString()}
+                      </span>
+                    )}
+                    {playlist.duration && (
+                      <span className="ml-auto">
+                        Duration: {playlist.duration}s
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
