@@ -9,11 +9,11 @@ import {
 import {
   addMediaToPlaylist,
   getAvailableMediaForPlaylist,
-  removeMediaFromPlaylist,
   updateMediaDurationInPlaylist,
   uploadMediaToPlaylist,
   getMediaPreview,
 } from "../controllers/addMediaPlaylistController.js";
+import { deleteMediaPlaylist } from "../controllers/deleteMediaPlaylist.js";
 
 const router = express.Router();
 
@@ -37,11 +37,7 @@ router.get(
   verifyToken,
   getAvailableMediaForPlaylist
 );
-router.delete(
-  "/:playlistId/media/:widgetId",
-  verifyToken,
-  removeMediaFromPlaylist
-);
+router.delete("/:playlistId/media/:widgetId", verifyToken, deleteMediaPlaylist);
 router.put(
   "/:playlistId/media/:widgetId/duration",
   verifyToken,

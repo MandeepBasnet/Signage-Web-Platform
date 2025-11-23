@@ -23,6 +23,7 @@ export default function PlaylistContent() {
   const [createError, setCreateError] = useState(null);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
+  const [deleteHoveredWidgetId, setDeleteHoveredWidgetId] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -388,6 +389,43 @@ export default function PlaylistContent() {
     }
   };
 
+  const handleDeleteMedia = async (widgetId) => {
+    if (
+      !confirm("Are you sure you want to remove this media from the playlist?")
+    ) {
+      return;
+    }
+
+    try {
+      const playlistId =
+        selectedPlaylist.playlistId ||
+        selectedPlaylist.playlist_id ||
+        selectedPlaylist.id ||
+        selectedPlaylist.ID ||
+        selectedPlaylist.PlaylistId;
+
+      const response = await fetch(
+        `${API_BASE_URL}/playlists/${playlistId}/media/${widgetId}`,
+        {
+          method: "DELETE",
+          headers: {
+            ...getAuthHeaders(),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to delete media");
+      }
+
+      // Refresh playlist
+      fetchPlaylistDetails(playlistId);
+    } catch (err) {
+      console.error("Error deleting media:", err);
+      alert("Failed to delete media");
+    }
+  };
+
   const getMediaUrl = (item) => {
     const mediaId = getMediaId(item);
     if (!mediaId) return null;
@@ -509,10 +547,14 @@ export default function PlaylistContent() {
                 const isVideoType = isVideo(mediaType);
                 const isAudioType = isAudio(mediaType);
 
+                const isDeleteHovered = deleteHoveredWidgetId === widgetId;
+
                 return (
                   <div
                     key={`${widgetId || "widget"}-${mediaId || "media"}`}
-                    className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col"
+                    className={`border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col relative group ${
+                      isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
+                    }`}
                   >
                     {/* Media Preview */}
                     <div
@@ -613,6 +655,27 @@ export default function PlaylistContent() {
                             item.mediaName ||
                             "Unnamed Media"}
                         </h3>
+                        {/* Delete Button */}
+                        {widgetId && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMedia(widgetId);
+                            }}
+                            onMouseEnter={() =>
+                              setDeleteHoveredWidgetId(widgetId)
+                            }
+                            onMouseLeave={() => setDeleteHoveredWidgetId(null)}
+                            className="ml-2 p-1 rounded-full hover:bg-red-100 transition-colors flex-shrink-0"
+                            title="Remove from playlist"
+                          >
+                            <img
+                              src="/trash-svgrepo-com.svg"
+                              alt="Delete"
+                              className="w-6 h-6"
+                            />
+                          </button>
+                        )}
                       </div>
                       {item.description && (
                         <p className="text-sm text-gray-600 mb-3 line-clamp-2">
