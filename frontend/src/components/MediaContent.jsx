@@ -38,6 +38,7 @@ export default function MediaContent() {
   const [foldersLoading, setFoldersLoading] = useState(false);
   const [nameSuggestion, setNameSuggestion] = useState(null);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
+  const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -408,6 +409,33 @@ export default function MediaContent() {
     }
   };
 
+  const handleDeleteMedia = async (mediaId) => {
+    if (!mediaId) return;
+
+    if (!confirm("Are you sure you want to delete this media?")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/library/${mediaId}`, {
+        method: "DELETE",
+        headers: {
+          ...getAuthHeaders(),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to delete media: ${response.status}`);
+      }
+
+      // Refresh media list
+      fetchMedia();
+    } catch (err) {
+      console.error("Error deleting media:", err);
+      alert("Failed to delete media. Please try again.");
+    }
+  };
+
   const getMediaIcon = (mediaType) => {
     const type = mediaType?.toLowerCase() || "";
     if (type.includes("image")) return "🖼️";
@@ -516,10 +544,14 @@ export default function MediaContent() {
               const isVideoType = isVideo(mediaType);
               const isAudioType = isAudio(mediaType);
 
+              const isDeleteHovered = deleteHoveredMediaId === mediaId;
+
               return (
                 <div
                   key={mediaId}
-                  className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col"
+                  className={`border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col relative group ${
+                    isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
+                  }`}
                 >
                   {/* Media Preview */}
                   <div
@@ -620,6 +652,25 @@ export default function MediaContent() {
                           item.mediaName ||
                           "Unnamed Media"}
                       </h3>
+                      {/* Delete Button */}
+                      {mediaId && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteMedia(mediaId);
+                          }}
+                          onMouseEnter={() => setDeleteHoveredMediaId(mediaId)}
+                          onMouseLeave={() => setDeleteHoveredMediaId(null)}
+                          className="ml-2 p-1 rounded-full hover:bg-red-100 transition-colors flex-shrink-0"
+                          title="Delete media"
+                        >
+                          <img
+                            src="/trash-svgrepo-com.svg"
+                            alt="Delete"
+                            className="w-6 h-6"
+                          />
+                        </button>
+                      )}
                     </div>
                     {item.description && (
                       <p className="text-sm text-gray-600 mb-3 line-clamp-2">

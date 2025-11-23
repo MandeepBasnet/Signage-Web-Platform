@@ -9,6 +9,7 @@ import {
   uploadMedia,
   validateMediaName,
 } from "../controllers/libraryController.js";
+import { deleteMedia } from "../controllers/deleteMedia.js";
 
 const router = express.Router();
 const upload = multer({
@@ -24,5 +25,6 @@ router.get("/all", verifyToken, getAllLibraryMedia);
 router.post("/validate-name", verifyToken, validateMediaName);
 router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);
+router.delete("/:mediaId", verifyToken, deleteMedia);
 
 export default router;
