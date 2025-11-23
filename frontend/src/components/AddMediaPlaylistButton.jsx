@@ -41,15 +41,99 @@ export default function AddMediaPlaylistButton({
   const [uploadError, setUploadError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadNameSuggestion, setUploadNameSuggestion] = useState(null);
+  const [mediaUrls, setMediaUrls] = useState(new Map());
+
+  // Helper functions for media types
+  const isImage = (mediaType) => {
+    const type = mediaType?.toLowerCase() || "";
+    return (
+      type.includes("image") ||
+      type.includes("jpg") ||
+      type.includes("jpeg") ||
+      type.includes("png") ||
+      type.includes("gif") ||
+      type.includes("webp") ||
+      type.includes("svg")
+    );
+  };
+
+  const isVideo = (mediaType) => {
+    const type = mediaType?.toLowerCase() || "";
+    return (
+      type.includes("video") ||
+      type.includes("mp4") ||
+      type.includes("webm") ||
+      type.includes("ogg") ||
+      type.includes("mov") ||
+      type.includes("avi")
+    );
+  };
+
+  const isAudio = (mediaType) => {
+    const type = mediaType?.toLowerCase() || "";
+    return (
+      type.includes("audio") ||
+      type.includes("mp3") ||
+      type.includes("wav") ||
+      type.includes("ogg") ||
+      type.includes("m4a")
+    );
+  };
+
+  const getMediaIcon = (mediaType) => {
+    const type = mediaType?.toLowerCase() || "";
+    if (type.includes("image")) return "🖼️";
+    if (type.includes("video")) return "🎬";
+    if (type.includes("audio")) return "🎵";
+    if (type.includes("pdf")) return "📄";
+    return "📹";
+  };
+
+  const getMediaUrl = (item) => {
+    const mediaId = item.mediaId || item.id;
+    if (!mediaId) return null;
+    // Use blob URL if available, otherwise use direct download URL (via proxy)
+    return (
+      mediaUrls.get(mediaId) ||
+      `${API_BASE_URL}/playlists/media/${mediaId}/preview`
+    );
+  };
 
   // Folder state
   const [folderOptions, setFolderOptions] = useState([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
 
-  /**
-   * Fetch media options based on scope
-   * XIBO API: GET /library or GET /library/all
-   */
+  // Pre-fetch media URLs for previews
+  const fetchMediaPreviews = async (items) => {
+    const urlMap = new Map(mediaUrls);
+
+    for (const item of items) {
+      const mediaId = item.mediaId || item.id;
+      if (mediaId && !urlMap.has(mediaId)) {
+        const mediaType = item.mediaType || item.type || "";
+        if (isImage(mediaType) || isVideo(mediaType) || isAudio(mediaType)) {
+          try {
+            const response = await fetch(
+              `${API_BASE_URL}/playlists/media/${mediaId}/preview`,
+              {
+                headers: { ...getAuthHeaders() },
+              }
+            );
+            if (response.ok) {
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              urlMap.set(mediaId, url);
+            }
+          } catch (err) {
+            console.warn(`Failed to load preview for ${mediaId}`, err);
+          }
+        }
+      }
+    }
+    setMediaUrls(urlMap);
+  };
+
+  // Update fetchMediaOptions to call fetchMediaPreviews
   const fetchMediaOptions = async (scope = "owned") => {
     try {
       setMediaOptionsLoading(true);
@@ -73,11 +157,16 @@ export default function AddMediaPlaylistButton({
       }
 
       const data = await response.json();
+      const items = data?.data || [];
+
       if (scope === "all") {
-        setAllMediaOptions(data?.data || []);
+        setAllMediaOptions(items);
       } else {
-        setOwnedMediaOptions(data?.data || []);
+        setOwnedMediaOptions(items);
       }
+
+      // Fetch previews in background
+      fetchMediaPreviews(items);
     } catch (err) {
       console.error("Error fetching media options:", err);
       setMediaOptionsError(err.message || "Failed to load media");
@@ -337,31 +426,52 @@ export default function AddMediaPlaylistButton({
       formData.append("folderId", uploadFolder);
       formData.append("duration", uploadDuration);
 
-      // Upload media
-      const uploadResponse = await fetch(`${API_BASE_URL}/library/upload`, {
-        method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-        },
-        body: formData,
-      });
+      // Use new unified endpoint
+      const uploadResponse = await fetch(
+        `${API_BASE_URL}/playlists/${playlistId}/upload`,
+        {
+          method: "POST",
+          headers: {
+            ...getAuthHeaders(),
+          },
+          body: formData,
+        }
+      );
 
       if (!uploadResponse.ok) {
         const errorData = await uploadResponse.json().catch(() => ({}));
+
+        // Handle duplicate name error
+        if (uploadResponse.status === 409) {
+          setUploadError(
+            errorData?.message ||
+              `A media with that name already exists. Please choose another name.`
+          );
+          if (errorData?.nameInfo) {
+            setUploadNameSuggestion({
+              originalName: errorData.nameInfo.originalName,
+              suggestedName: errorData.nameInfo.suggestedName,
+              reason: errorData.nameInfo.changeReason,
+            });
+          }
+          return;
+        }
+
         throw new Error(
           errorData?.message || `Upload failed: ${uploadResponse.status}`
         );
       }
 
-      const uploadedData = await uploadResponse.json();
-      const uploadedMediaId = uploadedData?.data?.files?.[0]?.mediaId;
+      const result = await uploadResponse.json();
 
-      if (uploadedMediaId) {
-        // Auto-attach to playlist if upload succeeds
-        await handleAttachMedia(uploadedMediaId);
-        resetUploadState();
-        setCurrentTab("owned");
-        fetchMediaOptions("owned");
+      // Success
+      resetUploadState();
+      setCurrentTab("owned");
+      fetchMediaOptions("owned");
+
+      // Trigger callback with new media ID
+      if (onMediaAdded && result.data?.mediaId) {
+        onMediaAdded(result.data.mediaId);
       }
     } catch (err) {
       console.error("Error uploading media:", err);
@@ -380,22 +490,82 @@ export default function AddMediaPlaylistButton({
     const isAttaching = attachingMediaId === mediaId;
     const name = item.name || item.fileName || `Media ${mediaId}`;
 
+    const mediaUrl = getMediaUrl(item);
+    const mediaType = item.mediaType || item.type || "";
+    const isImageType = isImage(mediaType);
+    const isVideoType = isVideo(mediaType);
+
     return (
       <div
         key={mediaId}
-        className="rounded-lg border border-gray-200 p-4 hover:border-blue-300 hover:shadow-md transition-all"
+        className="rounded-lg border border-gray-200 overflow-hidden hover:border-blue-300 hover:shadow-md transition-all bg-white flex flex-col"
       >
-        <div className="flex items-center justify-between mb-3">
-          <p className="font-medium text-sm text-gray-900 truncate">{name}</p>
+        {/* Preview Area */}
+        <div className="relative w-full h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
+          {mediaUrl ? (
+            <>
+              {isImageType && (
+                <img
+                  src={mediaUrl}
+                  alt={name}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                    e.target.nextSibling.style.display = "flex";
+                  }}
+                />
+              )}
+              {isVideoType && (
+                <video
+                  src={mediaUrl}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.target.style.display = "none";
+                    e.target.nextSibling.style.display = "flex";
+                  }}
+                />
+              )}
+              {!isImageType && !isVideoType && (
+                <div className="flex flex-col items-center justify-center text-gray-400">
+                  <span className="text-3xl">{getMediaIcon(mediaType)}</span>
+                </div>
+              )}
+              {/* Fallback */}
+              <div className="hidden flex-col items-center justify-center text-gray-400">
+                <span className="text-3xl">{getMediaIcon(mediaType)}</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-gray-400">
+              <span className="text-3xl">{getMediaIcon(mediaType)}</span>
+            </div>
+          )}
+
+          {/* Overlay for Add button */}
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-end justify-end p-2">
+            {/* Button moved to footer */}
+          </div>
+        </div>
+
+        {/* Footer Info */}
+        <div className="p-3 flex items-center justify-between border-t border-gray-100">
+          <div className="flex-1 min-w-0 mr-2">
+            <p
+              className="font-medium text-sm text-gray-900 truncate"
+              title={name}
+            >
+              {name}
+            </p>
+            <p className="text-xs text-gray-500 truncate">ID: {mediaId}</p>
+          </div>
           <button
             onClick={() => handleAttachMedia(mediaId)}
             disabled={isAttaching || uploading}
-            className="ml-2 rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-400"
+            className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:bg-gray-400 transition-colors shadow-sm"
           >
-            {isAttaching ? "Adding..." : "Add"}
+            {isAttaching ? "..." : "Add"}
           </button>
         </div>
-        <p className="text-xs text-gray-500">ID: {mediaId}</p>
       </div>
     );
   };

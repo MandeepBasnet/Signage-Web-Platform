@@ -1,4 +1,5 @@
 import express from "express";
+import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import {
   getPlaylists,
@@ -10,9 +11,19 @@ import {
   getAvailableMediaForPlaylist,
   removeMediaFromPlaylist,
   updateMediaDurationInPlaylist,
+  uploadMediaToPlaylist,
+  getMediaPreview,
 } from "../controllers/addMediaPlaylistController.js";
 
 const router = express.Router();
+
+// Configure multer for memory storage
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 200 * 1024 * 1024, // 200MB
+  },
+});
 
 // Playlist CRUD operations
 router.post("/", verifyToken, createPlaylist);
@@ -36,5 +47,14 @@ router.put(
   verifyToken,
   updateMediaDurationInPlaylist
 );
+
+// New endpoints for direct upload and preview
+router.post(
+  "/:playlistId/upload",
+  verifyToken,
+  upload.single("media"),
+  uploadMediaToPlaylist
+);
+router.get("/media/:mediaId/preview", verifyToken, getMediaPreview);
 
 export default router;

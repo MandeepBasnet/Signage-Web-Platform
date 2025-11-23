@@ -12,7 +12,7 @@ import {
 
 // Extract the display name field that Xibo uses for duplicate checking
 // Xibo checks the "name" field (display name), not fileName
-const extractMediaName = (item) => {
+export const extractMediaName = (item) => {
   // Only check the name field - this is what Xibo uses for duplicate detection
   // Also handle cases where name might be null or empty string
   const mediaName = item?.name || item?.mediaName || item?.media_name || null;
@@ -22,7 +22,7 @@ const extractMediaName = (item) => {
     : null;
 };
 
-const ensureExtension = (desiredName, fallbackName) => {
+export const ensureExtension = (desiredName, fallbackName) => {
   const fallbackExt = path.extname(fallbackName || "");
   if (!fallbackExt) return desiredName;
   return path.extname(desiredName || "")
@@ -30,7 +30,7 @@ const ensureExtension = (desiredName, fallbackName) => {
     : `${desiredName}${fallbackExt}`;
 };
 
-const checkMediaNameAvailability = async (req, desiredName) => {
+export const checkMediaNameAvailability = async (req, desiredName) => {
   const target = desiredName?.trim();
 
   // Validate name length before checking duplicates

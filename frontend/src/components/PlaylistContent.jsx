@@ -263,7 +263,7 @@ export default function PlaylistContent() {
           if (isImageType || isVideoType || isAudioType) {
             try {
               const mediaResponse = await fetch(
-                `${API_BASE_URL}/library/${mediaId}/download`,
+                `${API_BASE_URL}/playlists/media/${mediaId}/preview`,
                 {
                   headers: {
                     ...getAuthHeaders(),
@@ -392,7 +392,8 @@ export default function PlaylistContent() {
     const mediaId = getMediaId(item);
     if (!mediaId) return null;
     return (
-      mediaUrls.get(mediaId) || `${API_BASE_URL}/library/${mediaId}/download`
+      mediaUrls.get(mediaId) ||
+      `${API_BASE_URL}/playlists/media/${mediaId}/preview`
     );
   };
 

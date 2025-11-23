@@ -309,3 +309,215 @@ export const updateMediaDurationInPlaylist = async (req, res) => {
     handleControllerError(res, err, "Failed to update media duration");
   }
 };
+
+/**
+ * Get media preview (thumbnail/download)
+ * Proxies the download from Xibo
+ */
+export const getMediaPreview = async (req, res) => {
+  try {
+    const { mediaId } = req.params;
+    const { token } = getUserContext(req);
+
+    if (!mediaId) {
+      return res.status(400).json({ message: "Media ID is required" });
+    }
+
+    // Get media download URL from Xibo API
+    const xiboApiUrl = process.env.XIBO_API_URL;
+    const downloadUrl = `${xiboApiUrl}/library/download/${mediaId}`;
+
+    // Fetch the media file from Xibo
+    const response = await axios.get(downloadUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      responseType: "stream",
+    });
+
+    // Set appropriate headers
+    res.setHeader(
+      "Content-Type",
+      response.headers["content-type"] || "application/octet-stream"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      response.headers["content-disposition"] ||
+        `attachment; filename="media-${mediaId}"`
+    );
+
+    // Pipe the response to the client
+    response.data.pipe(res);
+  } catch (err) {
+    console.error("Error downloading media preview:", err.message);
+    handleControllerError(res, err, "Failed to download media preview");
+  }
+};
+
+/**
+ * Upload media and assign to playlist
+ * Handles upload to library and immediate assignment to playlist
+ */
+export const uploadMediaToPlaylist = async (req, res) => {
+  try {
+    const { playlistId } = req.params;
+    const { token, userId } = getUserContext(req);
+    const file = req.file;
+    const {
+      name,
+      duration = 10,
+      folderId = 1,
+      tags,
+      enableStat,
+      retired,
+    } = req.body || {};
+
+    if (!playlistId) {
+      throw new HttpError(400, "Playlist ID is required");
+    }
+
+    if (!file) {
+      throw new HttpError(400, "Media file is required");
+    }
+
+    // Import helpers dynamically to avoid circular dependency issues if any
+    // (Though standard import at top is better if no circular deps)
+    // We'll rely on the imports added at the top of the file
+    const { checkMediaNameAvailability, ensureExtension } = await import(
+      "./libraryController.js"
+    );
+
+    // 1. Prepare Name
+    let requestedName = file.originalname;
+    if (typeof name === "string" && name.trim().length) {
+      requestedName = name.trim();
+    }
+    const desiredName = ensureExtension(requestedName, file.originalname);
+
+    console.log(`Processing upload for playlist ${playlistId}:`, {
+      filename: file.originalname,
+      desiredName,
+      size: file.size,
+    });
+
+    // 2. Check for duplicates
+    const availability = await checkMediaNameAvailability(req, desiredName);
+
+    if (availability.hasConflict) {
+      return res.status(409).json({
+        success: false,
+        message: `A media named '${availability.originalName}' already exists.`,
+        nameInfo: {
+          originalName: availability.originalName,
+          suggestedName: availability.suggestedName,
+          wasChanged: true,
+          changeReason: `Name collision detected. Suggested: "${availability.suggestedName}"`,
+        },
+      });
+    }
+
+    // 3. Upload to Xibo Library
+    const uploadFormData = new FormData();
+    const { Readable } = await import("stream");
+    const fileStream = Readable.from(file.buffer);
+
+    uploadFormData.append("files[]", fileStream, {
+      filename: file.originalname,
+      contentType: file.mimetype,
+      knownLength: file.size,
+    });
+
+    uploadFormData.append("folderId", String(folderId));
+    uploadFormData.append("duration", String(duration));
+    uploadFormData.append("name", availability.originalName); // Use checked name
+    uploadFormData.append("forceDuplicateCheck", "1");
+    if (tags) uploadFormData.append("tags", String(tags));
+
+    console.log(
+      `Uploading to library with name: "${availability.originalName}"`
+    );
+
+    const uploadResponse = await axios.post(
+      `${process.env.XIBO_API_URL}/library`,
+      uploadFormData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...uploadFormData.getHeaders(),
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      }
+    );
+
+    // 4. Handle Upload Result
+    let uploadedMediaId = null;
+    if (
+      uploadResponse.data?.files &&
+      Array.isArray(uploadResponse.data.files) &&
+      uploadResponse.data.files.length > 0
+    ) {
+      const uploadedFile = uploadResponse.data.files[0];
+      if (uploadedFile.error) {
+        throw new HttpError(400, uploadedFile.error);
+      }
+      uploadedMediaId = uploadedFile.mediaId || uploadedFile.media_id;
+    }
+
+    if (!uploadedMediaId) {
+      throw new HttpError(500, "Upload failed: No media ID returned");
+    }
+
+    console.log(`Upload successful. Media ID: ${uploadedMediaId}`);
+
+    // 5. Transfer Ownership (Optional but recommended)
+    try {
+      await xiboRequest(
+        `/user/permissions/Media/${uploadedMediaId}`,
+        "POST",
+        { ownerId: String(userId) },
+        token
+      );
+    } catch (ownErr) {
+      console.warn(
+        `Ownership transfer failed for ${uploadedMediaId}:`,
+        ownErr.message
+      );
+    }
+
+    // 6. Assign to Playlist
+    console.log(`Assigning media ${uploadedMediaId} to playlist ${playlistId}`);
+
+    const assignFormData = new FormData();
+    assignFormData.append("media[]", String(uploadedMediaId));
+    assignFormData.append("duration", String(duration));
+    assignFormData.append("useDuration", "1");
+
+    await axios.post(
+      `${process.env.XIBO_API_URL}/playlist/library/assign/${playlistId}`,
+      assignFormData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          ...assignFormData.getHeaders(),
+        },
+      }
+    );
+
+    console.log(`Successfully assigned media ${uploadedMediaId} to playlist`);
+
+    res.status(201).json({
+      success: true,
+      message: "Media uploaded and added to playlist successfully",
+      data: {
+        mediaId: uploadedMediaId,
+        name: availability.originalName,
+        playlistId: playlistId,
+      },
+    });
+  } catch (err) {
+    console.error("Error in uploadMediaToPlaylist:", err);
+    // Handle specific Xibo errors if needed
+    handleControllerError(res, err, "Failed to upload and assign media");
+  }
+};
