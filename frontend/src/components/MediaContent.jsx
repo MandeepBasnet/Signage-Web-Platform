@@ -424,15 +424,22 @@ export default function MediaContent() {
         },
       });
 
+      if (response.status === 409) {
+        const data = await response.json();
+        alert(`Cannot delete media:\n\n${data.message}\n\nDetails: ${data.details || "It is currently assigned to a playlist or layout."}`);
+        return;
+      }
+
       if (!response.ok) {
-        throw new Error(`Failed to delete media: ${response.status}`);
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || `Failed to delete media: ${response.status}`);
       }
 
       // Refresh media list
       fetchMedia();
     } catch (err) {
       console.error("Error deleting media:", err);
-      alert("Failed to delete media. Please try again.");
+      alert(`Failed to delete media: ${err.message}`);
     }
   };
 
