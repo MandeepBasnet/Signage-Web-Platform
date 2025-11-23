@@ -383,9 +383,8 @@ export const uploadMediaToPlaylist = async (req, res) => {
     // Import helpers dynamically to avoid circular dependency issues if any
     // (Though standard import at top is better if no circular deps)
     // We'll rely on the imports added at the top of the file
-    const { checkMediaNameAvailability, ensureExtension } = await import(
-      "./libraryController.js"
-    );
+    const { checkMediaNameAvailability, ensureExtension, updateMediaName } =
+      await import("./libraryController.js");
 
     // 1. Prepare Name
     let requestedName = file.originalname;
@@ -483,6 +482,25 @@ export const uploadMediaToPlaylist = async (req, res) => {
         `Ownership transfer failed for ${uploadedMediaId}:`,
         ownErr.message
       );
+    }
+
+    // 5.5 Explicitly Update Name (Fix for Truncation Issue)
+    try {
+      console.log(
+        `Explicitly updating media ${uploadedMediaId} name to: "${availability.originalName}"`
+      );
+      await updateMediaName(
+        uploadedMediaId,
+        availability.originalName,
+        duration,
+        token
+      );
+    } catch (nameErr) {
+      console.warn(
+        `Failed to update media name for ${uploadedMediaId}:`,
+        nameErr.message
+      );
+      // Continue, as the media is uploaded and can be renamed later
     }
 
     // 6. Assign to Playlist

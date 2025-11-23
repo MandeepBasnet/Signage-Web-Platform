@@ -332,7 +332,7 @@ export const getLibraryFolders = async (req, res) => {
  * This ensures the name is explicitly set as Xibo may ignore the name during upload
  * Returns the actual stored name from Xibo to detect any truncation
  */
-const updateMediaName = async (
+export const updateMediaName = async (
   mediaId,
   desiredName,
   duration,
