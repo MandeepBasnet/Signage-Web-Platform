@@ -20,7 +20,12 @@ const isNumeric = (value) =>
 // Xibo checks the "name" field (display name), not fileName
 const extractMediaName = (item) => {
   // Only check the name field - this is what Xibo uses for duplicate detection
-  return item?.name || item?.mediaName || item?.media_name || null;
+  // Also handle cases where name might be null or empty string
+  const mediaName = item?.name || item?.mediaName || item?.media_name || null;
+  // Return null for empty strings to avoid false positives
+  return typeof mediaName === "string" && mediaName.trim()
+    ? mediaName.trim()
+    : null;
 };
 
 const ensureExtension = (desiredName, fallbackName) => {
@@ -33,11 +38,20 @@ const ensureExtension = (desiredName, fallbackName) => {
 
 const checkMediaNameAvailability = async (req, desiredName) => {
   const target = desiredName?.trim();
-  if (!target) {
+
+  // Validate name length before checking duplicates
+  // Xibo API requires 1-100 characters
+  if (!target || target.length === 0 || target.length > 100) {
+    console.warn(
+      `Invalid name length: "${desiredName}" (${
+        target?.length || 0
+      } chars). Must be 1-100 characters.`
+    );
     return {
-      hasConflict: false,
+      hasConflict: true,
       originalName: desiredName,
-      suggestedName: desiredName,
+      suggestedName: `Media_${Date.now()}`,
+      error: `Name must be between 1 and 100 characters`,
     };
   }
 
@@ -59,23 +73,70 @@ const checkMediaNameAvailability = async (req, desiredName) => {
     // Query ONLY the user's own media using ownerId filter
     // Xibo checks duplicates per user, not globally
     // Include retired media in the check
-    const ownedMediaResponse = await xiboRequest(
-      `/library?length=10000&ownerId=${userXiboUserId}`,
-      "GET",
-      null,
-      userXiboToken
-    );
-
-    // Handle different response formats from Xibo
+    // Use DataTables format for pagination
     let mediaList = [];
-    if (Array.isArray(ownedMediaResponse)) {
-      mediaList = ownedMediaResponse;
-    } else if (
-      ownedMediaResponse?.data &&
-      Array.isArray(ownedMediaResponse.data)
-    ) {
-      mediaList = ownedMediaResponse.data;
+    let totalItemsFetched = 0;
+    let pageSize = 1000;
+    let pageNum = 0;
+    let fetchedAll = false;
+
+    while (!fetchedAll && pageNum < 50) {
+      const start = pageNum * pageSize;
+      const queryStr = `/library?start=${start}&length=${pageSize}&draw=${
+        pageNum + 1
+      }&ownerId=${userXiboUserId}`;
+
+      console.log(
+        `Fetching user media page ${pageNum} with query: ${queryStr}`
+      );
+
+      try {
+        const pageResponse = await xiboRequest(
+          queryStr,
+          "GET",
+          null,
+          userXiboToken
+        );
+
+        // Handle different response formats from Xibo
+        let pageItems = [];
+        if (Array.isArray(pageResponse)) {
+          pageItems = pageResponse;
+        } else if (pageResponse?.data && Array.isArray(pageResponse.data)) {
+          pageItems = pageResponse.data;
+        } else if (pageResponse && typeof pageResponse === "object") {
+          // Handle DataTables response format
+          pageItems = Array.isArray(pageResponse) ? pageResponse : [];
+        }
+
+        console.log(`Page ${pageNum}: Fetched ${pageItems.length} items`);
+
+        if (!pageItems.length) {
+          fetchedAll = true;
+          break;
+        }
+
+        mediaList.push(...pageItems);
+        totalItemsFetched += pageItems.length;
+        pageNum++;
+
+        // Stop if we got fewer items than page size
+        if (pageItems.length < pageSize) {
+          fetchedAll = true;
+        }
+      } catch (pageErr) {
+        console.error(
+          `Error fetching page ${pageNum} of user media:`,
+          pageErr.message
+        );
+        // Continue with what we have
+        fetchedAll = true;
+      }
     }
+
+    console.log(
+      `Fetched ${totalItemsFetched} media items across ${pageNum} pages`
+    );
 
     console.log(
       `Duplicate check: Found ${mediaList.length} media items owned by user ${userXiboUserId}`
@@ -83,16 +144,38 @@ const checkMediaNameAvailability = async (req, desiredName) => {
 
     // Extract all existing media names (case-insensitive comparison as Xibo does)
     // Check the primary "name" field which Xibo uses for duplicate detection
-    const existingNames = new Set(
-      mediaList
-        .map((item) => extractMediaName(item))
-        .filter((name) => typeof name === "string" && name.trim().length > 0)
-        .map((name) => name.trim().toLowerCase())
-    );
+    const existingNames = new Set();
+    const extractedNames = [];
+    const failedToExtract = [];
 
-    console.log(`Existing media names sample:`, {
+    mediaList.forEach((item, index) => {
+      const mediaName = extractMediaName(item);
+      if (mediaName) {
+        existingNames.add(mediaName.toLowerCase());
+        extractedNames.push(mediaName);
+      } else {
+        // Track items where name extraction failed
+        failedToExtract.push({
+          index,
+          item: {
+            mediaId: item?.mediaId,
+            ownerId: item?.ownerId,
+            name: item?.name,
+            mediaName: item?.mediaName,
+            media_name: item?.media_name,
+            fileName: item?.fileName,
+          },
+        });
+      }
+    });
+
+    console.log(`Existing media names details:`, {
+      totalItems: mediaList.length,
       totalUnique: existingNames.size,
-      sample: Array.from(existingNames).slice(0, 10),
+      successfullyExtracted: extractedNames.length,
+      failedToExtract: failedToExtract.length,
+      allNames: extractedNames,
+      failedItems: failedToExtract.slice(0, 5), // Show first 5 failures
     });
 
     const targetLower = target.toLowerCase();
@@ -109,7 +192,7 @@ const checkMediaNameAvailability = async (req, desiredName) => {
     }
 
     console.log(
-      `Duplicate name detected in user's media: "${target}". Found ${existingNames.size} items.`
+      `Duplicate name detected in user's media: "${target}". Existing items: ${existingNames.size}`
     );
 
     const ext = path.extname(target);
@@ -126,6 +209,7 @@ const checkMediaNameAvailability = async (req, desiredName) => {
     };
   } catch (err) {
     console.warn("Failed to check existing media names:", err.message);
+    // Don't fail the upload if duplicate check fails
     return {
       hasConflict: false,
       originalName: target,
@@ -252,6 +336,7 @@ export const getLibraryFolders = async (req, res) => {
 /**
  * Update media name after upload using PUT /library/{mediaId}
  * This ensures the name is explicitly set as Xibo may ignore the name during upload
+ * Returns the actual stored name from Xibo to detect any truncation
  */
 const updateMediaName = async (
   mediaId,
@@ -262,15 +347,36 @@ const updateMediaName = async (
   try {
     console.log(`Updating media ${mediaId} name to: "${desiredName}"`);
 
+    // Validate name before sending
+    const trimmedName = desiredName?.trim();
+    if (!trimmedName || trimmedName.length > 100) {
+      throw new Error(
+        `Invalid name: "${desiredName}" (${
+          trimmedName?.length || 0
+        } chars). Must be 1-100 characters.`
+      );
+    }
+
     // Use xiboRequest with proper form-data format
     // According to Xibo API, PUT /library/{id} requires: name, duration, retired
     const updateData = {
-      name: desiredName,
+      name: trimmedName,
       duration: String(duration || 10),
       retired: "0",
     };
 
-    console.log(`Sending PUT request with data:`, updateData);
+    console.log(`Sending PUT request with data:`, {
+      ...updateData,
+      nameLength: updateData.name.length,
+      nameChars: Array.from(updateData.name).map((c) => c.charCodeAt(0)),
+    });
+
+    console.log(`Calling xiboRequest for PUT /library/${mediaId}`, {
+      endpoint: `/library/${mediaId}`,
+      method: "PUT",
+      dataKeys: Object.keys(updateData),
+      hasUserToken: !!userXiboToken,
+    });
 
     const response = await xiboRequest(
       `/library/${mediaId}`,
@@ -279,13 +385,35 @@ const updateMediaName = async (
       userXiboToken
     );
 
-    console.log(`Media ${mediaId} name updated successfully:`, {
+    console.log(`PUT request successful`, {
+      responseKeys: Object.keys(response || {}),
+      responsePreview: JSON.stringify(response).substring(0, 300),
+    });
+
+    // Properly extract the stored name from the response
+    // Xibo may return the full object or just an empty success response
+    const storedName =
+      response?.name ||
+      response?.mediaName ||
+      response?.media_name ||
+      response?.fileName ||
+      null;
+
+    console.log(`Media ${mediaId} name update response:`, {
       requestedName: desiredName,
-      responseName: response?.name || response?.fileName || "unknown",
+      storedName: storedName || "not provided in response",
       fullResponse: response,
     });
 
-    return response;
+    // Return object with both requested and stored names for comparison
+    return {
+      requestedName: desiredName,
+      storedName: storedName,
+      name: storedName, // Alias for backwards compatibility
+      fileName: storedName, // Alias for backwards compatibility
+      mediaName: storedName, // Alias for backwards compatibility
+      ...response, // Include full response
+    };
   } catch (err) {
     console.error(`Failed to update media ${mediaId} name:`, {
       error: err.message,
@@ -390,7 +518,20 @@ export const uploadMedia = async (req, res) => {
       uploadFormData.append("forceDuplicateCheck", "1");
       // Don't set ownerId - let Xibo assign it to the authenticated user
       // uploadFormData.append("ownerId", resolvedOwnerId);
-      uploadFormData.append("name", nameToUse);
+
+      // CRITICAL: Always set a proper name
+      // Xibo may use only the first character if name is not set properly
+      // Name is optional for POST but must be valid if provided
+      if (nameToUse && nameToUse.trim().length > 0) {
+        const trimmedName = nameToUse.trim();
+        console.log(
+          `Adding name to FormData: "${trimmedName}" (${trimmedName.length} chars)`
+        );
+        uploadFormData.append("name", trimmedName);
+      } else {
+        console.warn("No name provided for upload, using file originalname");
+        uploadFormData.append("name", file.originalname);
+      }
       if (tags) uploadFormData.append("tags", String(tags));
       if (enableStat !== undefined)
         uploadFormData.append("enableStat", String(enableStat));
@@ -398,6 +539,7 @@ export const uploadMedia = async (req, res) => {
         uploadFormData.append("retired", String(retired));
 
       try {
+        console.log(`Uploading file with name: "${nameToUse}"`);
         const response = await axios.post(
           `${process.env.XIBO_API_URL}/library`,
           uploadFormData,
@@ -409,24 +551,40 @@ export const uploadMedia = async (req, res) => {
             maxContentLength: Infinity,
             maxBodyLength: Infinity,
             validateStatus: (status) => {
-              // Don't throw on 400 - we'll handle it in the retry logic
-              return status < 500;
+              // Accept all statuses and handle them explicitly
+              return true;
             },
           }
         );
+
+        // Log the full response for debugging
+        console.log(`Upload response status: ${response.status}`, {
+          statusCode: response.status,
+          dataKeys: Object.keys(response.data || {}),
+          responsePreview: JSON.stringify(response.data).substring(0, 200),
+        });
 
         // Check if response has error status
         if (response.status >= 400) {
           const errorData = response.data;
           const errorMessage =
             errorData?.message || errorData?.error || "Upload failed";
+          console.error(`Upload returned error status ${response.status}:`, {
+            message: errorMessage,
+            fullResponse: errorData,
+          });
           const error = new Error(errorMessage);
           error.response = response;
+          error.status = response.status;
           throw error;
         }
 
         return response.data;
       } catch (err) {
+        // Ensure error object has response attached
+        if (!err.response && err.status) {
+          err.response = { status: err.status };
+        }
         // Re-throw to be handled by retry logic
         throw err;
       }
@@ -651,23 +809,45 @@ export const uploadMedia = async (req, res) => {
           );
 
           // Extract the actual stored name from the update response
+          // updateMediaName returns object with storedName
           const confirmedName =
+            updateResponse?.storedName ||
             updateResponse?.name ||
             updateResponse?.fileName ||
             updateResponse?.mediaName ||
             null;
 
-          if (confirmedName) {
-            finalStoredName = confirmedName;
-            if (confirmedName !== availability.originalName) {
+          if (confirmedName && confirmedName.trim()) {
+            finalStoredName = confirmedName.trim();
+            // Only mark as changed if different from requested
+            if (
+              finalStoredName.toLowerCase() !==
+              availability.originalName.toLowerCase()
+            ) {
               console.warn(
-                `Media name mismatch: requested "${availability.originalName}", got "${confirmedName}"`
+                `Media name mismatch: requested "${availability.originalName}", stored as "${finalStoredName}"`
               );
               finalNameChanged = true;
             } else {
               console.log(
-                `Media ${mediaId} name confirmed as: "${confirmedName}"`
+                `Media ${mediaId} name confirmed as: "${finalStoredName}"`
               );
+            }
+          } else {
+            // Response didn't include name - try to get from upload response
+            const uploadedName =
+              uploadedFile?.name ||
+              uploadedFile?.fileName ||
+              uploadedFile?.mediaName ||
+              null;
+            if (uploadedName && uploadedName.trim()) {
+              finalStoredName = uploadedName.trim();
+              if (
+                finalStoredName.toLowerCase() !==
+                availability.originalName.toLowerCase()
+              ) {
+                finalNameChanged = true;
+              }
             }
           }
         } catch (nameUpdateErr) {
@@ -681,14 +861,15 @@ export const uploadMedia = async (req, res) => {
             uploadedFile?.name ||
             uploadedFile?.fileName ||
             uploadedFile?.mediaName ||
-            uploadedFile?.originalName;
-          if (
-            storedName &&
-            storedName.trim().length > 0 &&
-            storedName !== availability.originalName
-          ) {
-            finalStoredName = storedName;
-            finalNameChanged = true;
+            null;
+          if (storedName && storedName.trim()) {
+            finalStoredName = storedName.trim();
+            if (
+              finalStoredName.toLowerCase() !==
+              availability.originalName.toLowerCase()
+            ) {
+              finalNameChanged = true;
+            }
           }
         }
       }

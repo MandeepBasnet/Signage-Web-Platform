@@ -305,13 +305,16 @@ export async function xiboRequest(
       // Convert data to form data for PUT requests
       const formData = new FormData();
       Object.keys(data).forEach((key) => {
-        formData.append(key, data[key]);
+        const value = data[key];
+        console.log(`[xiboRequest PUT] Adding to FormData: ${key} = ${value}`);
+        formData.append(key, String(value));
       });
       requestConfig.data = formData;
       requestConfig.headers = {
         ...requestConfig.headers,
         ...formData.getHeaders(),
       };
+      console.log(`[xiboRequest PUT] FormData headers:`, requestConfig.headers);
     } else {
       // Use JSON for other methods
       requestConfig.data = data;
@@ -322,6 +325,21 @@ export async function xiboRequest(
     requestConfig.headers["Content-Type"] = "application/x-www-form-urlencoded";
   }
 
-  const res = await axios(requestConfig);
-  return res.data;
+  try {
+    console.log(`[xiboRequest] ${method} ${requestConfig.url}`, {
+      hasData: !!data,
+      dataKeys: data ? Object.keys(data) : null,
+      headers: Object.keys(requestConfig.headers),
+    });
+    const res = await axios(requestConfig);
+    return res.data;
+  } catch (err) {
+    console.error(`[xiboRequest] ${method} ${requestConfig.url} failed:`, {
+      status: err.response?.status,
+      statusText: err.response?.statusText,
+      message: err.message,
+      responseData: err.response?.data,
+    });
+    throw err;
+  }
 }

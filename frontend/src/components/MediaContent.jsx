@@ -268,7 +268,13 @@ export default function MediaContent() {
           errorData?.message ||
             `A media named '${nameToValidate}' already exists. Please choose another name.`
         );
-        setNameSuggestion(errorData?.nameInfo || null);
+        // Store suggestion with full details for retry
+        setNameSuggestion({
+          originalName: errorData?.nameInfo?.originalName || nameToValidate,
+          suggestedName: errorData?.nameInfo?.suggestedName || nameToValidate,
+          wasChanged: errorData?.nameInfo?.wasChanged || false,
+          changeReason: errorData?.nameInfo?.changeReason || null,
+        });
         return false;
       }
 
@@ -280,6 +286,7 @@ export default function MediaContent() {
         );
       }
 
+      // Name is valid - clear any suggestions
       setNameSuggestion(null);
       return true;
     } catch (err) {
@@ -345,6 +352,26 @@ export default function MediaContent() {
       const result = await response.json();
       console.log("Upload response:", result);
 
+      // Handle duplicate name errors from server
+      if (response.status === 409) {
+        setUploadError(
+          result?.message ||
+            `A media with that name already exists. Please choose another name.`
+        );
+        // Store suggestion from server for user to retry with
+        if (result?.nameInfo) {
+          setNameSuggestion({
+            originalName: result.nameInfo.originalName,
+            suggestedName: result.nameInfo.suggestedName,
+            wasChanged: result.nameInfo.wasChanged,
+            changeReason: result.nameInfo.changeReason,
+          });
+        }
+        setUploading(false);
+        setUploadProgress(null);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error(
           result?.message ||
@@ -355,6 +382,7 @@ export default function MediaContent() {
 
       setUploadProgress("Upload successful!");
 
+      // Show name change notice if name was adjusted
       if (result.nameInfo?.wasChanged) {
         setNameChangeNotice({
           entity: "media",
@@ -743,23 +771,45 @@ export default function MediaContent() {
 
               {nameSuggestion?.suggestedName && (
                 <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-800 space-y-2">
-                  <p>
-                    Suggested name:{" "}
-                    <span className="font-semibold">
-                      {nameSuggestion.suggestedName}
-                    </span>
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setUploadName(nameSuggestion.suggestedName);
-                      setNameSuggestion(null);
-                      setUploadError(null);
-                    }}
-                    className="rounded-md bg-yellow-600 px-3 py-1 text-xs font-medium text-white hover:bg-yellow-700 transition-colors"
-                  >
-                    Use suggested name
-                  </button>
+                  <div>
+                    <p className="mb-2">
+                      <span className="font-semibold">Conflict Detected:</span>{" "}
+                      A media with the name{" "}
+                      <span className="font-mono">
+                        "{nameSuggestion.originalName}"
+                      </span>{" "}
+                      already exists.
+                    </p>
+                    <p>
+                      Suggested alternative:{" "}
+                      <span className="font-semibold font-mono">
+                        {nameSuggestion.suggestedName}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUploadName(nameSuggestion.suggestedName);
+                        setNameSuggestion(null);
+                        setUploadError(null);
+                      }}
+                      className="rounded-md bg-yellow-600 px-3 py-1 text-xs font-medium text-white hover:bg-yellow-700 transition-colors"
+                    >
+                      Use suggested name
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNameSuggestion(null);
+                        setUploadError(null);
+                      }}
+                      className="rounded-md bg-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-400 transition-colors"
+                    >
+                      Try different name
+                    </button>
+                  </div>
                 </div>
               )}
 
