@@ -618,8 +618,11 @@ export default function PlaylistContent() {
                           {isVideoType && (
                             <video
                               src={mediaUrl}
-                              controls
                               className="w-full h-full object-contain"
+                              muted
+                              loop
+                              onMouseOver={(e) => e.target.play()}
+                              onMouseOut={(e) => e.target.pause()}
                               onError={(e) => {
                                 e.target.style.display = "none";
                                 e.target.nextSibling.style.display = "flex";
@@ -765,6 +768,14 @@ export default function PlaylistContent() {
             </div>
           )}
         </div>
+      {/* Media Preview Modal */}
+      <MediaPreviewModal
+        isOpen={!!previewMedia}
+        onClose={() => setPreviewMedia(null)}
+        mediaUrl={previewMedia?.previewUrl}
+        mediaType={previewMedia?.mediaType || previewMedia?.type}
+        mediaName={previewMedia?.name || previewMedia?.fileName}
+      />
       </section>
     );
   }
@@ -1032,6 +1043,14 @@ export default function PlaylistContent() {
           </div>
         </div>
       )}
+      {/* Media Preview Modal */}
+      <MediaPreviewModal
+        isOpen={!!previewMedia}
+        onClose={() => setPreviewMedia(null)}
+        mediaUrl={previewMedia?.previewUrl}
+        mediaType={previewMedia?.mediaType || previewMedia?.type}
+        mediaName={previewMedia?.name || previewMedia?.fileName}
+      />
     </section>
   );
 }
