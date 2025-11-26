@@ -1,31 +1,20 @@
 import jwt from "jsonwebtoken";
 
 export const verifyToken = (req, res, next) => {
-  const auth = req.headers.authorization;
+  let token;
+  const authHeader = req.headers.authorization;
 
-  if (!auth) {
-    return res.status(401).json({
-      error: "No token",
-      message:
-        "Authorization header is missing. Please include: Authorization: Bearer <token>",
-    });
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.split(" ")[1];
+  } else if (req.query.token) {
+    token = req.query.token;
   }
-
-  // Check if it starts with "Bearer "
-  if (!auth.startsWith("Bearer ")) {
-    return res.status(401).json({
-      error: "Invalid token format",
-      message:
-        "Token must be prefixed with 'Bearer '. Format: Authorization: Bearer <token>",
-    });
-  }
-
-  const token = auth.split(" ")[1];
 
   if (!token) {
     return res.status(401).json({
       error: "No token",
-      message: "Token is missing after 'Bearer '",
+      message:
+        "Authorization header is missing or token not provided.",
     });
   }
 

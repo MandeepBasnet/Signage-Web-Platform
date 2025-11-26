@@ -111,22 +111,10 @@ export default function AddMediaPlaylistButton({
       const mediaId = item.mediaId || item.id;
       if (mediaId && !urlMap.has(mediaId)) {
         const mediaType = item.mediaType || item.type || "";
-        if (isImage(mediaType) || isVideo(mediaType) || isAudio(mediaType)) {
-          try {
-            const response = await fetch(
-              `${API_BASE_URL}/playlists/media/${mediaId}/preview`,
-              {
-                headers: { ...getAuthHeaders() },
-              }
-            );
-            if (response.ok) {
-              const blob = await response.blob();
-              const url = URL.createObjectURL(blob);
-              urlMap.set(mediaId, url);
-            }
-          } catch (err) {
-            console.warn(`Failed to load preview for ${mediaId}`, err);
-          }
+        if (isImage(mediaType) || isVideo(mediaType)) {
+          // Use thumbnail endpoint with query param token
+          const token = localStorage.getItem("auth_token");
+          urlMap.set(mediaId, `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=200&height=150&token=${token}`);
         }
       }
     }

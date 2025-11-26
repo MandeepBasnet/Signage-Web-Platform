@@ -260,28 +260,12 @@ export default function PlaylistContent() {
             "";
           const isImageType = isImage(mediaType);
           const isVideoType = isVideo(mediaType);
-          const isAudioType = isAudio(mediaType);
 
-          // Only pre-fetch for displayable media types
-          if (isImageType || isVideoType || isAudioType) {
-            try {
-              const mediaResponse = await fetch(
-                `${API_BASE_URL}/playlists/media/${mediaId}/preview`,
-                {
-                  headers: {
-                    ...getAuthHeaders(),
-                  },
-                }
-              );
-
-              if (mediaResponse.ok) {
-                const blob = await mediaResponse.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                urlMap.set(mediaId, blobUrl);
-              }
-            } catch (err) {
-              console.warn(`Failed to pre-fetch media ${mediaId}:`, err);
-            }
+          // Use the new thumbnail endpoint for previews
+          if (isImageType || isVideoType) {
+            // For images and videos, use the thumbnail endpoint with query param token
+            const token = localStorage.getItem("auth_token");
+            urlMap.set(mediaId, `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`);
           }
         }
       }

@@ -129,26 +129,18 @@ export default function MediaContent() {
           const isVideoType = isVideo(mediaType);
           const isAudioType = isAudio(mediaType);
 
-          // Only pre-fetch for displayable media types
-          if (isImageType || isVideoType || isAudioType) {
-            try {
-              const mediaResponse = await fetch(
-                `${API_BASE_URL}/library/${mediaId}/download`,
-                {
-                  headers: {
-                    ...getAuthHeaders(),
-                  },
-                }
-              );
-
-              if (mediaResponse.ok) {
-                const blob = await mediaResponse.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                urlMap.set(mediaId, blobUrl);
-              }
-            } catch (err) {
-              console.warn(`Failed to pre-fetch media ${mediaId}:`, err);
-            }
+          // Use the new thumbnail endpoint for previews
+          if (isImageType || isVideoType) {
+             // For images and videos, use the thumbnail endpoint with query param token
+             // This allows the browser to handle caching and parallel loading
+             const token = localStorage.getItem("auth_token"); // Correct key from auth.js
+             urlMap.set(mediaId, `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`);
+          } else if (isAudioType) {
+             // For audio, we might still want the download URL or a specific icon
+             // Keeping download URL for audio for now if it's used for playback
+             // But for previewing in a grid, we usually just show an icon.
+             // If there's a waveform thumbnail, we could use that.
+             // For now, let's stick to the pattern but maybe just use the icon logic in render.
           }
         }
       }

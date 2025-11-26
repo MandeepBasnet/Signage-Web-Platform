@@ -8,6 +8,7 @@ import {
   getLibraryFolders,
   uploadMedia,
   validateMediaName,
+  getMediaThumbnail,
 } from "../controllers/libraryController.js";
 import { deleteMedia } from "../controllers/deleteMedia.js";
 
@@ -25,6 +26,7 @@ router.get("/all", verifyToken, getAllLibraryMedia);
 router.post("/validate-name", verifyToken, validateMediaName);
 router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);
+router.get("/:mediaId/thumbnail", verifyToken, getMediaThumbnail);
 router.delete("/:mediaId", verifyToken, deleteMedia);
 
 export default router;

@@ -318,6 +318,61 @@ export const downloadMedia = async (req, res) => {
   }
 };
 
+// Get media thumbnail/preview from Xibo
+export const getMediaThumbnail = async (req, res) => {
+  try {
+    const { mediaId } = req.params;
+    const { width, height, preview } = req.query;
+    const token = await getAccessToken();
+
+    if (!mediaId) {
+      return res.status(400).json({ message: "Media ID is required" });
+    }
+
+    // Build query string for Xibo
+    const queryParams = new URLSearchParams();
+    if (width) queryParams.append("width", width);
+    if (height) queryParams.append("height", height);
+    // Default preview to 1 if not specified, as requested by user
+    queryParams.append("preview", preview || "1");
+
+    const xiboApiUrl = process.env.XIBO_API_URL;
+    const thumbnailUrl = `${xiboApiUrl}/library/thumbnail/${mediaId}?${queryParams.toString()}`;
+
+    console.log(`Fetching thumbnail from Xibo: ${thumbnailUrl}`);
+
+    const response = await axios.get(thumbnailUrl, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      responseType: "stream",
+      validateStatus: (status) => status < 500, // Handle 404s gracefully
+    });
+
+    if (response.status === 404) {
+      // If thumbnail not found, return 404 or a placeholder
+      return res.status(404).json({ message: "Thumbnail not available" });
+    }
+
+    // Set appropriate headers
+    res.setHeader(
+      "Content-Type",
+      response.headers["content-type"] || "image/jpeg"
+    );
+    res.setHeader(
+      "Cache-Control",
+      "public, max-age=3600" // Cache thumbnails for 1 hour
+    );
+
+    // Pipe the response to the client
+    response.data.pipe(res);
+  } catch (err) {
+    console.error("Error fetching media thumbnail:", err.message);
+    // Don't crash on thumbnail errors, just return 404
+    res.status(404).json({ message: "Thumbnail fetch failed" });
+  }
+};
+
 export const getLibraryFolders = async (req, res) => {
   try {
     const folders = await xiboRequest("/folders", "GET");
