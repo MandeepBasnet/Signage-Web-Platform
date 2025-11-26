@@ -21,6 +21,8 @@ const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
   return `${trimmed}${fallbackExtension}`;
 };
 
+import MediaPreviewModal from "./MediaPreviewModal";
+
 export default function MediaContent() {
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +41,12 @@ export default function MediaContent() {
   const [nameSuggestion, setNameSuggestion] = useState(null);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const ITEMS_PER_PAGE = 8;
+  
+  // Preview state
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -79,6 +87,17 @@ export default function MediaContent() {
       type.includes("ogg") ||
       type.includes("m4a")
     );
+  };
+
+  const handlePreview = (item) => {
+    const mediaId = getMediaId(item);
+    const token = localStorage.getItem("auth_token");
+    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    
+    setPreviewMedia({
+      ...item,
+      previewUrl
+    });
   };
 
   useEffect(() => {
@@ -551,10 +570,11 @@ export default function MediaContent() {
                   className={`border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col relative group ${
                     isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
                   }`}
+                  onClick={() => handlePreview(item)}
                 >
                   {/* Media Preview */}
                   <div
-                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden"
+                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer"
                     style={{ minHeight: "200px", maxHeight: "300px" }}
                   >
                     {mediaUrl ? (
@@ -926,6 +946,14 @@ export default function MediaContent() {
           </div>
         </div>
       )}
+      {/* Media Preview Modal */}
+      <MediaPreviewModal
+        isOpen={!!previewMedia}
+        onClose={() => setPreviewMedia(null)}
+        mediaUrl={previewMedia?.previewUrl}
+        mediaType={previewMedia?.mediaType || previewMedia?.type}
+        mediaName={previewMedia?.name || previewMedia?.mediaName}
+      />
     </section>
   );
 }

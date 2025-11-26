@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
+import MediaPreviewModal from "./MediaPreviewModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -26,6 +27,7 @@ export default function PlaylistContent() {
   const [showAddMediaModal, setShowAddMediaModal] = useState(false);
   const [deleteHoveredWidgetId, setDeleteHoveredWidgetId] = useState(null);
   const [deleteHoveredPlaylistId, setDeleteHoveredPlaylistId] = useState(null);
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -91,6 +93,17 @@ export default function PlaylistContent() {
     if (type.includes("audio")) return "🎵";
     if (type.includes("pdf")) return "📄";
     return "📹";
+  };
+
+  const handlePreview = (item) => {
+    const mediaId = getMediaId(item);
+    const token = localStorage.getItem("auth_token");
+    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    
+    setPreviewMedia({
+      ...item,
+      previewUrl
+    });
   };
 
   const formatFileSize = (bytes) => {
@@ -577,10 +590,11 @@ export default function PlaylistContent() {
                     className={`border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col relative group ${
                       isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
                     }`}
+                    onClick={() => handlePreview(item)}
                   >
                     {/* Media Preview */}
                     <div
-                      className="w-full bg-gray-100 flex items-center justify-center overflow-hidden"
+                      className="w-full bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer"
                       style={{ minHeight: "200px", maxHeight: "300px" }}
                     >
                       {mediaUrl ? (

@@ -289,7 +289,11 @@ export const downloadMedia = async (req, res) => {
 
     // Get media download URL from Xibo API
     const xiboApiUrl = process.env.XIBO_API_URL;
-    const downloadUrl = `${xiboApiUrl}/library/download/${mediaId}`;
+    const { preview } = req.query;
+    const queryParams = new URLSearchParams();
+    if (preview) queryParams.append("preview", preview);
+    
+    const downloadUrl = `${xiboApiUrl}/library/download/${mediaId}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
 
     // Fetch the media file from Xibo
     const response = await axios.get(downloadUrl, {

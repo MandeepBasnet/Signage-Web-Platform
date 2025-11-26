@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
+import MediaPreviewModal from "./MediaPreviewModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -42,6 +43,7 @@ export default function AddMediaPlaylistButton({
   const [uploadProgress, setUploadProgress] = useState(null);
   const [uploadNameSuggestion, setUploadNameSuggestion] = useState(null);
   const [mediaUrls, setMediaUrls] = useState(new Map());
+  const [previewMedia, setPreviewMedia] = useState(null);
 
   // Helper functions for media types
   const isImage = (mediaType) => {
@@ -97,6 +99,17 @@ export default function AddMediaPlaylistButton({
       mediaUrls.get(mediaId) ||
       `${API_BASE_URL}/playlists/media/${mediaId}/preview`
     );
+  };
+
+  const handlePreview = (item) => {
+    const mediaId = item.mediaId || item.id;
+    const token = localStorage.getItem("auth_token");
+    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    
+    setPreviewMedia({
+      ...item,
+      previewUrl
+    });
   };
 
   // Folder state
@@ -489,7 +502,10 @@ export default function AddMediaPlaylistButton({
         className="rounded-lg border border-gray-200 overflow-hidden hover:border-blue-300 hover:shadow-md transition-all bg-white flex flex-col"
       >
         {/* Preview Area */}
-        <div className="relative w-full h-32 bg-gray-100 flex items-center justify-center overflow-hidden">
+        <div 
+          className="relative w-full h-32 bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer group/preview"
+          onClick={() => handlePreview(item)}
+        >
           {mediaUrl ? (
             <>
               {isImageType && (
@@ -504,14 +520,19 @@ export default function AddMediaPlaylistButton({
                 />
               )}
               {isVideoType && (
-                <video
-                  src={mediaUrl}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = "none";
-                    e.target.nextSibling.style.display = "flex";
-                  }}
-                />
+                <div className="relative w-full h-full">
+                  <video
+                    src={mediaUrl}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                      e.target.parentElement.nextSibling.style.display = "flex";
+                    }}
+                  />
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/preview:bg-black/10 transition-colors">
+                    <span className="text-2xl">▶️</span>
+                  </div>
+                </div>
               )}
               {!isImageType && !isVideoType && (
                 <div className="flex flex-col items-center justify-center text-gray-400">
@@ -529,9 +550,9 @@ export default function AddMediaPlaylistButton({
             </div>
           )}
 
-          {/* Overlay for Add button */}
-          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-end justify-end p-2">
-            {/* Button moved to footer */}
+          {/* Overlay for Preview hint */}
+          <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
+            <span className="bg-black/50 text-white px-2 py-1 rounded text-xs">Preview</span>
           </div>
         </div>
 
@@ -822,15 +843,24 @@ export default function AddMediaPlaylistButton({
             </div>
 
             {/* Footer */}
-            <div className="border-t px-6 py-4 flex justify-end gap-3">
+            <div className="flex items-center justify-end border-t bg-gray-50 px-6 py-4">
               <button
-                onClick={closeModal}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                onClick={() => setShowModal(false)}
+                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 Close
               </button>
             </div>
           </div>
+          
+          {/* Media Preview Modal */}
+          <MediaPreviewModal
+            isOpen={!!previewMedia}
+            onClose={() => setPreviewMedia(null)}
+            mediaUrl={previewMedia?.previewUrl}
+            mediaType={previewMedia?.mediaType || previewMedia?.type}
+            mediaName={previewMedia?.name || previewMedia?.fileName}
+          />
         </div>
       )}
     </>
