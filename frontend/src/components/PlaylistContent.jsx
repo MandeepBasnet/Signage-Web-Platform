@@ -615,19 +615,19 @@ export default function PlaylistContent() {
                             </video>
                           )}
                           {isAudioType && (
-                            <div className="w-full p-4">
-                              <audio
-                                src={mediaUrl}
-                                controls
-                                className="w-full"
-                                onError={(e) => {
-                                  e.target.style.display = "none";
-                                  e.target.parentElement.nextSibling.style.display =
-                                    "flex";
-                                }}
-                              >
-                                Your browser does not support the audio tag.
-                              </audio>
+                            <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50 text-gray-500">
+                              <div className="p-4 rounded-full bg-white shadow-sm mb-3">
+                                <span className="text-4xl">🎵</span>
+                              </div>
+                              {item.duration && (
+                                <span className="text-sm font-medium bg-gray-200 px-2 py-1 rounded text-gray-700">
+                                  {isNaN(item.duration)
+                                    ? item.duration
+                                    : new Date(item.duration * 1000)
+                                        .toISOString()
+                                        .substr(14, 5)}
+                                </span>
+                              )}
                             </div>
                           )}
                           {!isImageType && !isVideoType && !isAudioType && (
@@ -636,7 +636,12 @@ export default function PlaylistContent() {
                                 {getMediaIcon(mediaType)}
                               </span>
                               <a
-                                href={mediaUrl}
+                                href={
+                                  mediaUrl ||
+                                  `${API_BASE_URL}/library/${mediaId}/download?token=${localStorage.getItem(
+                                    "auth_token"
+                                  )}`
+                                }
                                 download
                                 className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
                               >
@@ -650,7 +655,12 @@ export default function PlaylistContent() {
                               {getMediaIcon(mediaType)}
                             </span>
                             <a
-                              href={mediaUrl}
+                              href={
+                                mediaUrl ||
+                                `${API_BASE_URL}/library/${mediaId}/download?token=${localStorage.getItem(
+                                  "auth_token"
+                                )}`
+                              }
                               download
                               className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
                             >
