@@ -1,16 +1,12 @@
 import express from "express";
-import {
-  getDatasets,
-  getDatasetColumns,
-  getDatasetData,
-  addDatasetRow,
-} from "../controllers/datasetController.js";
+import * as datasetController from "../controllers/datasetController.js";
 
 const router = express.Router();
 
-router.get("/", getDatasets);
-router.get("/:id/column", getDatasetColumns);
-router.get("/data/:id", getDatasetData);
-router.post("/data/:id", addDatasetRow);
+router.get("/", datasetController.getDatasets);
+router.get("/:id/column", datasetController.getDatasetColumns);
+router.get("/data/:id", datasetController.getDatasetData);
+router.post("/data/:id", datasetController.addDatasetRow);
+router.delete("/data/:id/:rowId", datasetController.deleteDatasetRow);
 
 export default router;

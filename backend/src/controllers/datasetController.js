@@ -1,3 +1,4 @@
+
 import axios from "axios";
 import qs from "qs";
 import jwt from "jsonwebtoken";
@@ -131,5 +132,20 @@ export const addDatasetRow = async (req, res) => {
   } catch (error) {
     console.error("Error adding dataset row:", error.response?.data || error.message);
     res.status(error.response?.status || 500).json({ error: "Failed to add dataset row" });
+  }
+};
+
+export const deleteDatasetRow = async (req, res) => {
+  try {
+    const xiboToken = getXiboToken(req.headers.authorization);
+    const { id, rowId } = req.params;
+    const client = getXiboClient(xiboToken);
+    
+    // Xibo API endpoint: DELETE /dataset/data/{datasetId}/{rowId}
+    const response = await client.delete(`/dataset/data/${id}/${rowId}`);
+    res.json(response.data);
+  } catch (error) {
+    console.error("Error deleting dataset row:", error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({ error: "Failed to delete dataset row" });
   }
 };
