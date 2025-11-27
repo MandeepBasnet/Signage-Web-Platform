@@ -553,178 +553,175 @@ export default function MediaContent() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {media.map((item) => {
-              const mediaId = getMediaId(item);
-              const mediaUrl = getMediaUrl(item);
-              const mediaType = item.mediaType || item.type || "";
-              const isImageType = isImage(mediaType);
-              const isVideoType = isVideo(mediaType);
-              const isAudioType = isAudio(mediaType);
-
-              const isDeleteHovered = deleteHoveredMediaId === mediaId;
-
-              return (
-                <div
-                  key={mediaId}
-                  className={`border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-all flex flex-col relative group ${
-                    isDeleteHovered ? "bg-red-50 border-red-200" : "bg-white"
-                  }`}
-                  onClick={() => handlePreview(item)}
-                >
-                  {/* Media Preview */}
-                  <div
-                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer"
-                    style={{ minHeight: "200px", maxHeight: "300px" }}
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24"
                   >
-                    {mediaUrl ? (
-                      <>
-                        {isImageType && (
-                          <img
-                            src={mediaUrl}
-                            alt={
-                              item.name ||
-                              item.fileName ||
-                              item.mediaName ||
-                              "Media"
-                            }
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              e.target.nextSibling.style.display = "flex";
-                            }}
-                          />
-                        )}
-                        {isVideoType && (
-                          <video
-                            src={mediaUrl}
-                            controls
-                            className="w-full h-full object-contain"
-                            onError={(e) => {
-                              e.target.style.display = "none";
-                              e.target.nextSibling.style.display = "flex";
-                            }}
-                          >
-                            Your browser does not support the video tag.
-                          </video>
-                        )}
-                        {isAudioType && (
-                          <div className="w-full p-4">
-                            <audio
-                              src={mediaUrl}
-                              controls
-                              className="w-full"
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                                e.target.parentElement.nextSibling.style.display =
-                                  "flex";
-                              }}
-                            >
-                              Your browser does not support the audio tag.
-                            </audio>
-                          </div>
-                        )}
-                        {!isImageType && !isVideoType && !isAudioType && (
-                          <div className="flex flex-col items-center justify-center p-8 text-gray-400">
-                            <span className="text-6xl mb-2">
-                              {getMediaIcon(mediaType)}
-                            </span>
-                            <a
-                              href={mediaUrl}
-                              download
-                              className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-                            >
-                              Download
-                            </a>
-                          </div>
-                        )}
-                        {/* Fallback when media fails to load */}
-                        <div className="hidden flex-col items-center justify-center p-8 text-gray-400">
-                          <span className="text-6xl mb-2">
-                            {getMediaIcon(mediaType)}
-                          </span>
-                          <a
-                            href={mediaUrl}
-                            download
-                            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm"
-                          >
-                            Download
-                          </a>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center p-8 text-gray-400">
-                        <span className="text-6xl mb-2">
-                          {getMediaIcon(mediaType)}
-                        </span>
-                        <span className="text-sm">No preview available</span>
-                      </div>
-                    )}
-                  </div>
+                    Thumbnail
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Name
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Type
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Size
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Modified Date
+                  </th>
+                  <th
+                    scope="col"
+                    className="relative px-6 py-3 w-10"
+                  >
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {media.map((item) => {
+                  const mediaId = getMediaId(item);
+                  const mediaUrl = getMediaUrl(item);
+                  const mediaType = item.mediaType || item.type || "";
+                  const isImageType = isImage(mediaType);
+                  const isVideoType = isVideo(mediaType);
+                  const isAudioType = isAudio(mediaType);
 
-                  {/* Media Info */}
-                  <div className="p-4 flex-1 flex flex-col">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900 text-base truncate flex-1">
-                        {item.name ||
-                          item.fileName ||
-                          item.mediaName ||
-                          "Unnamed Media"}
-                      </h3>
-                      {/* Delete Button */}
-                      {mediaId && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteMedia(mediaId);
-                          }}
-                          onMouseEnter={() => setDeleteHoveredMediaId(mediaId)}
-                          onMouseLeave={() => setDeleteHoveredMediaId(null)}
-                          className="ml-2 p-1.5 rounded-full hover:bg-red-100 transition-colors flex-shrink-0 text-gray-400 hover:text-red-600"
-                          title="Delete media"
+                  const isDeleteHovered = deleteHoveredMediaId === mediaId;
+
+                  return (
+                    <tr
+                      key={mediaId}
+                      className={`hover:bg-gray-50 transition-colors ${
+                        isDeleteHovered ? "bg-red-50" : ""
+                      }`}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div
+                          className="h-16 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100 cursor-pointer flex items-center justify-center"
+                          onClick={() => handlePreview(item)}
                         >
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            strokeWidth={1.5}
-                            stroke="currentColor"
-                            className="w-5 h-5"
+                          {mediaUrl ? (
+                            <>
+                              {isImageType && (
+                                <img
+                                  src={mediaUrl}
+                                  alt={item.name}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                    e.target.nextSibling.style.display = "flex";
+                                  }}
+                                />
+                              )}
+                              {isVideoType && (
+                                <video
+                                  src={mediaUrl}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    e.target.style.display = "none";
+                                    e.target.nextSibling.style.display = "flex";
+                                  }}
+                                />
+                              )}
+                              {!isImageType && !isVideoType && (
+                                <div className="flex items-center justify-center h-full w-full text-gray-400 text-2xl">
+                                  {getMediaIcon(mediaType)}
+                                </div>
+                              )}
+                              {/* Fallback */}
+                              <div className="hidden items-center justify-center h-full w-full text-gray-400 text-2xl">
+                                {getMediaIcon(mediaType)}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex items-center justify-center h-full w-full text-gray-400 text-2xl">
+                              {getMediaIcon(mediaType)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900">
+                          {item.name ||
+                            item.fileName ||
+                            item.mediaName ||
+                            "Unnamed Media"}
+                        </div>
+                        {item.description && (
+                          <div className="text-sm text-gray-500 truncate max-w-xs">
+                            {item.description}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500 capitalize">
+                          {item.mediaType || "Unknown"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {formatFileSize(item.fileSize)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm text-gray-500">
+                          {item.modifiedDt
+                            ? new Date(item.modifiedDt).toLocaleDateString()
+                            : "-"}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {mediaId && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteMedia(mediaId);
+                            }}
+                            onMouseEnter={() => setDeleteHoveredMediaId(mediaId)}
+                            onMouseLeave={() => setDeleteHoveredMediaId(null)}
+                            className="text-gray-400 hover:text-red-600 transition-colors"
+                            title="Delete media"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                            />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    {item.description && (
-                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">
-                        {item.description}
-                      </p>
-                    )}
-                    <div className="flex flex-col gap-1 text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
-                      {item.mediaType && (
-                        <span className="capitalize">
-                          Type: {item.mediaType}
-                        </span>
-                      )}
-                      {item.fileSize && (
-                        <span>Size: {formatFileSize(item.fileSize)}</span>
-                      )}
-                      {item.modifiedDt && (
-                        <span>
-                          Modified:{" "}
-                          {new Date(item.modifiedDt).toLocaleDateString()}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              strokeWidth={1.5}
+                              stroke="currentColor"
+                              className="w-5 h-5"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                              />
+                            </svg>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
