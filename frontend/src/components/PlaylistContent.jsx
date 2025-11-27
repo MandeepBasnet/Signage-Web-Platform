@@ -804,10 +804,10 @@ export default function PlaylistContent() {
     <section className="flex flex-col gap-5 relative p-4">
       {/* Loading Overlay */}
       {playlistLoading && (
-        <div className="absolute inset-0 z-50 bg-gray-200 bg-opacity-75 flex items-center justify-center rounded-lg">
+        <div className="fixed inset-0 z-[9999] bg-gray-900 bg-opacity-50 flex items-center justify-center backdrop-blur-sm">
           <div className="flex flex-col items-center gap-4">
             <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-700 font-medium">Loading playlist...</p>
+            <p className="text-white font-medium">Loading playlist...</p>
           </div>
         </div>
       )}
