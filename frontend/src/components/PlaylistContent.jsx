@@ -303,6 +303,7 @@ export default function PlaylistContent() {
       playlist.PlaylistId;
 
     if (playlistId) {
+      setPlaylistLoading(true); // Set loading immediately
       fetchPlaylistDetails(playlistId);
     } else {
       console.error("No playlist ID found in playlist object:", playlist);
@@ -801,6 +802,15 @@ export default function PlaylistContent() {
 
   return (
     <section className="flex flex-col gap-5 relative p-4">
+      {/* Loading Overlay */}
+      {playlistLoading && (
+        <div className="absolute inset-0 z-50 bg-gray-200 bg-opacity-75 flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-700 font-medium">Loading playlist...</p>
+          </div>
+        </div>
+      )}
       <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <div>
