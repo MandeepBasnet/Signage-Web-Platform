@@ -712,14 +712,14 @@ export default function AddMediaPlaylistButton({
                   )}
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1 bg-transparent">
                       Media File <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="file"
                       accept="image/*,video/*,audio/*,application/pdf"
                       onChange={handleFileChange}
-                      className="block w-full text-sm text-gray-700"
+                      className="block w-full text-sm text-gray-700 bg-white"
                       disabled={uploading}
                       required
                     />
@@ -731,7 +731,7 @@ export default function AddMediaPlaylistButton({
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1 bg-transparent">
                       Display Name
                     </label>
                     <input
@@ -742,7 +742,7 @@ export default function AddMediaPlaylistButton({
                         setUploadNameSuggestion(null);
                         setUploadError(null);
                       }}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                       placeholder="Optional name"
                       disabled={uploading}
                     />
@@ -750,13 +750,13 @@ export default function AddMediaPlaylistButton({
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1 bg-transparent">
                         Folder
                       </label>
                       <select
                         value={uploadFolder}
                         onChange={(e) => setUploadFolder(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                         disabled={uploading}
                       >
                         {folderOptions.length === 0 ? (
@@ -782,7 +782,7 @@ export default function AddMediaPlaylistButton({
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1 bg-transparent">
                         Duration (seconds)
                       </label>
                       <input
@@ -790,7 +790,7 @@ export default function AddMediaPlaylistButton({
                         min="1"
                         value={uploadDuration}
                         onChange={(e) => setUploadDuration(e.target.value)}
-                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white"
                         disabled={uploading}
                       />
                     </div>

@@ -171,7 +171,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 bg-none border-none cursor-pointer text-lg text-gray-400 p-0 transition-colors duration-200 hover:text-gray-600"
+                      className="absolute right-3 bg-transparent border-none cursor-pointer text-lg text-gray-400 p-0 transition-colors duration-200 hover:text-gray-600"
                     >
                       {showPassword ? (
                         <svg
@@ -196,12 +196,12 @@ export default function Login() {
 
                   {/* Checkbox */}
                   <div className="flex items-center mt-2.5">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer text-[#1a1a1a]">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer text-[#1a1a1a] bg-transparent">
                       <input
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="cursor-pointer w-4 h-4 accent-blue-900"
+                        className="cursor-pointer w-4 h-4 accent-blue-900 bg-white"
                       />
                       <span>Remember Me</span>
                     </label>
