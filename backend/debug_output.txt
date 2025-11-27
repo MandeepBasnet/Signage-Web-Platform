@@ -1,0 +1,44 @@
+Logging in...
+Login successful. Token: Yes
+Fetching datasets...
+Status: 200
+Response Data Type: object
+Response Data Keys: [ 'data' ]
+Number of datasets: 1
+First dataset: {
+  "dataSetId": 150,
+  "dataSet": "Mandeep_class_routine",
+  "description": "",
+  "userId": 82,
+  "lastDataEdit": 1764251141,
+  "owner": "mandeep_basnet",
+  "groupsWithPermissions": "mandeep_basnet",
+  "code": "",
+  "isLookup": 0,
+  "isRemote": 0,
+  "method": null,
+  "uri": null,
+  "postData": null,
+  "authentication": null,
+  "username": null,
+  "password": null,
+  "customHeaders": null,
+  "userAgent": null,
+  "refreshRate": 86400,
+  "clearRate": 0,
+  "truncateOnEmpty": 0,
+  "runsAfter": 0,
+  "lastSync": 0,
+  "lastClear": 0,
+  "dataRoot": null,
+  "summarize": null,
+  "summarizeField": null,
+  "sourceId": 0,
+  "ignoreFirstRow": 0,
+  "rowLimit": null,
+  "limitPolicy": null,
+  "csvSeparator": null,
+  "folderId": 124,
+  "permissionsFolderId": 1,
+  "columns": []
+}

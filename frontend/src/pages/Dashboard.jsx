@@ -7,6 +7,7 @@ import Topbar from "../components/Topbar";
 import PlaylistContent from "../components/PlaylistContent";
 import MediaContent from "../components/MediaContent";
 import LayoutContent from "../components/LayoutContent";
+import DatasetContent from "../components/DatasetContent";
 import { clearAuth } from "../utils/auth.js";
 
 export default function Dashboard() {
@@ -26,6 +27,7 @@ export default function Dashboard() {
         <div className="flex-1 overflow-y-auto p-5 bg-gray-100">
           {currentPage === "library-playlist" && <PlaylistContent />}
           {currentPage === "library-media" && <MediaContent />}
+          {currentPage === "library-dataset" && <DatasetContent />}
           {currentPage === "design-layout" && <LayoutContent />}
         </div>
       </div>
