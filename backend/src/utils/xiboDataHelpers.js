@@ -122,10 +122,8 @@ function getUserContext(req) {
   const userId = req.user?.id ?? req.user?.userId;
   const username = req.user?.username ?? req.user?.userName;
 
-  if (!token) {
-    throw new HttpError(401, "User Xibo token not found. Please login again.");
-  }
-
+  // We allow token to be missing (it will fall back to App Token in xiboRequest)
+  // But we still need user identity
   if (userId === undefined && (username === undefined || username === null)) {
     throw new HttpError(
       401,

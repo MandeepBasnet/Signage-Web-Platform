@@ -1,38 +1,9 @@
-
-import axios from "axios";
 import qs from "qs";
-import jwt from "jsonwebtoken";
-
-const API_BASE_URL = process.env.VITE_API_BASE_URL || "http://localhost:3000"; // Fallback, though usually not needed in backend
-
-// Helper to get Xibo client
-const getXiboClient = (token) => {
-  return axios.create({
-    baseURL: process.env.XIBO_API_URL,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-  });
-};
-
-const getXiboToken = (authHeader) => {
-  const token = authHeader?.split(" ")[1];
-  if (!token) throw new Error("No token provided");
-  
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    return decoded.xiboToken;
-  } catch (err) {
-    throw new Error("Invalid token");
-  }
-};
+import axios from "axios";
+import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
 
 export const getDatasets = async (req, res) => {
   try {
-    const xiboToken = getXiboToken(req.headers.authorization);
-    const client = getXiboClient(xiboToken);
-    
     // Default DataTables parameters required by Xibo
     const defaultParams = {
       draw: 1,
@@ -50,13 +21,11 @@ export const getDatasets = async (req, res) => {
       ...req.query
     };
 
-    const response = await client.get("/dataset", { 
-      params: defaultParams,
-      paramsSerializer: params => qs.stringify(params, { arrayFormat: 'indices' })
-    });
+    const queryString = qs.stringify(defaultParams, { arrayFormat: 'indices' });
+    const response = await xiboRequest(`/dataset?${queryString}`, "GET");
     
     // Normalize response to always be { data: [...] }
-    const responseData = Array.isArray(response.data) ? { data: response.data } : response.data;
+    const responseData = Array.isArray(response) ? { data: response } : response;
     res.json(responseData);
   } catch (error) {
     console.error("Error fetching datasets:", error.response?.data || error.message);
@@ -69,9 +38,7 @@ export const getDatasets = async (req, res) => {
 
 export const getDatasetColumns = async (req, res) => {
   try {
-    const xiboToken = getXiboToken(req.headers.authorization);
     const { id } = req.params;
-    const client = getXiboClient(xiboToken);
     
     const defaultParams = {
       draw: 1,
@@ -80,12 +47,10 @@ export const getDatasetColumns = async (req, res) => {
       ...req.query
     };
 
-    const response = await client.get(`/dataset/${id}/column`, {
-      params: defaultParams,
-      paramsSerializer: params => qs.stringify(params, { arrayFormat: 'indices' })
-    });
+    const queryString = qs.stringify(defaultParams, { arrayFormat: 'indices' });
+    const response = await xiboRequest(`/dataset/${id}/column?${queryString}`, "GET");
     
-    const responseData = Array.isArray(response.data) ? { data: response.data } : response.data;
+    const responseData = Array.isArray(response) ? { data: response } : response;
     res.json(responseData);
   } catch (error) {
     console.error("Error fetching dataset columns:", error.response?.data || error.message);
@@ -95,9 +60,7 @@ export const getDatasetColumns = async (req, res) => {
 
 export const getDatasetData = async (req, res) => {
   try {
-    const xiboToken = getXiboToken(req.headers.authorization);
     const { id } = req.params;
-    const client = getXiboClient(xiboToken);
     
     const defaultParams = {
       draw: 1,
@@ -106,12 +69,10 @@ export const getDatasetData = async (req, res) => {
       ...req.query
     };
 
-    const response = await client.get(`/dataset/data/${id}`, {
-      params: defaultParams,
-      paramsSerializer: params => qs.stringify(params, { arrayFormat: 'indices' })
-    });
+    const queryString = qs.stringify(defaultParams, { arrayFormat: 'indices' });
+    const response = await xiboRequest(`/dataset/data/${id}?${queryString}`, "GET");
     
-    const responseData = Array.isArray(response.data) ? { data: response.data } : response.data;
+    const responseData = Array.isArray(response) ? { data: response } : response;
     res.json(responseData);
   } catch (error) {
     console.error("Error fetching dataset data:", error.response?.data || error.message);
@@ -121,13 +82,23 @@ export const getDatasetData = async (req, res) => {
 
 export const addDatasetRow = async (req, res) => {
   try {
-    const xiboToken = getXiboToken(req.headers.authorization);
     const { id } = req.params;
-    const client = getXiboClient(xiboToken);
+    const token = await getAccessToken();
     
     // Xibo expects form-data for adding rows
-    // The keys should be `dataSetColumnId_{columnId}`
-    const response = await client.post(`/dataset/data/${id}`, qs.stringify(req.body));
+    // We use axios directly here because xiboRequest defaults to JSON for POST
+    // and we need application/x-www-form-urlencoded
+    const response = await axios.post(
+      `${process.env.XIBO_API_URL}/dataset/data/${id}`,
+      qs.stringify(req.body),
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
     res.status(201).json(response.data);
   } catch (error) {
     console.error("Error adding dataset row:", error.response?.data || error.message);
@@ -137,13 +108,11 @@ export const addDatasetRow = async (req, res) => {
 
 export const deleteDatasetRow = async (req, res) => {
   try {
-    const xiboToken = getXiboToken(req.headers.authorization);
     const { id, rowId } = req.params;
-    const client = getXiboClient(xiboToken);
     
     // Xibo API endpoint: DELETE /dataset/data/{datasetId}/{rowId}
-    const response = await client.delete(`/dataset/data/${id}/${rowId}`);
-    res.json(response.data);
+    const response = await xiboRequest(`/dataset/data/${id}/${rowId}`, "DELETE");
+    res.json(response);
   } catch (error) {
     console.error("Error deleting dataset row:", error.response?.data || error.message);
     res.status(error.response?.status || 500).json({ error: "Failed to delete dataset row" });

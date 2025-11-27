@@ -74,11 +74,11 @@ export const login = async (req, res) => {
         id: userInfo.userId || loginIdentifier,
         username: userInfo.userName || loginIdentifier,
         email: userInfo.email || loginIdentifier,
-        xiboToken: authResult.access_token, // Store Xibo token for API calls
+        // xiboToken removed - we use app token managed by backend
       },
       process.env.JWT_SECRET,
       {
-        expiresIn: "1d",
+        expiresIn: "1h",
       }
     );
 

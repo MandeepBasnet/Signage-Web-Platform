@@ -1,5 +1,5 @@
 import axios from "axios";
-import { xiboRequest } from "../utils/xiboClient.js";
+import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
 import {
   fetchUserScopedCollection,
   getUserContext,
@@ -168,7 +168,11 @@ export const getLayoutDetails = async (req, res) => {
 export const getLayoutThumbnail = async (req, res) => {
   try {
     const { layoutId } = req.params;
-    const { token } = getUserContext(req);
+    let { token } = getUserContext(req);
+
+    if (!token) {
+        token = await getAccessToken();
+    }
 
     if (!layoutId) {
       throw new HttpError(400, "Layout ID is required");

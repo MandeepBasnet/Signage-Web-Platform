@@ -331,6 +331,33 @@ export async function xiboRequest(
     const res = await axios(requestConfig);
     return res.data;
   } catch (err) {
+    // Retry on 401 Unauthorized
+    if (err.response && err.response.status === 401) {
+      console.warn(
+        `[xiboRequest] 401 Unauthorized for ${endpoint}. Retrying with fresh App Token...`
+      );
+
+      try {
+        // Force refresh of app token
+        token = null; 
+        const freshToken = await getAccessToken();
+
+        // Update header with new token
+        requestConfig.headers.Authorization = `Bearer ${freshToken}`;
+
+        const retryRes = await axios(requestConfig);
+        return retryRes.data;
+      } catch (retryErr) {
+        console.error(
+          `[xiboRequest] Retry failed for ${endpoint}:`,
+          retryErr.message
+        );
+        // Throw the original error if retry fails, or the retry error?
+        // Usually better to throw the retry error as it's the most recent
+        throw retryErr;
+      }
+    }
+
     console.error(`[xiboRequest] ${method} ${requestConfig.url} failed:`, {
       status: err.response?.status,
       statusText: err.response?.statusText,

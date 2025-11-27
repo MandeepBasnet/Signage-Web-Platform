@@ -53,9 +53,9 @@ export const checkMediaNameAvailability = async (req, desiredName) => {
     const userXiboToken = req.user?.xiboToken;
     const userXiboUserId = req.user?.id || req.user?.userId;
 
-    if (!userXiboToken || !userXiboUserId) {
+    if (!userXiboUserId) {
       console.warn(
-        "User Xibo token or ID missing for duplicate checking. Skipping pre-check."
+        "User ID missing for duplicate checking. Skipping pre-check."
       );
       return {
         hasConflict: false,
@@ -469,12 +469,11 @@ export const updateMediaName = async (
 export const uploadMedia = async (req, res) => {
   try {
     // Use user's Xibo token instead of app token to ensure correct ownership
-    const userXiboToken = req.user?.xiboToken;
+    // Use user's Xibo token if available, otherwise fall back to app token
+    // We'll ensure ownership is transferred to the user later
+    let userXiboToken = req.user?.xiboToken;
     if (!userXiboToken) {
-      throw new HttpError(
-        401,
-        "User Xibo token not found. Please login again."
-      );
+      userXiboToken = await getAccessToken();
     }
 
     const file = req.file;
