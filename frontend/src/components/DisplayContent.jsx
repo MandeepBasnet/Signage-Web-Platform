@@ -55,7 +55,7 @@ export default function DisplayContent() {
       
       // Preload thumbnails for the layouts associated with displays
       const layoutsToLoad = fetchedDisplays
-        .map(d => d.layout)
+        .flatMap(d => [d.layout, ...(d.scheduledLayouts || [])])
         .filter(l => l !== null && l !== undefined);
       preloadThumbnails(layoutsToLoad);
 
@@ -228,57 +228,92 @@ export default function DisplayContent() {
             return (
               <div key={display.id} className="flex flex-col gap-4">
                 {/* Display Name Heading */}
-                <h3 className="text-xl font-bold text-gray-800 border-b pb-2">
-                  {display.name}
-                </h3>
-
-                {/* Layout Card */}
-                <div className="w-full max-w-sm">
-                  {layout ? (
-                    <div className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group">
-                      {/* Visual Representation */}
-                      <div
-                        className="w-full bg-gray-100 flex items-center justify-center overflow-hidden relative"
-                        style={{ minHeight: "200px", maxHeight: "250px" }}
-                      >
-                        {previewUrl ? (
-                          <img
-                            src={previewUrl}
-                            alt={`${layoutName} preview`}
-                            className="w-full h-full object-contain bg-black"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex flex-col items-center justify-center p-8 text-gray-600 text-center">
-                            <span className="text-5xl mb-3">📄</span>
-                            <p className="font-semibold text-base mb-1">{layoutName}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Layout Info */}
-                      <div className="p-4 flex-1 flex flex-col">
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-semibold text-gray-900 text-base truncate flex-1">
-                            {layoutName}
-                          </h4>
-                        </div>
-                        <div className="flex flex-col gap-1 text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
-                           {layout.status && (
-                            <span className="capitalize">Status: {layout.status}</span>
-                          )}
-                          {layout.duration && (
-                            <span>Duration: {layout.duration}s</span>
-                          )}
-                          {layout.modifiedDt && (
-                            <span>Modified: {formatDate(layout.modifiedDt)}</span>
-                          )}
-                        </div>
-                      </div>
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h3 className="text-xl font-bold text-gray-800">
+                    {display.name}
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm">
+                    <div className="flex items-center gap-1">
+                      <span className={`w-2 h-2 rounded-full ${display.loggedIn ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                      <span className="text-gray-600">{display.loggedIn ? 'Online' : 'Offline'}</span>
                     </div>
+                    <div className="text-gray-500">
+                      Last Checked: {formatDate(display.lastAccessed)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scheduled Layouts Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full">
+                  {display.scheduledLayouts && display.scheduledLayouts.length > 0 ? (
+                    display.scheduledLayouts.map((layout) => {
+                      const layoutId = layout.layoutId || layout.id;
+                      const layoutName = layout.name || layout.campaign || "Unknown Layout";
+                      const previewUrl = getThumbnailUrl(layoutId);
+                      
+                      return (
+                        <div 
+                            key={layout.id || Math.random()} 
+                            className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group cursor-pointer"
+                            onClick={() => window.location.href = `/layout/design/${layoutId}`}
+                        >
+                          {/* Visual Representation */}
+                          <div
+                            className="w-full bg-gray-100 flex items-center justify-center overflow-hidden relative"
+                            style={{ minHeight: "200px", maxHeight: "250px" }}
+                          >
+                            {previewUrl ? (
+                              <img
+                                src={previewUrl}
+                                alt={`${layoutName} preview`}
+                                className="w-full h-full object-contain bg-black"
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center p-8 text-gray-600 text-center">
+                                <span className="text-5xl mb-3">📄</span>
+                                <p className="font-semibold text-base mb-1">{layoutName}</p>
+                              </div>
+                            )}
+                            
+                            {/* Status Badge (if available or mocked) */}
+                            <div className="absolute top-2 right-2">
+                                <span className="px-2 py-1 text-xs font-semibold bg-green-100 text-green-800 rounded-full">
+                                    Active
+                                </span>
+                            </div>
+                            
+                            {/* Hover Overlay for Edit Hint */}
+                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 flex items-center justify-center transition-colors">
+                                <span className="opacity-0 group-hover:opacity-100 bg-white/90 text-gray-800 px-3 py-1 rounded-full text-sm font-medium shadow-sm transform translate-y-2 group-hover:translate-y-0 transition-all">
+                                    Open Designer
+                                </span>
+                            </div>
+                          </div>
+
+                          {/* Layout Info */}
+                          <div className="p-4 flex-1 flex flex-col">
+                            <div className="flex items-start justify-between mb-2">
+                              <h4 className="font-semibold text-gray-900 text-base truncate flex-1">
+                                {layoutName}
+                              </h4>
+                            </div>
+                            <div className="flex flex-col gap-1 text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
+                               {layout.isAlways ? (
+                                 <span>Duration: Always</span>
+                               ) : (
+                                 <span>
+                                   {formatDate(layout.fromDt)} - {formatDate(layout.toDt)}
+                                 </span>
+                               )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
-                     <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 text-center text-gray-500">
-                        No layout assigned or layout information unavailable.
+                     <div className="col-span-full border border-gray-200 rounded-lg p-6 bg-gray-50 text-center text-gray-500">
+                        No scheduled layouts found.
                      </div>
                   )}
                 </div>

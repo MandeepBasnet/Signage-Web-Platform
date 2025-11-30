@@ -1,0 +1,45 @@
+
+> frontend@0.0.0 lint
+> eslint .
+
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\AddMediaPlaylistButton.jsx
+  74:9  error  'isAudio' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\DatasetContent.jsx
+  26:13  error  'user' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\DisplayContent.jsx
+   16:10  error    'menuOpenId' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+   20:6   warning  React Hook useEffect has a missing dependency: 'fetchDisplays'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+  123:9   error    'handleDelete' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                      no-unused-vars
+  141:9   error    'handleEdit' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+  225:19  error    'layoutName' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+  226:19  error    'previewUrl' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                        no-unused-vars
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\LayoutContent.jsx
+  17:6  warning  React Hook useEffect has a missing dependency: 'fetchLayouts'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\LayoutDesign.jsx
+  16:10  error    'loading' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                no-unused-vars
+  17:10  error    'error' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                  no-unused-vars
+  25:6   warning  React Hook useEffect has a missing dependency: 'fetchLayoutDetails'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\MediaContent.jsx
+   44:10  error    'currentPage' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                      no-unused-vars
+   44:23  error    'setCurrentPage' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                   no-unused-vars
+   45:10  error    'totalPages' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                       no-unused-vars
+   45:22  error    'setTotalPages' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                    no-unused-vars
+  114:6   warning  React Hook useEffect has missing dependencies: 'fetchMedia' and 'mediaUrls'. Either include them or remove the dependency array  react-hooks/exhaustive-deps
+  605:25  error    'isAudioType' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u                                      no-unused-vars
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\MediaPreviewModal.jsx
+  51:3  error  React Hook "useEffect" is called conditionally. React Hooks must be called in the exact same order in every component render  react-hooks/rules-of-hooks
+
+C:\Users\sales\OneDrive\Desktop\Signage-Platform\frontend\src\components\PlaylistContent.jsx
+    1:1  warning  Unused eslint-disable directive (no problems were reported from 'no-undef')
+  115:9  error    'formatFileSize' is assigned a value but never used. Allowed unused vars must match /^[A-Z_]/u  no-unused-vars
+
+Γ£û 21 problems (16 errors, 5 warnings)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

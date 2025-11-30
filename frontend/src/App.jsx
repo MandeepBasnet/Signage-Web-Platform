@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import LayoutDesign from "./components/LayoutDesign.jsx";
 import { isTokenValid } from "./utils/auth.js";
 import "./App.css";
 
@@ -20,6 +21,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Dashboard />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/layout/design/:layoutId"
+          element={
+            <RequireAuth>
+              <LayoutDesign />
             </RequireAuth>
           }
         />

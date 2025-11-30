@@ -78,7 +78,42 @@ export const getDisplays = async (req, res) => {
       return false;
     });
 
-    // 4. Pagination & Normalization
+    // 4. Fetch Schedules for these displays
+    const displayGroupIds = filteredDisplays.map(d => d.displayGroupId).filter(id => id);
+    const uniqueGroupIds = [...new Set(displayGroupIds)];
+
+    let scheduledLayouts = [];
+    if (uniqueGroupIds.length > 0) {
+        try {
+            const scheduleParams = new URLSearchParams();
+            uniqueGroupIds.forEach(id => scheduleParams.append('displayGroupIds[]', id));
+            // Fetch active schedules (wide range)
+            const now = Math.floor(Date.now() / 1000);
+            // scheduleParams.append('fromDt', now - 86400); 
+            // scheduleParams.append('toDt', now + 31536000); 
+            // Using a very wide range to ensure we catch "Always" events which might have 0-INT_MAX
+            // Actually, Xibo might default to a range if not specified. 
+            // Let's try without dates first, or with the user's observed params if needed.
+            // The user's log showed fromDt=0 and toDt=2147483647 for "Always".
+            
+            const scheduleResponse = await xiboRequest(`/schedule?${scheduleParams.toString()}`, 'GET');
+            
+            let events = [];
+            if (Array.isArray(scheduleResponse)) {
+                events = scheduleResponse;
+            } else if (scheduleResponse.data) {
+                events = scheduleResponse.data;
+            }
+            
+            // Filter for Layouts (eventTypeId = 1)
+            scheduledLayouts = events.filter(e => e.eventTypeId === 1);
+
+        } catch (error) {
+            console.error("Failed to fetch schedules:", error);
+        }
+    }
+
+    // 5. Pagination & Normalization
     const startIndex = parseInt(start) || 0;
     const limit = parseInt(length) || 10;
     const pagedDisplays = filteredDisplays.slice(startIndex, startIndex + limit);
@@ -87,6 +122,21 @@ export const getDisplays = async (req, res) => {
         const layoutId = display.currentLayoutId || display.defaultLayoutId;
         const layoutObj = display.currentLayout || null;
         
+        // Find layouts for this display
+        const displayLayouts = scheduledLayouts.filter(event => {
+            // Check if event's displayGroups contains this display's groupId
+            return event.displayGroups && event.displayGroups.some(dg => dg.displayGroupId === display.displayGroupId);
+        }).map(event => ({
+            id: event.eventId,
+            name: event.name, // Layout name
+            eventId: event.eventId,
+            fromDt: event.fromDt,
+            toDt: event.toDt,
+            isAlways: event.isAlways,
+            campaign: event.campaign,
+            layoutId: event.campaignId // Map campaignId to layoutId for thumbnails
+        }));
+
         return {
             ...display,
             id: display.displayId,
@@ -98,7 +148,8 @@ export const getDisplays = async (req, res) => {
             layoutName: display.currentLayout?.layout || display.defaultLayout || "Default Layout",
             clientType: display.clientType,
             clientVersion: display.clientVersion,
-            lastAccessed: display.lastAccessed
+            lastAccessed: display.lastAccessed,
+            scheduledLayouts: displayLayouts // Add scheduled layouts
         };
     });
 
