@@ -52,7 +52,13 @@ export default function DisplayContent() {
       const data = await response.json();
       const fetchedDisplays = data?.data || [];
       setDisplays(fetchedDisplays);
-      preloadThumbnails(fetchedDisplays);
+      
+      // Preload thumbnails for the layouts associated with displays
+      const layoutsToLoad = fetchedDisplays
+        .map(d => d.layout)
+        .filter(l => l !== null && l !== undefined);
+      preloadThumbnails(layoutsToLoad);
+
     } catch (err) {
       console.error("Error fetching displays:", err);
       setError(err.message || "Failed to load displays");
@@ -61,9 +67,9 @@ export default function DisplayContent() {
     }
   };
 
-  const preloadThumbnails = async (displayList) => {
-    for (const display of displayList) {
-      const layoutId = display.layoutId;
+  const preloadThumbnails = async (layoutList) => {
+    for (const layout of layoutList) {
+      const layoutId = layout.layoutId || layout.layout_id || layout.id;
       if (!layoutId) continue;
       if (layoutThumbs.has(layoutId)) continue;
 
@@ -77,9 +83,7 @@ export default function DisplayContent() {
           }
         );
 
-        if (!response.ok) {
-          continue;
-        }
+        if (!response.ok) continue;
 
         const blob = await response.blob();
         const blobUrl = URL.createObjectURL(blob);
@@ -107,8 +111,6 @@ export default function DisplayContent() {
   const formatDate = (dateString) => {
     if (!dateString) return "Unknown";
     try {
-      // Handle unix timestamp if necessary, but Xibo usually returns YYYY-MM-DD HH:mm:ss
-      // If it's a number (timestamp), convert it
       if (typeof dateString === 'number') {
           return new Date(dateString * 1000).toLocaleString();
       }
@@ -117,45 +119,6 @@ export default function DisplayContent() {
       return dateString;
     }
   };
-
-  if (loading) {
-    return (
-      <section className="flex flex-col gap-5 relative p-4">
-        <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
-          <div className="flex items-center justify-center py-12">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"></div>
-              <p className="text-gray-600">Loading displays...</p>
-            </div>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="flex flex-col gap-5 relative p-4">
-        <div className="rounded-lg border border-red-200 p-6 bg-red-50 shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
-            <div>
-              <h3 className="font-semibold text-red-800 mb-1">Error</h3>
-              <p className="text-red-700">{error}</p>
-            </div>
-          </div>
-          <button
-            onClick={fetchDisplays}
-            className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-
 
   const handleDelete = async (displayId) => {
     if (!window.confirm("Are you sure you want to delete this display?")) return;
@@ -210,141 +173,120 @@ export default function DisplayContent() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
+        <p className="font-semibold">Error loading displays</p>
+        <p>{error}</p>
+        <button
+          onClick={fetchDisplays}
+          className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <section className="flex flex-col gap-5 relative p-4">
-      <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-semibold text-gray-900">Screens</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Manage your digital displays and their settings
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={fetchDisplays}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-            >
-              Refresh
-            </button>
-          </div>
+    <section className="flex flex-col gap-8 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900">Displays</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            {displays.length} {displays.length === 1 ? "display" : "displays"} found
+          </p>
         </div>
+        <button
+          onClick={fetchDisplays}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+        >
+          Refresh
+        </button>
+      </div>
 
-        {displays.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No displays found</p>
-            <p className="text-gray-400 text-sm mt-2">
-              Connect a player to see it here.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {displays.map((display) => {
-              const previewUrl = getThumbnailUrl(display.layoutId);
-              const isActive = display.loggedIn; 
-              
-              return (
-                <div
-                  key={display.id}
-                  className="border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg transition-shadow bg-white flex flex-col"
-                >
-                  {/* Display Visual Representation (Layout Thumbnail) */}
-                  <div className="relative w-full bg-black aspect-video flex items-center justify-center overflow-hidden group">
-                     {/* Status Badge */}
-                    <div className={`absolute top-3 right-3 px-2 py-1 rounded-full text-xs font-medium z-10 ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}>
-                        {isActive ? 'Active' : 'Inactive'}
-                    </div>
-                    {/* Red dot indicator */}
-                    <div className="absolute top-3 left-3 w-3 h-3 rounded-full bg-red-500 z-10 border-2 border-white"></div>
+      {displays.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <p className="text-gray-500 text-lg">No displays found</p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-8">
+          {displays.map((display) => {
+            const layout = display.layout;
+            const layoutId = layout?.layoutId || layout?.layout_id || layout?.id;
+            const layoutName = layout?.layout || layout?.name || display.layoutName || "Default Layout";
+            const previewUrl = getThumbnailUrl(layoutId);
+            
+            return (
+              <div key={display.id} className="flex flex-col gap-4">
+                {/* Display Name Heading */}
+                <h3 className="text-xl font-bold text-gray-800 border-b pb-2">
+                  {display.name}
+                </h3>
 
-                    {previewUrl ? (
-                      <img
-                        src={previewUrl}
-                        alt={`${display.layoutName} preview`}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-gray-500">
-                        <span className="text-4xl mb-2">📺</span>
-                        <span className="text-sm">No Preview</span>
-                      </div>
-                    )}
-                    
-                    {/* Overlay with Layout Name */}
-                     <div className="absolute bottom-3 left-3 right-3 bg-black/60 backdrop-blur-sm text-white text-xs px-3 py-2 rounded-md flex items-center gap-2">
-                        <span className="truncate flex-1">{display.layoutName || "Default Layout"}</span>
-                     </div>
-                  </div>
-
-                  {/* Display Info */}
-                  <div className="p-4 flex-1 flex flex-col gap-3 relative">
-                    <div className="flex items-start justify-between">
-                      <h3 className="font-bold text-gray-900 text-lg truncate flex-1">
-                        {display.name}
-                      </h3>
-                      <div className="relative">
-                        <button 
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                            onClick={() => setMenuOpenId(menuOpenId === display.id ? null : display.id)}
-                        >
-                            ⋮
-                        </button>
-                        {menuOpenId === display.id && (
-                            <div className="absolute right-0 top-full mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20 py-1">
-                                <button 
-                                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                    onClick={() => handleEdit(display)}
-                                >
-                                    Edit
-                                </button>
-                                <button 
-                                    className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
-                                    onClick={() => handleDelete(display.id)}
-                                >
-                                    Delete
-                                </button>
-                            </div>
+                {/* Layout Card */}
+                <div className="w-full max-w-sm">
+                  {layout ? (
+                    <div className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group">
+                      {/* Visual Representation */}
+                      <div
+                        className="w-full bg-gray-100 flex items-center justify-center overflow-hidden relative"
+                        style={{ minHeight: "200px", maxHeight: "250px" }}
+                      >
+                        {previewUrl ? (
+                          <img
+                            src={previewUrl}
+                            alt={`${layoutName} preview`}
+                            className="w-full h-full object-contain bg-black"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-8 text-gray-600 text-center">
+                            <span className="text-5xl mb-3">📄</span>
+                            <p className="font-semibold text-base mb-1">{layoutName}</p>
+                          </div>
                         )}
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="text-blue-500">📄</span>
-                        <span className="truncate">{display.layoutName || "No Layout Assigned"}</span>
+                      {/* Layout Info */}
+                      <div className="p-4 flex-1 flex flex-col">
+                        <div className="flex items-start justify-between mb-2">
+                          <h4 className="font-semibold text-gray-900 text-base truncate flex-1">
+                            {layoutName}
+                          </h4>
+                        </div>
+                        <div className="flex flex-col gap-1 text-xs text-gray-500 mt-auto pt-3 border-t border-gray-100">
+                           {layout.status && (
+                            <span className="capitalize">Status: {layout.status}</span>
+                          )}
+                          {layout.duration && (
+                            <span>Duration: {layout.duration}s</span>
+                          )}
+                          {layout.modifiedDt && (
+                            <span>Modified: {formatDate(layout.modifiedDt)}</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-y-2 text-xs text-gray-500 mt-2">
-                        <div className="flex flex-col">
-                            <span className="text-gray-400">Connection</span>
-                            <span className={display.loggedIn ? "text-green-600" : "text-red-500"}>
-                                {display.loggedIn ? "Connected" : "Disconnected"}
-                            </span>
-                        </div>
-                        <div className="flex flex-col text-right">
-                             <span className="text-gray-400">Last Checked</span>
-                             <span>{display.lastAccessed ? formatDate(display.lastAccessed) : "Never"}</span>
-                        </div>
-                         <div className="flex flex-col">
-                            <span className="text-gray-400">Browser</span>
-                            <span>{display.clientType || "Unknown"} {display.clientVersion || ""}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="mt-auto pt-4 flex items-center justify-between border-t border-gray-100">
-                        <span className="text-sm font-medium text-gray-700">Accept Ads</span>
-                        <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
-                            <input type="checkbox" name="toggle" id={`toggle-${display.id}`} className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer"/>
-                            <label htmlFor={`toggle-${display.id}`} className="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
-                        </div>
-                    </div>
-                  </div>
+                  ) : (
+                     <div className="border border-gray-200 rounded-lg p-6 bg-gray-50 text-center text-gray-500">
+                        No layout assigned or layout information unavailable.
+                     </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Edit Modal */}
       {showEditModal && editingDisplay && (

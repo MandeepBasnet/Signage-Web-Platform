@@ -4,63 +4,113 @@ import axios from "axios";
 
 export const getDisplays = async (req, res) => {
   try {
-    const { token, userId } = getUserContext(req);
-    
-    // Direct request to Xibo API to avoid over-filtering in helper
-    // Using standard Xibo API parameters as per documentation
-    // We rely on the token to handle permissions
+    const { start, length } = req.query;
+    const userId = req.user.id; 
+
+    // 1. Fetch User Details to get Groups
+    let userGroups = [];
+    let user = null;
+    try {
+      // We use the App Token (via xiboRequest default) to fetch user details
+      const userDetails = await xiboRequest(
+        `/user?userId=${userId}&embed=groups`,
+        "GET"
+      );
+      
+      if (Array.isArray(userDetails)) {
+        user = userDetails[0];
+      } else if (userDetails.data) {
+         user = Array.isArray(userDetails.data) ? userDetails.data[0] : userDetails.data;
+      } else {
+        user = userDetails;
+      }
+
+      if (user) {
+        // Add explicit groups
+        if (user.groups) {
+          userGroups = user.groups.map(g => g.group);
+        }
+        // Add primary group if it exists
+        if (user.group) {
+          userGroups.push(user.group);
+        }
+      }
+    } catch (userError) {
+      console.error(`[getDisplays] Failed to fetch user details:`, userError.message);
+    }
+
+    // 2. Fetch All Displays
+    // We fetch a large number to ensure we get everything, then filter.
     const params = new URLSearchParams({
       start: 0,
-      length: 100,
-      embed: "status,currentLayout,displayGroup",
+      length: 1000,
+      embed: "status,currentLayout,displayGroup,groupsWithPermissions", 
     });
-
-    if (userId) {
-      params.append("userId", userId);
-      // params.append("ownerId", userId); 
-    }
 
     const response = await xiboRequest(
       `/display?${params.toString()}`, 
-      "GET", 
-      null, 
-      token
+      "GET"
     );
 
-    // Xibo returns { data: [...], recordsTotal: N, ... } or just array
-    // Handle both cases
     let displays = [];
-    let total = 0;
-
     if (Array.isArray(response)) {
         displays = response;
-        total = response.length;
     } else if (response.data) {
         displays = response.data;
-        total = response.recordsTotal || response.total || displays.length;
     }
 
-    // Normalize display data
-    const normalizedDisplays = displays.map((display) => {
-        // Determine the layout to show (current or default)
+    // 3. Filter Displays
+    const filteredDisplays = displays.filter(display => {
+      // 1. Owner check
+      if (display.ownerId == userId) return true;
+
+      // 2. Group Permissions check
+      if (display.groupsWithPermissions) {
+        const permittedGroups = typeof display.groupsWithPermissions === 'string' 
+          ? display.groupsWithPermissions.split(',').map(s => s.trim())
+          : display.groupsWithPermissions; 
+
+        // Check intersection
+        const hasPermission = permittedGroups.some(pg => userGroups.includes(pg));
+        if (hasPermission) return true;
+      }
+
+      return false;
+    });
+
+    // 4. Pagination & Normalization
+    const startIndex = parseInt(start) || 0;
+    const limit = parseInt(length) || 10;
+    const pagedDisplays = filteredDisplays.slice(startIndex, startIndex + limit);
+
+    const normalizedDisplays = pagedDisplays.map((display) => {
         const layoutId = display.currentLayoutId || display.defaultLayoutId;
+        const layoutObj = display.currentLayout || null;
         
         return {
             ...display,
             id: display.displayId,
+            displayId: display.displayId, // Ensure displayId is present
             name: display.display,
-            status: display.loggedIn ? 'Active' : 'Inactive',
+            status: display.loggedIn ? 'Active' : 'Inactive', // Simple status mapping
             layoutId: layoutId,
-            // Try to get layout name from embedded data
+            layout: layoutObj,
             layoutName: display.currentLayout?.layout || display.defaultLayout || "Default Layout",
-            // Ensure we have client info
             clientType: display.clientType,
             clientVersion: display.clientVersion,
             lastAccessed: display.lastAccessed
         };
     });
 
-    res.json({ data: normalizedDisplays, total: total });
+    // Return in DataTables format (or standard JSON if not using DataTables)
+    // The frontend expects { data: [...] } based on previous code
+    res.json({ 
+      data: normalizedDisplays, 
+      total: filteredDisplays.length,
+      recordsTotal: filteredDisplays.length,
+      recordsFiltered: filteredDisplays.length
+    });
+
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch displays");
   }
