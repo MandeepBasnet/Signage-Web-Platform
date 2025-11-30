@@ -1,5 +1,0 @@
-
-> signage-lab-backend@1.0.0 start
-> node src/server.js
-
-Γ£à Server running on port 5000
