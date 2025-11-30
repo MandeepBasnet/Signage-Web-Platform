@@ -25,7 +25,7 @@ export default function App() {
           }
         />
         <Route
-          path="/layout/design/:layoutId"
+          path="/layout/designer/:layoutId"
           element={
             <RequireAuth>
               <LayoutDesign />

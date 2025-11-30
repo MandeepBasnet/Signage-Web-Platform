@@ -7,6 +7,7 @@ import {
   publishLayout,
 } from "../controllers/layoutController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
+
 const router = express.Router();
 
 // All layout routes require authentication

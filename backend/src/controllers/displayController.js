@@ -11,7 +11,6 @@ export const getDisplays = async (req, res) => {
     let userGroups = [];
     let user = null;
     try {
-      // We use the App Token (via xiboRequest default) to fetch user details
       const userDetails = await xiboRequest(
         `/user?userId=${userId}&embed=groups`,
         "GET"
@@ -26,11 +25,9 @@ export const getDisplays = async (req, res) => {
       }
 
       if (user) {
-        // Add explicit groups
         if (user.groups) {
           userGroups = user.groups.map(g => g.group);
         }
-        // Add primary group if it exists
         if (user.group) {
           userGroups.push(user.group);
         }
@@ -40,7 +37,6 @@ export const getDisplays = async (req, res) => {
     }
 
     // 2. Fetch All Displays
-    // We fetch a large number to ensure we get everything, then filter.
     const params = new URLSearchParams({
       start: 0,
       length: 1000,
@@ -61,20 +57,14 @@ export const getDisplays = async (req, res) => {
 
     // 3. Filter Displays
     const filteredDisplays = displays.filter(display => {
-      // 1. Owner check
       if (display.ownerId == userId) return true;
-
-      // 2. Group Permissions check
       if (display.groupsWithPermissions) {
         const permittedGroups = typeof display.groupsWithPermissions === 'string' 
           ? display.groupsWithPermissions.split(',').map(s => s.trim())
           : display.groupsWithPermissions; 
-
-        // Check intersection
         const hasPermission = permittedGroups.some(pg => userGroups.includes(pg));
         if (hasPermission) return true;
       }
-
       return false;
     });
 
@@ -87,15 +77,6 @@ export const getDisplays = async (req, res) => {
         try {
             const scheduleParams = new URLSearchParams();
             uniqueGroupIds.forEach(id => scheduleParams.append('displayGroupIds[]', id));
-            // Fetch active schedules (wide range)
-            const now = Math.floor(Date.now() / 1000);
-            // scheduleParams.append('fromDt', now - 86400); 
-            // scheduleParams.append('toDt', now + 31536000); 
-            // Using a very wide range to ensure we catch "Always" events which might have 0-INT_MAX
-            // Actually, Xibo might default to a range if not specified. 
-            // Let's try without dates first, or with the user's observed params if needed.
-            // The user's log showed fromDt=0 and toDt=2147483647 for "Always".
-            
             const scheduleResponse = await xiboRequest(`/schedule?${scheduleParams.toString()}`, 'GET');
             
             let events = [];
@@ -107,6 +88,30 @@ export const getDisplays = async (req, res) => {
             
             // Filter for Layouts (eventTypeId = 1)
             scheduledLayouts = events.filter(e => e.eventTypeId === 1);
+
+            // 5. Resolve Layout IDs from Campaigns
+            const campaignIds = [...new Set(scheduledLayouts.map(e => e.campaignId).filter(id => id))];
+            const campaignLayoutMap = new Map();
+
+            if (campaignIds.length > 0) {
+                try {
+                    await Promise.all(campaignIds.map(async (campaignId) => {
+                        try {
+                            const layouts = await xiboRequest(`/layout?campaignId=${campaignId}`, 'GET');
+                            if (Array.isArray(layouts) && layouts.length > 0) {
+                                campaignLayoutMap.set(campaignId, layouts[0].layoutId);
+                            }
+                        } catch (e) {
+                            console.warn(`Failed to fetch layouts for campaign ${campaignId}`, e);
+                        }
+                    }));
+                } catch (error) {
+                    console.error("Failed to resolve campaign layouts:", error);
+                }
+            }
+            
+            // Attach map to request for use in normalization
+            req.campaignLayoutMap = campaignLayoutMap;
 
         } catch (error) {
             console.error("Failed to fetch schedules:", error);
@@ -122,39 +127,38 @@ export const getDisplays = async (req, res) => {
         const layoutId = display.currentLayoutId || display.defaultLayoutId;
         const layoutObj = display.currentLayout || null;
         
-        // Find layouts for this display
         const displayLayouts = scheduledLayouts.filter(event => {
-            // Check if event's displayGroups contains this display's groupId
             return event.displayGroups && event.displayGroups.some(dg => dg.displayGroupId === display.displayGroupId);
-        }).map(event => ({
-            id: event.eventId,
-            name: event.name, // Layout name
-            eventId: event.eventId,
-            fromDt: event.fromDt,
-            toDt: event.toDt,
-            isAlways: event.isAlways,
-            campaign: event.campaign,
-            layoutId: event.campaignId // Map campaignId to layoutId for thumbnails
-        }));
+        }).map(event => {
+            const resolvedLayoutId = (req.campaignLayoutMap && req.campaignLayoutMap.get(event.campaignId)) || event.campaignId;
+            return {
+                id: event.eventId,
+                name: event.name,
+                eventId: event.eventId,
+                fromDt: event.fromDt,
+                toDt: event.toDt,
+                isAlways: event.isAlways,
+                campaign: event.campaign,
+                layoutId: resolvedLayoutId
+            };
+        });
 
         return {
             ...display,
             id: display.displayId,
-            displayId: display.displayId, // Ensure displayId is present
+            displayId: display.displayId,
             name: display.display,
-            status: display.loggedIn ? 'Active' : 'Inactive', // Simple status mapping
+            status: display.loggedIn ? 'Active' : 'Inactive',
             layoutId: layoutId,
             layout: layoutObj,
-            layoutName: display.currentLayout?.layout || display.defaultLayout || "Default Layout",
+            layoutName: (display.currentLayout && display.currentLayout.layout) || display.defaultLayout || "Default Layout",
             clientType: display.clientType,
             clientVersion: display.clientVersion,
             lastAccessed: display.lastAccessed,
-            scheduledLayouts: displayLayouts // Add scheduled layouts
+            scheduledLayouts: displayLayouts
         };
     });
 
-    // Return in DataTables format (or standard JSON if not using DataTables)
-    // The frontend expects { data: [...] } based on previous code
     res.json({ 
       data: normalizedDisplays, 
       total: filteredDisplays.length,
@@ -188,19 +192,13 @@ export const updateDisplay = async (req, res) => {
     try {
         const { displayId } = req.params;
         const { token } = getUserContext(req);
-        const { display, description, license } = req.body; // Fields to update
-
-        // Xibo expects form-data for updates usually, but JSON might work if headers are set.
-        // xiboRequest handles JSON by default.
-        // Check documentation: PUT /display/{displayId} takes form data.
-        // We will pass the body directly.
+        const { display, description, license } = req.body; 
 
         const formData = new URLSearchParams();
         if (display) formData.append('display', display);
         if (description) formData.append('description', description);
         if (license) formData.append('license', license);
         
-        // We need to send as application/x-www-form-urlencoded
         await axios.put(`${process.env.XIBO_API_URL}/display/${displayId}`, formData, {
             headers: {
                 Authorization: `Bearer ${token}`,

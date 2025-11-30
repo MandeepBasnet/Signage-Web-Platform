@@ -198,7 +198,23 @@ export default function LayoutDesign() {
                                             title={`${widget.moduleName} - ${widget.name}`}
                                         >
                                             <span className="text-blue-300 font-bold mr-1">{idx + 1}.</span>
-                                            {widget.moduleName}
+                                            {widget.moduleName === 'image' || widget.moduleName === 'localvideo' ? (
+                                                <div className="flex items-center gap-2">
+                                                    {widget.mediaIds && widget.mediaIds.length > 0 && (
+                                                        <img 
+                                                            src={`${API_BASE_URL}/library/${widget.mediaIds[0]}/thumbnail?width=200&height=200`}
+                                                            alt={widget.name}
+                                                            className="w-4 h-4 object-cover rounded-sm"
+                                                            onError={(e) => {
+                                                                e.target.style.display = 'none';
+                                                            }}
+                                                        />
+                                                    )}
+                                                    <span className="truncate">{widget.moduleName}</span>
+                                                </div>
+                                            ) : (
+                                                <span>{widget.moduleName}</span>
+                                            )}
                                         </div>
                                     ))}
                                 </div>
@@ -217,77 +233,7 @@ export default function LayoutDesign() {
                 {Math.round(scale * 100)}%
             </div>
         </main>
-
-        {/* Right Sidebar - Properties */}
-        <aside className="w-72 bg-gray-800 border-l border-gray-700 flex flex-col shrink-0 z-20">
-            <div className="p-4 border-b border-gray-700">
-                <h3 className="font-semibold text-sm text-gray-200 uppercase tracking-wider">Properties</h3>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
-                {/* Layout Info */}
-                <div className="space-y-3">
-                    <div className="group">
-                        <label className="block text-xs font-medium text-gray-500 mb-1 group-hover:text-gray-400 transition-colors">Name</label>
-                        <div className="text-sm text-gray-300 font-medium break-words">{layout.layout}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="group">
-                            <label className="block text-xs font-medium text-gray-500 mb-1 group-hover:text-gray-400 transition-colors">Width</label>
-                            <div className="text-sm text-gray-300 font-mono">{layout.width}px</div>
-                        </div>
-                        <div className="group">
-                            <label className="block text-xs font-medium text-gray-500 mb-1 group-hover:text-gray-400 transition-colors">Height</label>
-                            <div className="text-sm text-gray-300 font-mono">{layout.height}px</div>
-                        </div>
-                    </div>
-                    <div className="group">
-                        <label className="block text-xs font-medium text-gray-500 mb-1 group-hover:text-gray-400 transition-colors">Description</label>
-                        <div className="text-sm text-gray-400 italic">{layout.description || "No description"}</div>
-                    </div>
-                </div>
-
-                {/* Regions List */}
-                <div>
-                    <h4 className="font-semibold text-xs text-gray-200 uppercase tracking-wider mb-3 flex items-center justify-between">
-                        <span>Regions</span>
-                        <span className="bg-gray-700 text-gray-300 text-[10px] px-1.5 py-0.5 rounded-full">{layout.regions?.length || 0}</span>
-                    </h4>
-                    <div className="space-y-2">
-                        {layout.regions?.map(region => (
-                            <div key={region.regionId} className="bg-gray-700/50 rounded border border-gray-700 p-2 hover:border-gray-600 transition-colors">
-                                <div className="flex items-center justify-between mb-1">
-                                    <span className="text-xs font-medium text-blue-300">Region {region.regionId}</span>
-                                    <span className="text-[10px] text-gray-500">{region.width}x{region.height}</span>
-                                </div>
-                                <div className="text-[10px] text-gray-400 flex items-center gap-2">
-                                    <span>X: {region.left}</span>
-                                    <span>Y: {region.top}</span>
-                                </div>
-                                {region.widgets && region.widgets.length > 0 && (
-                                    <div className="mt-2 pt-2 border-t border-gray-700/50">
-                                        <div className="text-[10px] text-gray-500 mb-1">Widgets ({region.widgets.length})</div>
-                                        <div className="space-y-0.5">
-                                            {region.widgets.slice(0, 3).map(w => (
-                                                <div key={w.widgetId} className="text-[10px] text-gray-300 truncate pl-1 border-l-2 border-blue-500/30">
-                                                    {w.moduleName}
-                                                </div>
-                                            ))}
-                                            {region.widgets.length > 3 && (
-                                                <div className="text-[10px] text-gray-500 pl-1 italic">
-                                                    +{region.widgets.length - 3} more...
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-        </aside>
-    </div>
+      </div>
     </div>
   );
 }

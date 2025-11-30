@@ -255,7 +255,7 @@ export default function DisplayContent() {
                         <div 
                             key={layout.id || Math.random()} 
                             className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group cursor-pointer"
-                            onClick={() => window.location.href = `/layout/design/${layoutId}`}
+                            onClick={() => window.location.href = `/layout/designer/${layoutId}`}
                         >
                           {/* Visual Representation */}
                           <div

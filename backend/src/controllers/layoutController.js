@@ -179,12 +179,8 @@ export const getLayoutThumbnail = async (req, res) => {
     }
 
     const xiboApiUrl = process.env.XIBO_API_URL;
-    // Remove /api from the end if present to get the base URL
-    const baseUrl = xiboApiUrl.replace(/\/api\/?$/, '');
-    
-    // The log shows /layout/thumbnail/{layoutId} works on the base URL
-    const thumbnailPath = `/layout/thumbnail/${layoutId}`;
-    const url = `${baseUrl}${thumbnailPath}`;
+    // Use the API URL directly, similar to libraryController
+    const url = `${xiboApiUrl}/layout/thumbnail/${layoutId}`;
 
     console.log(`[getLayoutThumbnail] Fetching from: ${url}`);
 
@@ -208,6 +204,8 @@ export const getLayoutThumbnail = async (req, res) => {
     handleControllerError(res, err, "Failed to fetch layout thumbnail");
   }
 };
+
+
 
 export const getLayoutPreview = async (req, res) => {
     try {

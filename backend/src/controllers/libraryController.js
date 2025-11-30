@@ -359,10 +359,13 @@ export const getMediaThumbnail = async (req, res) => {
     }
 
     // Set appropriate headers
-    res.setHeader(
-      "Content-Type",
-      response.headers["content-type"] || "image/jpeg"
-    );
+    let contentType = response.headers["content-type"];
+    // Xibo sometimes returns text/html for images, force image/jpeg if so
+    if (!contentType || contentType.includes("text/html")) {
+        contentType = "image/jpeg";
+    }
+    
+    res.setHeader("Content-Type", contentType);
     res.setHeader(
       "Cache-Control",
       "public, max-age=3600" // Cache thumbnails for 1 hour
