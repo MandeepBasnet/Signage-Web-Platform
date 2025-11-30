@@ -195,11 +195,11 @@ export default function LayoutContent() {
               return (
                 <div
                   key={layoutId}
-                  className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col"
+                  className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group"
                 >
                   {/* Layout Visual Representation */}
                   <div
-                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden"
+                    className="w-full bg-gray-100 flex items-center justify-center overflow-hidden relative"
                     style={{ minHeight: "200px", maxHeight: "300px" }}
                   >
                     {previewUrl ? (
@@ -234,6 +234,50 @@ export default function LayoutContent() {
                             }`}
                         </p>
                       )}
+                    </div>
+                    
+                    {/* Hover Overlay with Preview Button */}
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <a 
+                            href={`${API_BASE_URL}/layouts/${layoutId}/preview?token=${getAuthHeaders().Authorization?.replace('Bearer ', '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2 bg-white text-gray-900 rounded-full font-medium hover:bg-gray-100 transition-colors flex items-center gap-2"
+                            onClick={(e) => {
+                                // If we want to handle auth via headers, we might need to fetch blob and open
+                                // But for simplicity, let's try opening with token in query param if backend supports it
+                                // Or just rely on the fact that we are opening a new tab to our backend which proxies.
+                                // Wait, our backend endpoint expects Bearer token header.
+                                // Opening in new tab won't send header.
+                                // We need to handle this.
+                                e.preventDefault();
+                                const token = getAuthHeaders().Authorization?.replace('Bearer ', '');
+                                if (!token) return;
+                                
+                                // Open a window that will fetch the content
+                                const win = window.open('', '_blank');
+                                if (win) {
+                                    win.document.write('Loading preview...');
+                                    fetch(`${API_BASE_URL}/layouts/${layoutId}/preview`, {
+                                        headers: {
+                                            'Authorization': `Bearer ${token}`
+                                        }
+                                    })
+                                    .then(res => res.text())
+                                    .then(html => {
+                                        win.document.open();
+                                        win.document.write(html);
+                                        win.document.close();
+                                    })
+                                    .catch(err => {
+                                        win.document.body.innerHTML = 'Failed to load preview';
+                                        console.error(err);
+                                    });
+                                }
+                            }}
+                        >
+                            <span>👁️</span> Preview
+                        </a>
                     </div>
                   </div>
 

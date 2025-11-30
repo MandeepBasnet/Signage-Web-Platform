@@ -1,18 +1,19 @@
 "use client";
 
 const menuItems = [
-  /*
   {
     section: "DESIGN",
-    items: [{ id: "design-layout", label: "Layouts", icon: "📄" }],
+    items: [
+        { id: "display", label: "Display", icon: "📺" },
+        // { id: "layout", label: "Layouts", icon: "🎨" },
+    ],
   },
-  */
   {
     section: "LIBRARY",
     items: [
-      { id: "library-playlist", label: "Playlists", icon: "📂" },
-      { id: "library-media", label: "Media", icon: "📹" },
-      { id: "library-dataset", label: "Datasets", icon: "📊" },
+      { id: "library", label: "Library", icon: "📁" },
+      { id: "playlist", label: "Playlists", icon: "📋" },
+      { id: "dataset", label: "Datasets", icon: "📊" },
     ],
   },
 ];

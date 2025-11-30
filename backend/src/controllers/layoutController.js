@@ -179,58 +179,89 @@ export const getLayoutThumbnail = async (req, res) => {
     }
 
     const xiboApiUrl = process.env.XIBO_API_URL;
+    // Remove /api from the end if present to get the base URL
+    const baseUrl = xiboApiUrl.replace(/\/api\/?$/, '');
+    
+    // The log shows /layout/thumbnail/{layoutId} works on the base URL
     const thumbnailPath = `/layout/thumbnail/${layoutId}`;
-    const url = `${xiboApiUrl}${thumbnailPath}`;
+    const url = `${baseUrl}${thumbnailPath}`;
+
+    console.log(`[getLayoutThumbnail] Fetching from: ${url}`);
 
     const response = await axios.get(url, {
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: "image/*",
+        Accept: "*/*", 
       },
       responseType: "arraybuffer",
     });
 
-    res.setHeader(
-      "Content-Type",
-      response.headers["content-type"] || "image/png"
-    );
-    res.setHeader("Cache-Control", "private, max-age=60");
+    const contentType = response.headers["content-type"] || "image/png";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Cache-Control", "public, max-age=300");
     res.send(Buffer.from(response.data, "binary"));
   } catch (err) {
     console.error("Error fetching layout thumbnail:", err.message);
-
-    if (err.response) {
-      const status = err.response.status || 500;
-      const contentType = err.response.headers?.["content-type"];
-      let message =
-        err.response.statusText || "Failed to fetch layout thumbnail";
-
-      if (
-        contentType &&
-        contentType.includes("application/json") &&
-        err.response.data
-      ) {
-        try {
-          const json =
-            typeof err.response.data === "string"
-              ? JSON.parse(err.response.data)
-              : err.response.data;
-          message =
-            json?.message ||
-            json?.error ||
-            json?.errors?.join?.(", ") ||
-            message;
-        } catch {
-          // ignore JSON parse errors
-        }
-      }
-
-      return res.status(status).json({
-        message,
-        error: err.message,
-      });
+    if (err.response && err.response.status === 404) {
+        return res.status(404).send("Thumbnail not found");
     }
-
     handleControllerError(res, err, "Failed to fetch layout thumbnail");
   }
+};
+
+export const getLayoutPreview = async (req, res) => {
+    try {
+        const { layoutId } = req.params;
+        let { token } = getUserContext(req);
+
+        if (!token) {
+            token = await getAccessToken();
+        }
+
+        // Try to export/download the layout
+        // Based on user hint: "preview of a layout should be made that is via download"
+        // We will try /layout/export/{layoutId} which is the standard Xibo export endpoint
+        const xiboApiUrl = process.env.XIBO_API_URL;
+        const url = `${xiboApiUrl}/layout/export/${layoutId}`;
+
+        console.log(`[getLayoutPreview] Fetching from: ${url}`);
+
+        const response = await axios.get(url, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+            },
+            responseType: 'stream'
+        });
+
+        // Set appropriate headers for download
+        res.setHeader(
+            "Content-Type",
+            response.headers["content-type"] || "application/octet-stream"
+        );
+        res.setHeader(
+            "Content-Disposition",
+            response.headers["content-disposition"] || `attachment; filename="layout-${layoutId}.zip"`
+        );
+
+        response.data.pipe(res);
+
+    } catch (err) {
+        console.error("Error fetching layout preview/download:", err.message);
+        // Extract safe error information to avoid circular reference issues
+        const safeError = {
+            message: err.message,
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data
+        };
+        console.error("Error details:", safeError);
+        
+        // Send error response
+        const statusCode = err.response?.status || 500;
+        res.status(statusCode).json({
+            success: false,
+            message: "Failed to download layout preview",
+            error: err.message
+        });
+    }
 };
