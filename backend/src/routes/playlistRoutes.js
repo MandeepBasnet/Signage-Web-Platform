@@ -5,6 +5,7 @@ import {
   getPlaylists,
   getPlaylistDetails,
   createPlaylist,
+  updatePlaylistWidgetItemExpiry,
 } from "../controllers/playlistController.js";
 import {
   addMediaToPlaylist,
@@ -44,6 +45,11 @@ router.put(
   "/:playlistId/media/:widgetId/duration",
   verifyToken,
   updateMediaDurationInPlaylist
+);
+router.put(
+  "/:playlistId/media/:widgetId/expiry",
+  verifyToken,
+  updatePlaylistWidgetItemExpiry
 );
 
 // New endpoints for direct upload and preview

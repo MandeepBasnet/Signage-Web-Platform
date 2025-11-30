@@ -441,3 +441,55 @@ export const getPlaylistDetails = async (req, res) => {
     handleControllerError(res, err, "Failed to fetch playlist details");
   }
 };
+
+/**
+ * Update widget expiry dates in playlist
+ *
+ * XIBO API Reference:
+ * PUT /playlist/widget/{widgetId}/expiry
+ *
+ * Path Parameters:
+ * - widgetId (integer, required): The Widget ID
+ *
+ * Form Data:
+ * - fromDt (string): Start date (Y-m-d H:i:s)
+ * - toDt (string): End date (Y-m-d H:i:s)
+ * - deleteOnExpiry (integer): Auto-delete on expiry? (0 or 1)
+ */
+export const updatePlaylistWidgetItemExpiry = async (req, res) => {
+  try {
+    const { playlistId, widgetId } = req.params;
+    const { fromDt, toDt, deleteOnExpiry } = req.body;
+    const { token } = getUserContext(req);
+
+    if (!widgetId) {
+      return res.status(400).json({ message: "Widget ID is required" });
+    }
+
+    console.log(
+      `Updating expiry for widget ${widgetId} in playlist ${playlistId}`,
+      { fromDt, toDt, deleteOnExpiry }
+    );
+
+    const updateData = {};
+    if (fromDt !== undefined) updateData.fromDt = fromDt;
+    if (toDt !== undefined) updateData.toDt = toDt;
+    if (deleteOnExpiry !== undefined)
+      updateData.deleteOnExpiry = deleteOnExpiry ? 1 : 0;
+
+    const response = await xiboRequest(
+      `/playlist/widget/${widgetId}/expiry`,
+      "PUT",
+      updateData,
+      token
+    );
+
+    res.json({
+      success: true,
+      message: "Widget expiry updated successfully",
+      data: response,
+    });
+  } catch (err) {
+    handleControllerError(res, err, "Failed to update widget expiry");
+  }
+};

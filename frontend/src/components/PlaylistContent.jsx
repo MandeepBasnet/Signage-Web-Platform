@@ -28,6 +28,12 @@ export default function PlaylistContent() {
   const [deleteHoveredWidgetId, setDeleteHoveredWidgetId] = useState(null);
   const [deleteHoveredPlaylistId, setDeleteHoveredPlaylistId] = useState(null);
   const [previewMedia, setPreviewMedia] = useState(null);
+  const [expiryModalOpen, setExpiryModalOpen] = useState(false);
+  const [selectedWidgetForExpiry, setSelectedWidgetForExpiry] = useState(null);
+  const [expiryFromDate, setExpiryFromDate] = useState("");
+  const [expiryToDate, setExpiryToDate] = useState("");
+  const [deleteOnExpiry, setDeleteOnExpiry] = useState(false);
+  const [updatingExpiry, setUpdatingExpiry] = useState(false);
 
   // Helper functions
   const getMediaId = (item) => {
@@ -426,6 +432,69 @@ export default function PlaylistContent() {
     }
   };
 
+  const handleOpenExpiryModal = (item) => {
+    const widgetId = getWidgetId(item);
+    if (!widgetId) return;
+
+    setSelectedWidgetForExpiry(item);
+    // Initialize with existing values if available (assuming they might be in item properties)
+    // Note: The API response might not include these by default unless we specifically ask for them
+    // or if they are part of the widget object.
+    // For now, we'll start empty or try to read from item.
+    setExpiryFromDate(item.fromDt || "");
+    setExpiryToDate(item.toDt || "");
+    setDeleteOnExpiry(item.deleteOnExpiry === 1 || item.deleteOnExpiry === true);
+    setExpiryModalOpen(true);
+  };
+
+  const handleUpdateExpiry = async (e) => {
+    e.preventDefault();
+    if (!selectedWidgetForExpiry) return;
+
+    const widgetId = getWidgetId(selectedWidgetForExpiry);
+    const playlistId =
+      selectedPlaylist.playlistId ||
+      selectedPlaylist.playlist_id ||
+      selectedPlaylist.id ||
+      selectedPlaylist.ID ||
+      selectedPlaylist.PlaylistId;
+
+    try {
+      setUpdatingExpiry(true);
+      const response = await fetch(
+        `${API_BASE_URL}/playlists/${playlistId}/media/${widgetId}/expiry`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            fromDt: expiryFromDate,
+            toDt: expiryToDate,
+            deleteOnExpiry: deleteOnExpiry,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to update expiry");
+      }
+
+      // Success
+      setExpiryModalOpen(false);
+      // Refresh playlist to show updated data (if we display it)
+      fetchPlaylistDetails(playlistId);
+      alert("Expiration settings updated successfully");
+    } catch (err) {
+      console.error("Error updating expiry:", err);
+      alert(`Failed to update expiry: ${err.message}`);
+    } finally {
+      setUpdatingExpiry(false);
+    }
+  };
+
   const handleDeletePlaylist = async (playlistId) => {
     if (!confirm("Are you sure you want to delete this playlist?")) {
       return;
@@ -714,33 +783,58 @@ export default function PlaylistContent() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           {widgetId && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteMedia(widgetId);
-                              }}
-                              onMouseEnter={() =>
-                                setDeleteHoveredWidgetId(widgetId)
-                              }
-                              onMouseLeave={() => setDeleteHoveredWidgetId(null)}
-                              className="text-gray-400 hover:text-red-600 transition-colors"
-                              title="Remove from playlist"
-                            >
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                strokeWidth={1.5}
-                                stroke="currentColor"
-                                className="w-5 h-5"
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenExpiryModal(item);
+                                }}
+                                className="text-gray-400 hover:text-blue-600 transition-colors mr-2"
+                                title="Schedule Expiration"
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-                                />
-                              </svg>
-                            </button>
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth={1.5}
+                                  stroke="currentColor"
+                                  className="w-5 h-5"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteMedia(widgetId);
+                                }}
+                                onMouseEnter={() =>
+                                  setDeleteHoveredWidgetId(widgetId)
+                                }
+                                onMouseLeave={() => setDeleteHoveredWidgetId(null)}
+                                className="text-gray-400 hover:text-red-600 transition-colors"
+                                title="Remove from playlist"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth={1.5}
+                                  stroke="currentColor"
+                                  className="w-5 h-5"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                                  />
+                                </svg>
+                              </button>
+                            </>
                           )}
                         </td>
                       </tr>
@@ -759,6 +853,103 @@ export default function PlaylistContent() {
         mediaType={previewMedia?.mediaType || previewMedia?.type}
         mediaName={previewMedia?.name || previewMedia?.fileName}
       />
+
+      {/* Expiry Modal */}
+      {expiryModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={() => setExpiryModalOpen(false)}
+            ></div>
+
+            <span
+              className="hidden sm:inline-block sm:align-middle sm:h-screen"
+              aria-hidden="true"
+            >
+              &#8203;
+            </span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <form onSubmit={handleUpdateExpiry}>
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900">
+                        Schedule Media Expiration
+                      </h3>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-500 mb-4">
+                          Set the start and end dates for this media item in the
+                          playlist.
+                        </p>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              From Date
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={expiryFromDate}
+                              onChange={(e) => setExpiryFromDate(e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              To Date
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={expiryToDate}
+                              onChange={(e) => setExpiryToDate(e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                            />
+                          </div>
+
+                          <div className="flex items-center">
+                            <input
+                              id="deleteOnExpiry"
+                              type="checkbox"
+                              checked={deleteOnExpiry}
+                              onChange={(e) => setDeleteOnExpiry(e.target.checked)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label
+                              htmlFor="deleteOnExpiry"
+                              className="ml-2 block text-sm text-gray-900"
+                            >
+                              Delete from playlist on expiry
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="submit"
+                    disabled={updatingExpiry}
+                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                  >
+                    {updatingExpiry ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                    onClick={() => setExpiryModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
       </section>
     );
   }
@@ -1043,6 +1234,103 @@ export default function PlaylistContent() {
         mediaType={previewMedia?.mediaType || previewMedia?.type}
         mediaName={previewMedia?.name || previewMedia?.fileName}
       />
+
+      {/* Expiry Modal */}
+      {expiryModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+            <div
+              className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
+              onClick={() => setExpiryModalOpen(false)}
+            ></div>
+
+            <span
+              className="hidden sm:inline-block sm:align-middle sm:h-screen"
+              aria-hidden="true"
+            >
+              &#8203;
+            </span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <form onSubmit={handleUpdateExpiry}>
+                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                      <h3 className="text-lg leading-6 font-medium text-gray-900">
+                        Schedule Media Expiration
+                      </h3>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-500 mb-4">
+                          Set the start and end dates for this media item in the
+                          playlist.
+                        </p>
+
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              From Date
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={expiryFromDate}
+                              onChange={(e) => setExpiryFromDate(e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">
+                              To Date
+                            </label>
+                            <input
+                              type="datetime-local"
+                              value={expiryToDate}
+                              onChange={(e) => setExpiryToDate(e.target.value)}
+                              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm border p-2"
+                            />
+                          </div>
+
+                          <div className="flex items-center">
+                            <input
+                              id="deleteOnExpiry"
+                              type="checkbox"
+                              checked={deleteOnExpiry}
+                              onChange={(e) => setDeleteOnExpiry(e.target.checked)}
+                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                            <label
+                              htmlFor="deleteOnExpiry"
+                              className="ml-2 block text-sm text-gray-900"
+                            >
+                              Delete from playlist on expiry
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="submit"
+                    disabled={updatingExpiry}
+                    className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
+                  >
+                    {updatingExpiry ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                    onClick={() => setExpiryModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
