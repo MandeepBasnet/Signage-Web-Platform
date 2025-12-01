@@ -74,6 +74,48 @@ export default function LayoutDesign() {
     return `${kb.toFixed(2)} KB`;
   };
 
+  // Helper to extract text elements from Canvas/Global widgets
+  const extractTextElements = (widget) => {
+    const elementsOption = getOptionValue(widget, 'elements');
+    if (!elementsOption) return [];
+    
+    try {
+      const elementsData = JSON.parse(elementsOption);
+      const textElements = [];
+      
+      // Navigate through the elements structure
+      if (Array.isArray(elementsData)) {
+        elementsData.forEach(page => {
+          if (page.elements && Array.isArray(page.elements)) {
+            page.elements.forEach(element => {
+              // Check if this is a text element
+              if (element.id === 'text' || element.type === 'text' || 
+                  (element.properties && element.properties.some(p => p.id === 'text'))) {
+                // Extract text value from properties
+                const textProp = element.properties?.find(p => p.id === 'text');
+                if (textProp && textProp.value) {
+                  textElements.push({
+                    text: textProp.value.trim(),
+                    elementId: element.elementId,
+                    elementName: element.elementName || 'Text Element',
+                    fontSize: element.properties?.find(p => p.id === 'fontSize')?.value || '12',
+                    fontColor: element.properties?.find(p => p.id === 'fontColor')?.value || '#000000',
+                    position: { left: element.left, top: element.top, width: element.width, height: element.height }
+                  });
+                }
+              }
+            });
+          }
+        });
+      }
+      
+      return textElements;
+    } catch (e) {
+      console.error('Failed to parse elements JSON:', e);
+      return [];
+    }
+  };
+
   // Fetch Layout Details
   useEffect(() => {
     fetchLayoutDetails();
@@ -816,6 +858,59 @@ export default function LayoutDesign() {
                                                                             No data rows available
                                                                         </div>
                                                                     )}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })() : moduleName === 'canvas' || moduleName === 'global' ? (() => {
+                                                        const textElements = extractTextElements(widget);
+                                                        
+                                                        if (textElements.length === 0) {
+                                                            return widget.mediaIds?.length > 0 ? (
+                                                                <span className="truncate">Media ID: {widget.mediaIds[0]}</span>
+                                                            ) : (
+                                                                <span>No text elements found</span>
+                                                            );
+                                                        }
+                                                        
+                                                        return (
+                                                            <div className="mt-2 space-y-2">
+                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
+                                                                    Text Elements: {textElements.length}
+                                                                </div>
+                                                                <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+                                                                    {textElements.map((textEl, idx) => (
+                                                                        <div 
+                                                                            key={idx} 
+                                                                            className="bg-gray-900/50 p-2 rounded border border-gray-800 hover:bg-gray-800 transition-colors"
+                                                                        >
+                                                                            <div className="flex items-start gap-2">
+                                                                                {/* Text Icon */}
+                                                                                <div className="shrink-0 w-6 h-6 bg-yellow-500/10 rounded flex items-center justify-center text-yellow-400 text-xs font-bold">
+                                                                                    T
+                                                                                </div>
+                                                                                {/* Text Content */}
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="text-[11px] text-gray-300 font-medium break-words">
+                                                                                        {textEl.text}
+                                                                                    </div>
+                                                                                    <div className="text-[9px] text-gray-500 mt-1 flex items-center gap-2 flex-wrap">
+                                                                                        <span className="flex items-center gap-1">
+                                                                                            <span className="w-3 h-3 rounded-sm border border-gray-600" style={{ backgroundColor: textEl.fontColor }}></span>
+                                                                                            {textEl.fontColor}
+                                                                                        </span>
+                                                                                        <span>•</span>
+                                                                                        <span>Size: {textEl.fontSize}px</span>
+                                                                                        {textEl.position && (
+                                                                                            <>
+                                                                                                <span>•</span>
+                                                                                                <span>Pos: ({textEl.position.left}, {textEl.position.top})</span>
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
                                                                 </div>
                                                             </div>
                                                         );
