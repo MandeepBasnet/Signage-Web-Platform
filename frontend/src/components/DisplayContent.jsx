@@ -75,7 +75,7 @@ export default function DisplayContent() {
 
       try {
         const response = await fetch(
-          `${API_BASE_URL}/layouts/${layoutId}/thumbnail`,
+          `${API_BASE_URL}/layouts/thumbnail/${layoutId}`,
           {
             headers: {
               ...getAuthHeaders(),

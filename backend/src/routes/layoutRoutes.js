@@ -12,7 +12,7 @@ const router = express.Router();
 
 // All layout routes require authentication
 router.get("/", verifyToken, getLayouts);
-router.get("/:layoutId/thumbnail", verifyToken, getLayoutThumbnail);
+router.get("/thumbnail/:layoutId", verifyToken, getLayoutThumbnail);
 router.get("/:layoutId/preview", verifyToken, getLayoutPreview);
 router.get("/:layoutId", verifyToken, getLayoutDetails);
 router.put("/publish/:layoutId", verifyToken, publishLayout);

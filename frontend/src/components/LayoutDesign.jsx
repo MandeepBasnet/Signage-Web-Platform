@@ -24,8 +24,48 @@ export default function LayoutDesign() {
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState(null);
 
+  // Playlist & Dataset Data State
+  const [playlistData, setPlaylistData] = useState(new Map());
+  const [datasetData, setDatasetData] = useState(new Map());
+  const [loadingWidgetData, setLoadingWidgetData] = useState(new Set());
+
   // Refs
   const containerRef = useRef(null);
+
+  // Helper to extract option value from widgetOptions array
+  const getOptionValue = (widget, optionName) => {
+    if (!widget?.widgetOptions || !Array.isArray(widget.widgetOptions)) return null;
+    const option = widget.widgetOptions.find(o => o.option === optionName);
+    return option ? option.value : null;
+  };
+
+  // Helper to extract Playlist ID
+  const getPlaylistId = (widget) => {
+    // 1. Check for subPlaylists option (JSON string)
+    const subPlaylistsStr = getOptionValue(widget, 'subPlaylists');
+    if (subPlaylistsStr) {
+      try {
+        const subs = JSON.parse(subPlaylistsStr);
+        if (Array.isArray(subs) && subs.length > 0 && subs[0].playlistId) {
+          return subs[0].playlistId;
+        }
+      } catch (e) {
+        console.warn('Failed to parse subPlaylists JSON', e);
+      }
+    }
+    
+    // 2. Fallback to direct playlistId if it's NOT the region's playlist ID (heuristic)
+    // Note: In the provided JSON, widget.playlistId matches regionPlaylist.playlistId, 
+    // so we prefer the subPlaylists option if available.
+    if (widget.playlistId) return widget.playlistId;
+    
+    return null;
+  };
+
+  // Helper to extract Dataset ID
+  const getDatasetId = (widget) => {
+    return getOptionValue(widget, 'dataSetId');
+  };
 
   // Fetch Layout Details
   useEffect(() => {
@@ -36,14 +76,13 @@ export default function LayoutDesign() {
   useEffect(() => {
     if (!layout || !containerSize.width || !containerSize.height) return;
     
-    const padding = 60; // Increased padding for better visual breathing room
+    const padding = 60; 
     const availableWidth = containerSize.width - padding;
     const availableHeight = containerSize.height - padding;
     
     const scaleX = availableWidth / layout.width;
     const scaleY = availableHeight / layout.height;
     
-    // Use the smaller scale to ensure it fits entirely
     setScale(Math.min(scaleX, scaleY)); 
   }, [layout, containerSize]);
 
@@ -52,6 +91,36 @@ export default function LayoutDesign() {
     if (layout?.backgroundImageId) {
       fetchBackgroundImage(layout.backgroundImageId);
     }
+  }, [layout]);
+
+  // Auto-fetch Playlist and Dataset data when layout loads
+  useEffect(() => {
+    if (!layout?.regions) return;
+    
+    const playlistIds = new Set();
+    const datasetIds = new Set();
+    
+    layout.regions.forEach(region => {
+      region.widgets?.forEach(widget => {
+        const moduleName = widget.moduleName?.toLowerCase();
+        
+        // Check for playlist types
+        if (moduleName === 'playlist' || moduleName === 'subplaylist') {
+          const plId = getPlaylistId(widget);
+          if (plId) playlistIds.add(plId);
+        } 
+        // Check for dataset types
+        else if (moduleName === 'dataset') {
+          const dsId = getDatasetId(widget);
+          if (dsId) datasetIds.add(dsId);
+        }
+      });
+    });
+    
+    console.log(`Found ${playlistIds.size} playlists and ${datasetIds.size} datasets to fetch`);
+    
+    playlistIds.forEach(id => fetchPlaylistMedia(id));
+    datasetIds.forEach(id => fetchDatasetData(id));
   }, [layout]);
 
   // Resize Observer for Container
@@ -110,28 +179,149 @@ export default function LayoutDesign() {
     }
   };
 
+  const fetchPlaylistMedia = async (playlistId) => {
+    if (!playlistId || playlistData.has(playlistId)) return;
+    
+    setLoadingWidgetData(prev => new Set(prev).add(`playlist-${playlistId}`));
+    console.log(`Fetching playlist media for ID: ${playlistId}`);
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
+        headers: getAuthHeaders(),
+      });
+      
+      if (!response.ok) throw new Error(`Failed to fetch playlist: ${response.statusText}`);
+      
+      const data = await response.json();
+      
+      setPlaylistData(prev => new Map(prev).set(String(playlistId), {
+        playlist: data.playlist,
+        media: data.media || []
+      }));
+      
+      console.log(`Fetched ${data.media?.length || 0} media items for playlist ${playlistId}`);
+    } catch (err) {
+      console.error(`Failed to fetch playlist ${playlistId}:`, err);
+    } finally {
+      setLoadingWidgetData(prev => {
+        const next = new Set(prev);
+        next.delete(`playlist-${playlistId}`);
+        return next;
+      });
+    }
+  };
+
+  const fetchDatasetData = async (dataSetId) => {
+    if (!dataSetId || datasetData.has(dataSetId)) return;
+    
+    setLoadingWidgetData(prev => new Set(prev).add(`dataset-${dataSetId}`));
+    console.log(`Fetching dataset data for ID: ${dataSetId}`);
+    
+    try {
+      const [colResponse, dataResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/datasets/${dataSetId}/column`, {
+          headers: getAuthHeaders(),
+        }),
+        fetch(`${API_BASE_URL}/datasets/data/${dataSetId}`, {
+          headers: getAuthHeaders(),
+        })
+      ]);
+      
+      if (!colResponse.ok || !dataResponse.ok) throw new Error('Failed to fetch dataset');
+      
+      const colData = await colResponse.json();
+      const rowData = await dataResponse.json();
+      
+      setDatasetData(prev => new Map(prev).set(String(dataSetId), {
+        columns: colData.data || [],
+        rows: rowData.data || []
+      }));
+      
+      console.log(`Fetched dataset ${dataSetId}: ${colData.data?.length || 0} columns, ${rowData.data?.length || 0} rows`);
+    } catch (err) {
+      console.error(`Failed to fetch dataset ${dataSetId}:`, err);
+    } finally {
+      setLoadingWidgetData(prev => {
+        const next = new Set(prev);
+        next.delete(`dataset-${dataSetId}`);
+        return next;
+      });
+    }
+  };
+
   const handleWidgetClick = (widget) => {
     console.log("Widget clicked:", widget);
+    const moduleName = widget.moduleName?.toLowerCase();
     
+    // Handle media widgets
     if (widget.mediaIds && widget.mediaIds.length > 0) {
-        // Try to preview media for any widget that has mediaIds
         const mediaId = widget.mediaIds[0];
         const token = getStoredToken();
         const mediaUrl = `${API_BASE_URL}/library/${mediaId}/download?token=${token}`;
         
         setPreviewMedia({
             url: mediaUrl,
-            type: widget.moduleName, // Pass module name, modal handles type detection
+            type: widget.moduleName,
             name: widget.name || `Media ${mediaId}`
         });
         setPreviewModalOpen(true);
-    } else if (widget.moduleName === 'playlist') {
-         alert(`Playlist: ${widget.name}\nNo media items found directly.`);
-    } else {
-        // Text, Dataset, etc.
+    }
+    // Handle playlist widgets
+    else if (moduleName === 'playlist' || moduleName === 'subplaylist') {
+      const plId = getPlaylistId(widget);
+      
+      if (!plId) {
+        alert(`Playlist widget has no playlist ID.\n\nDebug Info:\nModule: ${widget.moduleName}\nType: ${widget.type}\nOptions: ${JSON.stringify(widget.widgetOptions)}`);
+        return;
+      }
+      
+      const plData = playlistData.get(String(plId));
+      
+      if (!plData) {
+        alert(`Loading playlist data for ID ${plId}...`);
+        fetchPlaylistMedia(plId);
+        return;
+      }
+      
+      // Show playlist with media items
+      const mediaList = plData.media.map((m, idx) => 
+        `${idx + 1}. ${m.name || 'Unnamed'} (${m.mediaType || 'unknown'})`
+      ).join('\n');
+      
+      alert(`Playlist: ${widget.name || plData.playlist.name}\nID: ${plId}\n\nMedia Items (${plData.media.length}):\n${mediaList || 'No media items'}\n\nNote: Thumbnails visible in sidebar`);
+    }
+    // Handle dataset widgets
+    else if (moduleName === 'dataset') {
+      const dsId = getDatasetId(widget);
+      
+      if (!dsId) {
+        alert(`Dataset widget has no dataset ID.\n\nDebug Info:\nModule: ${widget.moduleName}\nType: ${widget.type}\nOptions: ${JSON.stringify(widget.widgetOptions)}`);
+        return;
+      }
+      
+      const dsData = datasetData.get(String(dsId));
+      
+      if (!dsData) {
+        alert(`Loading dataset data for ID ${dsId}...`);
+        fetchDatasetData(dsId);
+        return;
+      }
+      
+      const columnList = dsData.columns.map(col => col.heading).join(', ');
+      const rowPreview = dsData.rows.slice(0, 3).map((row, idx) => {
+        const rowData = dsData.columns.map(col => 
+          row[col.heading] || row[`col_${col.dataSetColumnId}`] || '-'
+        ).join(' | ');
+        return `Row ${idx + 1}: ${rowData}`;
+      }).join('\n');
+      
+      alert(`Dataset Widget: ${widget.name}\nID: ${dsId}\n\nColumns (${dsData.columns.length}): ${columnList}\n\nRows: ${dsData.rows.length}\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? '\n...' : ''}`);
+    }
+    // Handle other widgets
+    else {
         let details = `Type: ${widget.moduleName}\nName: ${widget.name}`;
-        if (widget.options) {
-            details += `\nOptions: ${JSON.stringify(widget.options, null, 2)}`;
+        if (widget.widgetOptions) {
+            details += `\nOptions (Count): ${widget.widgetOptions.length}`;
         }
         alert(details);
     }
@@ -316,11 +506,11 @@ export default function LayoutDesign() {
                                         <span className="text-blue-300 font-bold">{wIdx + 1}.</span>
                                         
                                         {/* Icon based on type */}
-                                        {['image', 'localvideo', 'video'].includes(widget.moduleName) ? (
+                                        {['image', 'localvideo', 'video'].includes(widget.moduleName?.toLowerCase()) ? (
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
                                             </svg>
-                                        ) : widget.moduleName === 'text' ? (
+                                        ) : widget.moduleName?.toLowerCase() === 'text' ? (
                                             <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
                                                 <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
                                             </svg>
@@ -376,7 +566,9 @@ export default function LayoutDesign() {
                         {/* Widgets List */}
                         <div className="space-y-3 pl-2">
                             {region.widgets && region.widgets.length > 0 ? (
-                                region.widgets.map((widget, wIdx) => (
+                                region.widgets.map((widget, wIdx) => {
+                                    const moduleName = widget.moduleName?.toLowerCase();
+                                    return (
                                     <div 
                                         key={widget.widgetId}
                                         className="bg-gray-800/40 hover:bg-gray-800 rounded-lg p-3 cursor-pointer transition-all border border-gray-700/50 hover:border-blue-500/30 group relative overflow-hidden"
@@ -399,11 +591,11 @@ export default function LayoutDesign() {
                                                 
                                                 {/* Fallback Icon (shown if no image or error) */}
                                                 <div className={`w-full h-full flex items-center justify-center ${widget.mediaIds?.length > 0 ? 'hidden' : 'flex'}`}>
-                                                    {widget.moduleName === 'text' ? (
+                                                    {moduleName === 'text' ? (
                                                         <span className="text-2xl">T</span>
-                                                    ) : widget.moduleName === 'dataset' ? (
+                                                    ) : moduleName === 'dataset' ? (
                                                         <span className="text-2xl">📊</span>
-                                                    ) : widget.moduleName === 'playlist' ? (
+                                                    ) : moduleName === 'playlist' || moduleName === 'subplaylist' ? (
                                                         <span className="text-2xl">📑</span>
                                                     ) : (
                                                         <span className="text-2xl">📄</span>
@@ -415,8 +607,8 @@ export default function LayoutDesign() {
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                 <div className="flex items-center gap-2 mb-1">
                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${
-                                                        widget.moduleName === 'text' ? 'bg-yellow-500/10 text-yellow-400' :
-                                                        widget.moduleName === 'dataset' ? 'bg-purple-500/10 text-purple-400' :
+                                                        moduleName === 'text' ? 'bg-yellow-500/10 text-yellow-400' :
+                                                        moduleName === 'dataset' ? 'bg-purple-500/10 text-purple-400' :
                                                         'bg-blue-500/10 text-blue-400'
                                                     }`}>
                                                         {widget.moduleName}
@@ -434,13 +626,51 @@ export default function LayoutDesign() {
                                                 </h4>
                                                 
                                                 {/* Extra Info based on type */}
-                                                <div className="text-xs text-gray-500 mt-1 truncate">
-                                                    {widget.moduleName === 'text' ? (
-                                                        <span>{widget.options?.text?.replace(/<[^>]*>/g, '') || "Text Content"}</span>
-                                                    ) : widget.moduleName === 'dataset' ? (
-                                                        <span>Dataset ID: {widget.options?.dataSetId || "N/A"}</span>
-                                                    ) : widget.mediaIds?.length > 0 ? (
-                                                        <span>Media ID: {widget.mediaIds[0]}</span>
+                                                <div className="text-xs text-gray-500 mt-1">
+                                                    {moduleName === 'text' ? (
+                                                        <span className="truncate">{getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '') || "Text Content"}</span>
+                                                    ) : moduleName === 'playlist' || moduleName === 'subplaylist' ? (() => {
+                                                        const plId = getPlaylistId(widget);
+                                                        const plData = playlistData.get(String(plId));
+                                                        const isLoading = loadingWidgetData.has(`playlist-${plId}`);
+                                                        
+                                                        if (isLoading) return <span>Loading media...</span>;
+                                                        if (!plData) return <span>Playlist ID: {plId}</span>;
+                                                        
+                                                        return (
+                                                            <div>
+                                                                <div>{plData.media.length} media item{plData.media.length !== 1 ? 's' : ''}</div>
+                                                                {plData.media.length > 0 && (
+                                                                    <div className="flex gap-1 mt-2">
+                                                                        {plData.media.slice(0, 3).map((media, idx) => (
+                                                                            <div key={idx} className="w-8 h-8 bg-gray-700 rounded overflow-hidden">
+                                                                                <img 
+                                                                                    src={`${API_BASE_URL}/library/${media.mediaId}/thumbnail?width=50&height=50&token=${getStoredToken()}`}
+                                                                                    className="w-full h-full object-cover"
+                                                                                    alt={media.name}
+                                                                                />
+                                                                            </div>
+                                                                        ))}
+                                                                        {plData.media.length > 3 && (
+                                                                            <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center text-[10px]">
+                                                                                +{plData.media.length - 3}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })() : moduleName === 'dataset' ? (() => {
+                                                        const dsId = getDatasetId(widget);
+                                                        const dsData = datasetData.get(String(dsId));
+                                                        const isLoading = loadingWidgetData.has(`dataset-${dsId}`);
+                                                        
+                                                        if (isLoading) return <span>Loading dataset...</span>;
+                                                        if (!dsData) return <span>Dataset ID: {dsId || 'N/A'}</span>;
+                                                        
+                                                        return <span>{dsData.columns.length} columns × {dsData.rows.length} rows</span>;
+                                                    })() : widget.mediaIds?.length > 0 ? (
+                                                        <span className="truncate">Media ID: {widget.mediaIds[0]}</span>
                                                     ) : (
                                                         <span>No media attached</span>
                                                     )}
@@ -448,7 +678,7 @@ export default function LayoutDesign() {
                                             </div>
                                         </div>
                                     </div>
-                                ))
+                                )})
                             ) : (
                                 <div className="text-xs text-gray-600 italic pl-1 py-2 border-l-2 border-gray-800 ml-1">
                                     No widgets in this region
