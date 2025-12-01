@@ -29,6 +29,15 @@ export default function LayoutDesign() {
   const [datasetData, setDatasetData] = useState(new Map());
   const [loadingWidgetData, setLoadingWidgetData] = useState(new Set());
 
+  // Delete Media State
+  const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
+  const [deletingMediaId, setDeletingMediaId] = useState(null);
+
+  // Publish Layout State
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState(null);
+  const [publishSuccess, setPublishSuccess] = useState(false);
+
   // Refs
   const containerRef = useRef(null);
 
@@ -228,8 +237,8 @@ export default function LayoutDesign() {
     }
   };
 
-  const fetchPlaylistMedia = async (playlistId) => {
-    if (!playlistId || playlistData.has(playlistId)) return;
+  const fetchPlaylistMedia = async (playlistId, forceRefresh = false) => {
+    if (!playlistId || (!forceRefresh && playlistData.has(playlistId))) return;
     
     setLoadingWidgetData(prev => new Set(prev).add(`playlist-${playlistId}`));
     console.log(`Fetching playlist media for ID: ${playlistId}`);
@@ -389,6 +398,122 @@ export default function LayoutDesign() {
     setPreviewModalOpen(true);
   };
 
+  const handleDeletePlaylistMedia = async (playlistId, widgetId, mediaName) => {
+    if (!confirm(`Are you sure you want to remove "${mediaName}" from the playlist?`)) {
+      return;
+    }
+
+    try {
+      setDeletingMediaId(widgetId);
+      const response = await fetch(
+        `${API_BASE_URL}/playlists/${playlistId}/media/${widgetId}`,
+        {
+          method: "DELETE",
+          headers: {
+            ...getAuthHeaders(),
+          },
+        }
+      );
+
+      if (response.status === 403) {
+        alert("You don't have permission to modify this playlist.");
+        return;
+      }
+
+      if (response.status === 404) {
+        alert("Media or playlist not found. It may have already been deleted.");
+        return;
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to delete media");
+      }
+
+      // Refresh playlist data
+      await fetchPlaylistMedia(playlistId, true);
+      
+      // Reload the entire layout to ensure consistency
+      await fetchLayoutDetails();
+      
+      console.log(`Successfully removed media from playlist ${playlistId}`);
+      alert("Media deleted successfully and layout updated.");
+    } catch (err) {
+      console.error("Error deleting media from playlist:", err);
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        alert("Network error. Please check your connection and try again.");
+      } else {
+        alert(`Failed to delete media: ${err.message}`);
+      }
+    } finally {
+      setDeletingMediaId(null);
+    }
+  };
+
+  const handlePublishLayout = async () => {
+    if (!confirm("Are you sure you want to publish this layout? This will make it live.")) {
+      return;
+    }
+
+    try {
+      setPublishing(true);
+      setPublishError(null);
+      setPublishSuccess(false);
+
+      const response = await fetch(
+        `${API_BASE_URL}/layouts/publish/${layoutId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            publishNow: 1
+          }),
+        }
+      );
+
+      if (response.status === 403) {
+        throw new Error("You don't have permission to publish this layout.");
+      }
+
+      if (response.status === 404) {
+        throw new Error("Layout not found.");
+      }
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to publish layout");
+      }
+
+      const data = await response.json();
+      setPublishSuccess(true);
+      
+      // Refresh layout data to show updated status
+      await fetchLayoutDetails();
+      
+      // Show success message
+      alert("Layout published successfully!");
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setPublishSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error publishing layout:", err);
+      setPublishError(err.message);
+      
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        alert("Network error. Please check your connection and try again.");
+      } else {
+        alert(`Failed to publish layout: ${err.message}`);
+      }
+    } finally {
+      setPublishing(false);
+    }
+  };
+
   const getRegionSummary = (widgets) => {
       if (!widgets || widgets.length === 0) return "Empty";
       
@@ -485,6 +610,43 @@ export default function LayoutDesign() {
                 </span>
                 Designer Mode
             </div>
+            
+            {/* Publish Layout Button */}
+            <button
+              onClick={handlePublishLayout}
+              disabled={publishing}
+              className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2 ${
+                publishSuccess
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : publishing
+                  ? 'bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed'
+                  : 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30'
+              }`}
+            >
+              {publishing ? (
+                <>
+                  <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Publishing...
+                </>
+              ) : publishSuccess ? (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Published
+                </>
+              ) : (
+                <>
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Publish Layout
+                </>
+              )}
+            </button>
         </div>
       </header>
 
@@ -757,15 +919,17 @@ export default function LayoutDesign() {
                                                                         return (
                                                                             <div 
                                                                                 key={idx} 
-                                                                                className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded border border-gray-800 hover:bg-gray-800 transition-colors cursor-pointer"
-                                                                                onClick={(e) => {
-                                                                                    e.stopPropagation();
-                                                                                    handleMediaPreview(media);
-                                                                                }}
-                                                                                title={`Click to preview: ${media.name}`}
+                                                                                className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded border border-gray-800 hover:bg-gray-800 transition-colors group relative"
                                                                             >
-                                                                                {/* Thumbnail */}
-                                                                                <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden shrink-0 border border-gray-700 flex items-center justify-center relative">
+                                                                                {/* Thumbnail - Clickable for preview */}
+                                                                                <div 
+                                                                                    className="w-8 h-8 bg-gray-800 rounded overflow-hidden shrink-0 border border-gray-700 flex items-center justify-center relative cursor-pointer"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleMediaPreview(media);
+                                                                                    }}
+                                                                                    title={`Click to preview: ${media.name}`}
+                                                                                >
                                                                                     {hasThumbnail && mediaId ? (
                                                                                         <img 
                                                                                             src={`${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=50&height=50&token=${getStoredToken()}`}
@@ -786,14 +950,49 @@ export default function LayoutDesign() {
                                                                                         {isVideo(mediaType) ? '🎬' : '📄'}
                                                                                     </div>
                                                                                 </div>
-                                                                                {/* Details */}
-                                                                                <div className="min-w-0 flex-1">
+                                                                                
+                                                                                {/* Details - Clickable for preview */}
+                                                                                <div 
+                                                                                    className="min-w-0 flex-1 cursor-pointer"
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        handleMediaPreview(media);
+                                                                                    }}
+                                                                                    title={`Click to preview: ${media.name}`}
+                                                                                >
                                                                                     <div className="text-[10px] text-gray-300 truncate font-medium" title={media.name}>{media.name}</div>
                                                                                     <div className="text-[9px] text-gray-500 flex justify-between">
                                                                                         <span>{formatFileSize(media.fileSize)}</span>
                                                                                         <span>{media.duration}s</span>
                                                                                     </div>
                                                                                 </div>
+                                                                                
+                                                                                {/* Delete Button - Inline */}
+                                                                                <button
+                                                                                    onClick={(e) => {
+                                                                                        e.stopPropagation();
+                                                                                        const widgetId = media.widgetId || media.widget_id || media.id;
+                                                                                        handleDeletePlaylistMedia(plId, widgetId, media.name);
+                                                                                    }}
+                                                                                    disabled={deletingMediaId === (media.widgetId || media.widget_id || media.id)}
+                                                                                    className={`shrink-0 p-1 rounded transition-colors ${
+                                                                                        deletingMediaId === (media.widgetId || media.widget_id || media.id)
+                                                                                            ? 'text-gray-500 cursor-not-allowed'
+                                                                                            : 'text-gray-500 hover:text-red-400 hover:bg-red-500/10'
+                                                                                    }`}
+                                                                                    title={`Delete ${media.name}`}
+                                                                                >
+                                                                                    {deletingMediaId === (media.widgetId || media.widget_id || media.id) ? (
+                                                                                        <svg className="animate-spin h-3.5 w-3.5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                        </svg>
+                                                                                    ) : (
+                                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                        </svg>
+                                                                                    )}
+                                                                                </button>
                                                                             </div>
                                                                         );
                                                                     })}
