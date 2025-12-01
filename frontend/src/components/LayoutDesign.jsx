@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { getAuthHeaders } from "../utils/auth.js";
+import { getAuthHeaders, getStoredToken } from "../utils/auth.js";
+import MediaPreviewModal from "./MediaPreviewModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -18,6 +19,13 @@ export default function LayoutDesign() {
   const [scale, setScale] = useState(1);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [bgImageUrl, setBgImageUrl] = useState(null);
+  
+  // Preview Modal State
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState(null);
+
+  // Refs
+  const containerRef = useRef(null);
 
   // Fetch Layout Details
   useEffect(() => {
@@ -26,9 +34,9 @@ export default function LayoutDesign() {
 
   // Dynamic Scaling
   useEffect(() => {
-    if (!layout || !containerSize.width) return;
+    if (!layout || !containerSize.width || !containerSize.height) return;
     
-    const padding = 40;
+    const padding = 60; // Increased padding for better visual breathing room
     const availableWidth = containerSize.width - padding;
     const availableHeight = containerSize.height - padding;
     
@@ -36,7 +44,7 @@ export default function LayoutDesign() {
     const scaleY = availableHeight / layout.height;
     
     // Use the smaller scale to ensure it fits entirely
-    setScale(Math.min(scaleX, scaleY, 1)); 
+    setScale(Math.min(scaleX, scaleY)); 
   }, [layout, containerSize]);
 
   // Fetch Background Image
@@ -45,6 +53,26 @@ export default function LayoutDesign() {
       fetchBackgroundImage(layout.backgroundImageId);
     }
   }, [layout]);
+
+  // Resize Observer for Container
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerSize({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
 
   const fetchLayoutDetails = async () => {
     try {
@@ -82,25 +110,76 @@ export default function LayoutDesign() {
     }
   };
 
+  const handleWidgetClick = (widget) => {
+    console.log("Widget clicked:", widget);
+    
+    if (widget.mediaIds && widget.mediaIds.length > 0) {
+        // Try to preview media for any widget that has mediaIds
+        const mediaId = widget.mediaIds[0];
+        const token = getStoredToken();
+        const mediaUrl = `${API_BASE_URL}/library/${mediaId}/download?token=${token}`;
+        
+        setPreviewMedia({
+            url: mediaUrl,
+            type: widget.moduleName, // Pass module name, modal handles type detection
+            name: widget.name || `Media ${mediaId}`
+        });
+        setPreviewModalOpen(true);
+    } else if (widget.moduleName === 'playlist') {
+         alert(`Playlist: ${widget.name}\nNo media items found directly.`);
+    } else {
+        // Text, Dataset, etc.
+        let details = `Type: ${widget.moduleName}\nName: ${widget.name}`;
+        if (widget.options) {
+            details += `\nOptions: ${JSON.stringify(widget.options, null, 2)}`;
+        }
+        alert(details);
+    }
+  };
+
+  const getRegionSummary = (widgets) => {
+      if (!widgets || widgets.length === 0) return "Empty";
+      
+      const counts = widgets.reduce((acc, widget) => {
+          const type = widget.moduleName;
+          acc[type] = (acc[type] || 0) + 1;
+          return acc;
+      }, {});
+
+      return Object.entries(counts)
+          .map(([type, count]) => `${count} ${type.charAt(0).toUpperCase() + type.slice(1)}`)
+          .join(", ");
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+      <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
+        <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-400 animate-pulse">Loading Layout Designer...</p>
+        </div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-8 text-center">
-        <h2 className="text-2xl font-bold text-red-600 mb-4">Error</h2>
-        <p className="text-gray-600 mb-4">{error}</p>
-        <button
-          onClick={() => navigate(-1)}
-          className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md"
-        >
-          Go Back
-        </button>
+      <div className="h-screen flex items-center justify-center bg-gray-900 text-white">
+        <div className="p-8 bg-gray-800 rounded-lg border border-red-500/30 shadow-xl max-w-md text-center">
+          <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Failed to Load Layout</h2>
+          <p className="text-gray-400 mb-6">{error}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="px-6 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-md transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
       </div>
     );
   }
@@ -108,46 +187,69 @@ export default function LayoutDesign() {
   if (!layout) return null;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-white overflow-hidden">
+    <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
       {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between shadow-md z-10 shrink-0">
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between shadow-sm z-20 shrink-0">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate(-1)}
-            className="text-gray-400 hover:text-white transition-colors flex items-center gap-1 text-sm"
+            className="text-gray-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-medium group"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
+            <div className="p-1 rounded-md group-hover:bg-gray-800 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                </svg>
+            </div>
             Back
           </button>
-          <div className="h-6 w-px bg-gray-700 mx-2"></div>
+          <div className="h-6 w-px bg-gray-800 mx-2"></div>
           <div>
-            <h1 className="text-lg font-semibold text-white leading-tight">{layout.layout}</h1>
-            <div className="flex items-center gap-2 text-xs text-gray-400">
-              <span>{layout.width}x{layout.height}</span>
-              <span>•</span>
-              <span>{layout.duration}s</span>
+            <h1 className="text-lg font-semibold text-white leading-tight flex items-center gap-2">
+                {layout.layout}
+                <span className="text-xs font-normal text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full border border-gray-700">v{layout.version || 1}</span>
+            </h1>
+            <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
+              <span className="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+                {layout.width}x{layout.height}
+              </span>
+              <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
+              <span className="flex items-center gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {layout.duration}s
+              </span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3">
-             <div className="px-3 py-1 bg-blue-600/20 text-blue-400 rounded text-xs font-medium border border-blue-600/30">
+             <div className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-medium border border-indigo-500/20 flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                </span>
                 Designer Mode
             </div>
         </div>
       </header>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Main Canvas Area */}
+        {/* Left Panel: Visual Layout Canvas */}
         <main 
-            className="flex-1 bg-gray-900 relative overflow-hidden flex items-center justify-center p-8"
-            ref={(el) => {
-                if (el && (el.clientWidth !== containerSize.width || el.clientHeight !== containerSize.height)) {
-                    setContainerSize({ width: el.clientWidth, height: el.clientHeight });
-                }
-            }}
+            className="flex-1 bg-gray-950 relative overflow-hidden flex items-center justify-center p-8"
+            ref={containerRef}
         >
+            {/* Grid Background Pattern */}
+            <div className="absolute inset-0 opacity-[0.03]" 
+                style={{ 
+                    backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', 
+                    backgroundSize: '20px 20px' 
+                }} 
+            />
+
             {/* Canvas Wrapper for Centering and Scaling */}
             <div 
                 style={{
@@ -155,9 +257,9 @@ export default function LayoutDesign() {
                     height: layout.height,
                     transform: `scale(${scale})`,
                     transformOrigin: 'center center',
-                    transition: 'transform 0.2s ease-out'
+                    transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
                 }}
-                className="relative bg-black shadow-2xl ring-1 ring-gray-700"
+                className="relative bg-black shadow-2xl ring-1 ring-gray-800 overflow-hidden"
             >
                 {/* Background Image */}
                 {bgImageUrl ? (
@@ -166,61 +268,74 @@ export default function LayoutDesign() {
                         style={{ backgroundImage: `url(${bgImageUrl})` }}
                     />
                 ) : (
-                    <div className="absolute inset-0 bg-gray-800 z-0" style={{ backgroundColor: layout.backgroundColor }} />
+                    <div className="absolute inset-0 bg-gray-900 z-0" style={{ backgroundColor: layout.backgroundColor }} />
                 )}
 
                 {/* Regions */}
-                {layout.regions && layout.regions.map(region => (
+                {layout.regions && layout.regions.map((region, idx) => (
                     <div
                         key={region.regionId}
-                        className="absolute border border-blue-500/50 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-400 transition-colors group z-10"
+                        className="absolute border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-400 transition-all duration-200 group z-10 overflow-hidden"
                         style={{
                             top: region.top,
                             left: region.left,
                             width: region.width,
                             height: region.height,
-                            zIndex: region.zIndex + 10 // Ensure regions are above background
+                            zIndex: region.zIndex + 10
                         }}
                     >
-                        {/* Region Label */}
-                        <div className="absolute top-0 left-0 bg-blue-600 text-white text-[10px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                            {region.name || `Region ${region.regionId}`} ({region.width}x{region.height})
+                        {/* Region Header/Label Overlay - Always visible but subtle, pops on hover */}
+                        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-2 opacity-70 group-hover:opacity-100 transition-opacity z-20">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider truncate">
+                                    {region.name || `Region ${idx + 1}`}
+                                </span>
+                                <span className="text-[9px] text-gray-400 bg-black/50 px-1 rounded">
+                                    {region.width}x{region.height}
+                                </span>
+                            </div>
+                            {/* Widget Summary in Overlay */}
+                            <div className="text-[10px] text-white font-medium mt-0.5 truncate">
+                                {getRegionSummary(region.widgets)}
+                            </div>
                         </div>
                         
-                        {/* Widgets List inside Region */}
-                        <div className="w-full h-full overflow-hidden p-1">
+                        {/* Widgets Visual Representation */}
+                        <div className="w-full h-full p-8 overflow-hidden flex flex-col gap-1 content-start flex-wrap">
                             {region.widgets && region.widgets.length > 0 ? (
-                                <div className="flex flex-col gap-0.5">
-                                    {region.widgets.map((widget, idx) => (
-                                        <div 
-                                            key={widget.widgetId} 
-                                            className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-1 py-0.5 truncate rounded-sm border border-white/10"
-                                            title={`${widget.moduleName} - ${widget.name}`}
-                                        >
-                                            <span className="text-blue-300 font-bold mr-1">{idx + 1}.</span>
-                                            {widget.moduleName === 'image' || widget.moduleName === 'localvideo' ? (
-                                                <div className="flex items-center gap-2">
-                                                    {widget.mediaIds && widget.mediaIds.length > 0 && (
-                                                        <img 
-                                                            src={`${API_BASE_URL}/library/${widget.mediaIds[0]}/thumbnail?width=200&height=200`}
-                                                            alt={widget.name}
-                                                            className="w-4 h-4 object-cover rounded-sm"
-                                                            onError={(e) => {
-                                                                e.target.style.display = 'none';
-                                                            }}
-                                                        />
-                                                    )}
-                                                    <span className="truncate">{widget.moduleName}</span>
-                                                </div>
-                                            ) : (
-                                                <span>{widget.moduleName}</span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                                region.widgets.map((widget, wIdx) => (
+                                    <div 
+                                        key={widget.widgetId} 
+                                        className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 cursor-pointer hover:bg-blue-600/80 hover:border-blue-400 transition-all flex items-center gap-2 max-w-full shadow-sm"
+                                        title={`${widget.moduleName} - ${widget.name}`}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleWidgetClick(widget);
+                                        }}
+                                    >
+                                        <span className="text-blue-300 font-bold">{wIdx + 1}.</span>
+                                        
+                                        {/* Icon based on type */}
+                                        {['image', 'localvideo', 'video'].includes(widget.moduleName) ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                                            </svg>
+                                        ) : widget.moduleName === 'text' ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                                            </svg>
+                                        ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
+                                            </svg>
+                                        )}
+                                        
+                                        <span className="truncate max-w-[100px]">{widget.name || widget.moduleName}</span>
+                                    </div>
+                                ))
                             ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <span className="text-white/20 text-[10px] uppercase tracking-wider font-medium">Empty</span>
+                                <div className="flex items-center justify-center h-full w-full opacity-20">
+                                    <span className="text-[40px] font-thin text-white">+</span>
                                 </div>
                             )}
                         </div>
@@ -229,11 +344,131 @@ export default function LayoutDesign() {
             </div>
             
             {/* Zoom Info */}
-            <div className="absolute bottom-4 right-4 bg-gray-800/80 backdrop-blur text-white text-xs px-2 py-1 rounded border border-gray-700">
+            <div className="absolute bottom-6 right-6 bg-gray-900/90 backdrop-blur text-white text-xs px-3 py-1.5 rounded-full border border-gray-700 shadow-lg flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                </svg>
                 {Math.round(scale * 100)}%
             </div>
         </main>
+
+        {/* Right Panel: Layout Details Sidebar */}
+        <aside className="w-96 bg-gray-900 border-l border-gray-800 overflow-y-auto flex flex-col shadow-xl z-10">
+            <div className="p-5 border-b border-gray-800 bg-gray-900 sticky top-0 z-10">
+                <h2 className="font-semibold text-white text-lg">Layout Structure</h2>
+                <p className="text-xs text-gray-400 mt-1">Regions & Widgets Configuration</p>
+            </div>
+            
+            <div className="flex-1 p-4 space-y-8">
+                {layout.regions && layout.regions.map((region, rIdx) => (
+                    <div key={region.regionId} className="space-y-3">
+                        {/* Region Header */}
+                        <div className="flex items-center justify-between text-sm text-gray-200 font-medium border-b border-gray-800 pb-2">
+                            <div className="flex items-center gap-2">
+                                <div className="w-6 h-6 rounded bg-blue-500/20 text-blue-400 flex items-center justify-center text-xs font-bold">
+                                    {rIdx + 1}
+                                </div>
+                                <span>{region.name || `Region ${rIdx + 1}`}</span>
+                            </div>
+                            <span className="text-xs text-gray-500 font-mono bg-gray-800 px-1.5 py-0.5 rounded">{region.width}x{region.height}</span>
+                        </div>
+                        
+                        {/* Widgets List */}
+                        <div className="space-y-3 pl-2">
+                            {region.widgets && region.widgets.length > 0 ? (
+                                region.widgets.map((widget, wIdx) => (
+                                    <div 
+                                        key={widget.widgetId}
+                                        className="bg-gray-800/40 hover:bg-gray-800 rounded-lg p-3 cursor-pointer transition-all border border-gray-700/50 hover:border-blue-500/30 group relative overflow-hidden"
+                                        onClick={() => handleWidgetClick(widget)}
+                                    >
+                                        <div className="flex gap-3">
+                                            {/* Left: Thumbnail or Icon */}
+                                            <div className="shrink-0 w-16 h-16 bg-gray-900 rounded-md border border-gray-700 flex items-center justify-center overflow-hidden">
+                                                {widget.mediaIds?.length > 0 ? (
+                                                    <img 
+                                                        src={`${API_BASE_URL}/library/${widget.mediaIds[0]}/thumbnail?width=100&height=100&token=${getStoredToken()}`}
+                                                        alt={widget.name}
+                                                        className="w-full h-full object-cover"
+                                                        onError={(e) => {
+                                                            e.target.style.display = 'none';
+                                                            e.target.nextSibling.style.display = 'flex';
+                                                        }}
+                                                    />
+                                                ) : null}
+                                                
+                                                {/* Fallback Icon (shown if no image or error) */}
+                                                <div className={`w-full h-full flex items-center justify-center ${widget.mediaIds?.length > 0 ? 'hidden' : 'flex'}`}>
+                                                    {widget.moduleName === 'text' ? (
+                                                        <span className="text-2xl">T</span>
+                                                    ) : widget.moduleName === 'dataset' ? (
+                                                        <span className="text-2xl">📊</span>
+                                                    ) : widget.moduleName === 'playlist' ? (
+                                                        <span className="text-2xl">📑</span>
+                                                    ) : (
+                                                        <span className="text-2xl">📄</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Right: Details */}
+                                            <div className="flex-1 min-w-0 flex flex-col justify-center">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${
+                                                        widget.moduleName === 'text' ? 'bg-yellow-500/10 text-yellow-400' :
+                                                        widget.moduleName === 'dataset' ? 'bg-purple-500/10 text-purple-400' :
+                                                        'bg-blue-500/10 text-blue-400'
+                                                    }`}>
+                                                        {widget.moduleName}
+                                                    </span>
+                                                    <span className="text-gray-500 text-xs ml-auto flex items-center gap-1">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                        </svg>
+                                                        {widget.duration}s
+                                                    </span>
+                                                </div>
+                                                
+                                                <h4 className="text-sm font-medium text-gray-200 truncate" title={widget.name}>
+                                                    {widget.name || "Untitled Widget"}
+                                                </h4>
+                                                
+                                                {/* Extra Info based on type */}
+                                                <div className="text-xs text-gray-500 mt-1 truncate">
+                                                    {widget.moduleName === 'text' ? (
+                                                        <span>{widget.options?.text?.replace(/<[^>]*>/g, '') || "Text Content"}</span>
+                                                    ) : widget.moduleName === 'dataset' ? (
+                                                        <span>Dataset ID: {widget.options?.dataSetId || "N/A"}</span>
+                                                    ) : widget.mediaIds?.length > 0 ? (
+                                                        <span>Media ID: {widget.mediaIds[0]}</span>
+                                                    ) : (
+                                                        <span>No media attached</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="text-xs text-gray-600 italic pl-1 py-2 border-l-2 border-gray-800 ml-1">
+                                    No widgets in this region
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </aside>
       </div>
+      
+      {/* Media Preview Modal */}
+      <MediaPreviewModal
+        isOpen={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        mediaUrl={previewMedia?.url}
+        mediaType={previewMedia?.type}
+        mediaName={previewMedia?.name}
+      />
     </div>
   );
 }
