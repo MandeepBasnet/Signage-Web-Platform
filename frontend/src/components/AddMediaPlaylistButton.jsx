@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 
@@ -21,9 +21,17 @@ export default function AddMediaPlaylistButton({
   onMediaAdded,
   onClose,
   isOpen,
+  hideTrigger = false,
 }) {
   // Modal state
   const [showModal, setShowModal] = useState(isOpen ?? false);
+
+  // Sync state with isOpen prop
+  useEffect(() => {
+    if (isOpen !== undefined) {
+      setShowModal(isOpen);
+    }
+  }, [isOpen]);
   const [currentTab, setCurrentTab] = useState("owned");
 
   // Media listing state
@@ -601,12 +609,15 @@ export default function AddMediaPlaylistButton({
   return (
     <>
       {/* Button to open modal */}
-      <button
-        onClick={openModal}
-        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
-      >
-        + Add Media
-      </button>
+      {/* Button to open modal */}
+      {!hideTrigger && (
+        <button
+            onClick={openModal}
+            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
+        >
+            + Add Media
+        </button>
+      )}
 
       {/* Modal */}
       {showModal && (

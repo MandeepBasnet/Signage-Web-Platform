@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { getAuthHeaders, getStoredToken } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
+import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -23,6 +24,12 @@ export default function LayoutDesign() {
   // Preview Modal State
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewMedia, setPreviewMedia] = useState(null);
+
+  // Add Media Modal State
+  const [addMediaModalState, setAddMediaModalState] = useState({
+    isOpen: false,
+    playlistId: null
+  });
 
   // Playlist & Dataset Data State
   const [playlistData, setPlaylistData] = useState(new Map());
@@ -437,7 +444,7 @@ export default function LayoutDesign() {
       await fetchLayoutDetails();
       
       console.log(`Successfully removed media from playlist ${playlistId}`);
-      alert("Media deleted successfully and layout updated.");
+      // alert("Media deleted successfully and layout updated."); // Optional: remove alert for smoother UX
     } catch (err) {
       console.error("Error deleting media from playlist:", err);
       if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
@@ -447,6 +454,14 @@ export default function LayoutDesign() {
       }
     } finally {
       setDeletingMediaId(null);
+    }
+  };
+
+  const handleMediaAdded = async (mediaId) => {
+    console.log("Media added to playlist, refreshing...", mediaId);
+    if (addMediaModalState.playlistId) {
+        await fetchPlaylistMedia(addMediaModalState.playlistId, true);
+        await fetchLayoutDetails();
     }
   };
 
@@ -906,8 +921,23 @@ export default function LayoutDesign() {
 
                                                         return (
                                                             <div className="mt-2 space-y-2">
-                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
-                                                                    {plData.playlist.name || `Playlist ${plId}`} - {plData.media.length} items
+                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1 flex justify-between items-center">
+                                                                    <span>{plData.playlist.name || `Playlist ${plId}`} - {plData.media.length} items</span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setAddMediaModalState({
+                                                                                isOpen: true,
+                                                                                playlistId: plId
+                                                                            });
+                                                                        }}
+                                                                        className="p-1 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition-colors"
+                                                                        title="Add Media to Playlist"
+                                                                    >
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                                                        </svg>
+                                                                    </button>
                                                                 </div>
                                                                 {/* Increased max-height as requested */}
                                                                 <div className="space-y-1 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
@@ -1224,6 +1254,15 @@ export default function LayoutDesign() {
         mediaUrl={previewMedia?.url}
         mediaType={previewMedia?.type}
         mediaName={previewMedia?.name}
+      />
+
+      {/* Add Media Modal */}
+      <AddMediaPlaylistButton 
+        isOpen={addMediaModalState.isOpen}
+        playlistId={addMediaModalState.playlistId}
+        onClose={() => setAddMediaModalState({ isOpen: false, playlistId: null })}
+        onMediaAdded={handleMediaAdded}
+        hideTrigger={true}
       />
     </div>
   );
