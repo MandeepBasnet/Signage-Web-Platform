@@ -334,6 +334,19 @@ export default function LayoutDesign() {
     }
   };
 
+  const handleMediaPreview = (item) => {
+    const mediaId = item.mediaIds?.[0] || item.mediaId || item.media_id || item.id;
+    const token = localStorage.getItem("auth_token");
+    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    
+    setPreviewMedia({
+      url: previewUrl,
+      type: item.type || item.moduleName || item.mediaType,
+      name: item.name || `Media ${mediaId}`
+    });
+    setPreviewModalOpen(true);
+  };
+
   const getRegionSummary = (widgets) => {
       if (!widgets || widgets.length === 0) return "Empty";
       
@@ -700,7 +713,15 @@ export default function LayoutDesign() {
                                                                         const hasThumbnail = isImage(mediaType) || isVideo(mediaType);
                                                                         
                                                                         return (
-                                                                            <div key={idx} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded border border-gray-800 hover:bg-gray-800 transition-colors">
+                                                                            <div 
+                                                                                key={idx} 
+                                                                                className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded border border-gray-800 hover:bg-gray-800 transition-colors cursor-pointer"
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleMediaPreview(media);
+                                                                                }}
+                                                                                title={`Click to preview: ${media.name}`}
+                                                                            >
                                                                                 {/* Thumbnail */}
                                                                                 <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden shrink-0 border border-gray-700 flex items-center justify-center relative">
                                                                                     {hasThumbnail && mediaId ? (
