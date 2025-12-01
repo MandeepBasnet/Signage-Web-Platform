@@ -5,6 +5,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getAuthHeaders, getStoredToken } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
+import AddRowModal from "./AddRowModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -30,6 +31,15 @@ export default function LayoutDesign() {
     isOpen: false,
     playlistId: null
   });
+
+  // Add Row Modal State
+  const [addRowModalState, setAddRowModalState] = useState({
+    isOpen: false,
+    datasetId: null,
+    columns: []
+  });
+  const [addingRow, setAddingRow] = useState(false);
+  const [deletingRowId, setDeletingRowId] = useState(null);
 
   // Playlist & Dataset Data State
   const [playlistData, setPlaylistData] = useState(new Map());
@@ -462,6 +472,66 @@ export default function LayoutDesign() {
     if (addMediaModalState.playlistId) {
         await fetchPlaylistMedia(addMediaModalState.playlistId, true);
         await fetchLayoutDetails();
+    }
+  };
+
+  const handleAddRow = async (formData) => {
+    const { datasetId } = addRowModalState;
+    if (!datasetId) return;
+
+    try {
+      setAddingRow(true);
+      const response = await fetch(`${API_BASE_URL}/datasets/data/${datasetId}`, {
+        method: "POST",
+        headers: {
+          ...getAuthHeaders(),
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(formData),
+      });
+
+      if (!response.ok) throw new Error("Failed to add row");
+
+      // Refresh dataset data
+      await fetchDatasetData(datasetId);
+      
+      // Refresh layout
+      await fetchLayoutDetails();
+
+      alert("Row added successfully!");
+      setAddRowModalState(prev => ({ ...prev, isOpen: false }));
+    } catch (err) {
+      console.error("Error adding row:", err);
+      alert(`Failed to add row: ${err.message}`);
+    } finally {
+      setAddingRow(false);
+    }
+  };
+
+  const handleDeleteRow = async (datasetId, rowId) => {
+    if (!confirm("Are you sure you want to delete this row?")) return;
+
+    try {
+      setDeletingRowId(rowId);
+      const response = await fetch(`${API_BASE_URL}/datasets/data/${datasetId}/${rowId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) throw new Error("Failed to delete row");
+
+      // Refresh dataset data
+      await fetchDatasetData(datasetId);
+      
+      // Refresh layout
+      await fetchLayoutDetails();
+
+      console.log(`Successfully deleted row ${rowId} from dataset ${datasetId}`);
+    } catch (err) {
+      console.error("Error deleting row:", err);
+      alert(`Failed to delete row: ${err.message}`);
+    } finally {
+      setDeletingRowId(null);
     }
   };
 
@@ -1039,8 +1109,24 @@ export default function LayoutDesign() {
                                                         
                                                         return (
                                                             <div className="mt-2 space-y-2">
-                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
-                                                                    Dataset: {dsData.columns.length} columns × {dsData.rows.length} rows
+                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1 flex justify-between items-center">
+                                                                    <span>Dataset: {dsData.columns.length} columns × {dsData.rows.length} rows</span>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setAddRowModalState({
+                                                                                isOpen: true,
+                                                                                datasetId: dsId,
+                                                                                columns: dsData.columns
+                                                                            });
+                                                                        }}
+                                                                        className="p-1 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition-colors"
+                                                                        title="Add Row"
+                                                                    >
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                                                                            <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                                                        </svg>
+                                                                    </button>
                                                                 </div>
                                                                 {/* Dataset Table - Increased max-height for better visibility */}
                                                                 <div className="max-h-96 overflow-auto pr-1 custom-scrollbar">
@@ -1057,6 +1143,7 @@ export default function LayoutDesign() {
                                                                                         {col.heading}
                                                                                     </th>
                                                                                 ))}
+                                                                                <th className="px-1.5 py-1 text-right font-semibold text-gray-300 border-b border-gray-700 bg-gray-800 w-8"></th>
                                                                             </tr>
                                                                         </thead>
                                                                         <tbody>
@@ -1078,6 +1165,32 @@ export default function LayoutDesign() {
                                                                                             </td>
                                                                                         );
                                                                                     })}
+                                                                                    <td className="px-1.5 py-1.5 text-right">
+                                                                                        <button
+                                                                                            onClick={(e) => {
+                                                                                                e.stopPropagation();
+                                                                                                handleDeleteRow(dsId, row.id);
+                                                                                            }}
+                                                                                            disabled={deletingRowId === row.id}
+                                                                                            className={`p-0.5 rounded transition-colors ${
+                                                                                                deletingRowId === row.id
+                                                                                                    ? 'text-gray-600 cursor-not-allowed'
+                                                                                                    : 'text-gray-500 hover:text-red-400 hover:bg-red-500/10'
+                                                                                            }`}
+                                                                                            title="Delete Row"
+                                                                                        >
+                                                                                            {deletingRowId === row.id ? (
+                                                                                                <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                                </svg>
+                                                                                            ) : (
+                                                                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                                                                </svg>
+                                                                                            )}
+                                                                                        </button>
+                                                                                    </td>
                                                                                 </tr>
                                                                             ))}
                                                                         </tbody>
@@ -1263,6 +1376,14 @@ export default function LayoutDesign() {
         onClose={() => setAddMediaModalState({ isOpen: false, playlistId: null })}
         onMediaAdded={handleMediaAdded}
         hideTrigger={true}
+      />
+
+      {/* Add Row Modal */}
+      <AddRowModal
+        isOpen={addRowModalState.isOpen}
+        onClose={() => setAddRowModalState(prev => ({ ...prev, isOpen: false }))}
+        columns={addRowModalState.columns}
+        onSave={handleAddRow}
       />
     </div>
   );
