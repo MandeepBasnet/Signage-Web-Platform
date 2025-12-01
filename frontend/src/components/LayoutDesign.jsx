@@ -863,33 +863,121 @@ export default function LayoutDesign() {
                                                         );
                                                     })() : moduleName === 'canvas' || moduleName === 'global' ? (() => {
                                                         const textElements = extractTextElements(widget);
+                                                        const elementsOption = getOptionValue(widget, 'elements');
+                                                        let mediaElements = [];
                                                         
-                                                        if (textElements.length === 0) {
-                                                            return widget.mediaIds?.length > 0 ? (
-                                                                <span className="truncate">Media ID: {widget.mediaIds[0]}</span>
-                                                            ) : (
-                                                                <span>No text elements found</span>
-                                                            );
+                                                        // Extract media elements from the elements JSON
+                                                        if (elementsOption) {
+                                                            try {
+                                                                const elementsData = JSON.parse(elementsOption);
+                                                                if (Array.isArray(elementsData)) {
+                                                                    elementsData.forEach(page => {
+                                                                        if (page.elements && Array.isArray(page.elements)) {
+                                                                            page.elements.forEach(element => {
+                                                                                // Check for image/media elements
+                                                                                if (element.mediaId || element.id?.includes('image') || element.id?.includes('video')) {
+                                                                                    mediaElements.push({
+                                                                                        mediaId: element.mediaId,
+                                                                                        elementId: element.elementId,
+                                                                                        elementName: element.elementName || element.id || 'Media Element',
+                                                                                        type: element.id?.includes('video') ? 'video' : 'image',
+                                                                                        position: { left: element.left, top: element.top, width: element.width, height: element.height }
+                                                                                    });
+                                                                                }
+                                                                            });
+                                                                        }
+                                                                    });
+                                                                }
+                                                            } catch (e) {
+                                                                console.error('Failed to parse elements for media:', e);
+                                                            }
+                                                        }
+                                                        
+                                                        const totalElements = mediaElements.length + textElements.length;
+                                                        
+                                                        if (totalElements === 0) {
+                                                            return <span>No elements found</span>;
                                                         }
                                                         
                                                         return (
                                                             <div className="mt-2 space-y-2">
                                                                 <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
-                                                                    Text Elements: {textElements.length}
+                                                                    Canvas Elements: {totalElements}
                                                                 </div>
                                                                 <div className="space-y-2 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+                                                                    {/* Media Elements */}
+                                                                    {mediaElements.map((mediaEl, idx) => (
+                                                                        <div 
+                                                                            key={`media-${idx}`} 
+                                                                            className="bg-gray-900/50 p-2 rounded border border-gray-800 hover:bg-gray-800 transition-colors cursor-pointer"
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (mediaEl.mediaId) {
+                                                                                    handleMediaPreview({
+                                                                                        mediaId: mediaEl.mediaId,
+                                                                                        name: mediaEl.elementName,
+                                                                                        type: mediaEl.type
+                                                                                    });
+                                                                                }
+                                                                            }}
+                                                                            title={mediaEl.mediaId ? `Click to preview: ${mediaEl.elementName}` : mediaEl.elementName}
+                                                                        >
+                                                                            <div className="flex items-center gap-2">
+                                                                                {/* Media Thumbnail */}
+                                                                                <div className="shrink-0 w-12 h-12 bg-gray-800 rounded overflow-hidden border border-gray-700 flex items-center justify-center">
+                                                                                    {mediaEl.mediaId ? (
+                                                                                        <img 
+                                                                                            src={`${API_BASE_URL}/library/${mediaEl.mediaId}/thumbnail?width=100&height=100&token=${getStoredToken()}`}
+                                                                                            alt={mediaEl.elementName}
+                                                                                            className="w-full h-full object-cover"
+                                                                                            onError={(e) => {
+                                                                                                e.target.style.display = 'none';
+                                                                                                e.target.nextSibling.style.display = 'flex';
+                                                                                            }}
+                                                                                        />
+                                                                                    ) : null}
+                                                                                    <div className={`w-full h-full flex items-center justify-center text-gray-500 ${mediaEl.mediaId ? 'hidden' : 'flex'}`}>
+                                                                                        {mediaEl.type === 'video' ? '🎬' : '🖼️'}
+                                                                                    </div>
+                                                                                </div>
+                                                                                {/* Media Details */}
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider bg-green-500/10 text-green-400">
+                                                                                            {mediaEl.type}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                    <div className="text-[11px] text-gray-300 font-medium truncate mt-0.5">
+                                                                                        {mediaEl.elementName}
+                                                                                    </div>
+                                                                                    {mediaEl.mediaId && (
+                                                                                        <div className="text-[9px] text-gray-500 mt-0.5">
+                                                                                            Media ID: {mediaEl.mediaId}
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                    
+                                                                    {/* Text Elements */}
                                                                     {textElements.map((textEl, idx) => (
                                                                         <div 
-                                                                            key={idx} 
+                                                                            key={`text-${idx}`} 
                                                                             className="bg-gray-900/50 p-2 rounded border border-gray-800 hover:bg-gray-800 transition-colors"
                                                                         >
                                                                             <div className="flex items-start gap-2">
                                                                                 {/* Text Icon */}
-                                                                                <div className="shrink-0 w-6 h-6 bg-yellow-500/10 rounded flex items-center justify-center text-yellow-400 text-xs font-bold">
+                                                                                <div className="shrink-0 w-12 h-12 bg-yellow-500/10 rounded flex items-center justify-center text-yellow-400 text-lg font-bold border border-gray-700">
                                                                                     T
                                                                                 </div>
                                                                                 {/* Text Content */}
                                                                                 <div className="flex-1 min-w-0">
+                                                                                    <div className="flex items-center gap-2 mb-1">
+                                                                                        <span className="text-[10px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider bg-yellow-500/10 text-yellow-400">
+                                                                                            TEXT
+                                                                                        </span>
+                                                                                    </div>
                                                                                     <div className="text-[11px] text-gray-300 font-medium break-words">
                                                                                         {textEl.text}
                                                                                     </div>
@@ -900,12 +988,6 @@ export default function LayoutDesign() {
                                                                                         </span>
                                                                                         <span>•</span>
                                                                                         <span>Size: {textEl.fontSize}px</span>
-                                                                                        {textEl.position && (
-                                                                                            <>
-                                                                                                <span>•</span>
-                                                                                                <span>Pos: ({textEl.position.left}, {textEl.position.top})</span>
-                                                                                            </>
-                                                                                        )}
                                                                                     </div>
                                                                                 </div>
                                                                             </div>
