@@ -286,8 +286,8 @@ export default function LayoutDesign() {
     }
   };
 
-  const fetchDatasetData = async (dataSetId) => {
-    if (!dataSetId || datasetData.has(dataSetId)) return;
+  const fetchDatasetData = async (dataSetId, forceRefresh = false) => {
+    if (!dataSetId || (!forceRefresh && datasetData.has(dataSetId))) return;
     
     setLoadingWidgetData(prev => new Set(prev).add(`dataset-${dataSetId}`));
     console.log(`Fetching dataset data for ID: ${dataSetId}`);
@@ -493,7 +493,7 @@ export default function LayoutDesign() {
       if (!response.ok) throw new Error("Failed to add row");
 
       // Refresh dataset data
-      await fetchDatasetData(datasetId);
+      await fetchDatasetData(datasetId, true);
       
       // Refresh layout
       await fetchLayoutDetails();
@@ -521,7 +521,7 @@ export default function LayoutDesign() {
       if (!response.ok) throw new Error("Failed to delete row");
 
       // Refresh dataset data
-      await fetchDatasetData(datasetId);
+      await fetchDatasetData(datasetId, true);
       
       // Refresh layout
       await fetchLayoutDetails();
