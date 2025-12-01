@@ -646,6 +646,11 @@ export default function LayoutDesign() {
                                                         
                                                         // Helper to robustly get media ID
                                                         const getMediaId = (item) => {
+                                                            // Check mediaIds array first (primary field in API response)
+                                                            if (item.mediaIds && Array.isArray(item.mediaIds) && item.mediaIds.length > 0) {
+                                                                return item.mediaIds[0];
+                                                            }
+                                                            // Fallback to other possible field names
                                                             return (
                                                               item.mediaId ||
                                                               item.media_id ||
