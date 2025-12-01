@@ -30,6 +30,18 @@ export default function AddMediaPlaylistButton({
   useEffect(() => {
     if (isOpen !== undefined) {
       setShowModal(isOpen);
+      if (isOpen) {
+        // Trigger fetch when opened via prop
+        // We use a timeout to ensure the component is fully mounted/updated
+        // and to avoid potential issues with function definitions if they were not hoisted (though they are const, so TDZ applies, but effect runs after render)
+        // However, to be safe and ensure state updates propagate:
+        setTimeout(() => {
+            fetchMediaOptions("owned");
+            if (folderOptions.length === 0) {
+                fetchFolders();
+            }
+        }, 0);
+      }
     }
   }, [isOpen]);
   const [currentTab, setCurrentTab] = useState("owned");
