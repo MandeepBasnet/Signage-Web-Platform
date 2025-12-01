@@ -766,7 +766,59 @@ export default function LayoutDesign() {
                                                         if (isLoading) return <span>Loading dataset...</span>;
                                                         if (!dsData) return <span>Dataset ID: {dsId || 'N/A'}</span>;
                                                         
-                                                        return <span>{dsData.columns.length} columns × {dsData.rows.length} rows</span>;
+                                                        return (
+                                                            <div className="mt-2 space-y-2">
+                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
+                                                                    Dataset: {dsData.columns.length} columns × {dsData.rows.length} rows
+                                                                </div>
+                                                                {/* Dataset Table - Increased max-height for better visibility */}
+                                                                <div className="max-h-96 overflow-auto pr-1 custom-scrollbar">
+                                                                    <table className="w-full text-[10px] border-collapse">
+                                                                        <thead className="sticky top-0 bg-gray-900 z-10">
+                                                                            <tr>
+                                                                                <th className="px-1.5 py-1 text-left font-semibold text-gray-300 border-b border-gray-700 bg-gray-800">#</th>
+                                                                                {dsData.columns.map((col, idx) => (
+                                                                                    <th 
+                                                                                        key={idx} 
+                                                                                        className="px-1.5 py-1 text-left font-semibold text-gray-300 border-b border-gray-700 bg-gray-800 truncate max-w-[100px]"
+                                                                                        title={col.heading}
+                                                                                    >
+                                                                                        {col.heading}
+                                                                                    </th>
+                                                                                ))}
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {dsData.rows.map((row, rowIdx) => (
+                                                                                <tr 
+                                                                                    key={rowIdx} 
+                                                                                    className="hover:bg-gray-800/50 transition-colors border-b border-gray-800/50"
+                                                                                >
+                                                                                    <td className="px-1.5 py-1.5 text-gray-500 font-mono">{rowIdx + 1}</td>
+                                                                                    {dsData.columns.map((col, colIdx) => {
+                                                                                        const cellValue = row[col.heading] || row[`col_${col.dataSetColumnId}`] || '-';
+                                                                                        return (
+                                                                                            <td 
+                                                                                                key={colIdx} 
+                                                                                                className="px-1.5 py-1.5 text-gray-300 truncate max-w-[100px]"
+                                                                                                title={cellValue}
+                                                                                            >
+                                                                                                {cellValue}
+                                                                                            </td>
+                                                                                        );
+                                                                                    })}
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                    </table>
+                                                                    {dsData.rows.length === 0 && (
+                                                                        <div className="text-center py-4 text-gray-500 text-xs italic">
+                                                                            No data rows available
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        );
                                                     })() : widget.mediaIds?.length > 0 ? (
                                                         <span className="truncate">Media ID: {widget.mediaIds[0]}</span>
                                                     ) : (
