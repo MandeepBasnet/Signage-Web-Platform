@@ -55,8 +55,6 @@ export default function LayoutDesign() {
     }
     
     // 2. Fallback to direct playlistId if it's NOT the region's playlist ID (heuristic)
-    // Note: In the provided JSON, widget.playlistId matches regionPlaylist.playlistId, 
-    // so we prefer the subPlaylists option if available.
     if (widget.playlistId) return widget.playlistId;
     
     return null;
@@ -65,6 +63,15 @@ export default function LayoutDesign() {
   // Helper to extract Dataset ID
   const getDatasetId = (widget) => {
     return getOptionValue(widget, 'dataSetId');
+  };
+
+  // Helper to format file size
+  const formatFileSize = (bytes) => {
+    if (!bytes) return "Unknown size";
+    const kb = bytes / 1024;
+    const mb = kb / 1024;
+    if (mb >= 1) return `${mb.toFixed(2)} MB`;
+    return `${kb.toFixed(2)} KB`;
   };
 
   // Fetch Layout Details
@@ -637,27 +644,92 @@ export default function LayoutDesign() {
                                                         if (isLoading) return <span>Loading media...</span>;
                                                         if (!plData) return <span>Playlist ID: {plId}</span>;
                                                         
+                                                        // Helper to robustly get media ID
+                                                        const getMediaId = (item) => {
+                                                            return (
+                                                              item.mediaId ||
+                                                              item.media_id ||
+                                                              item.id ||
+                                                              item.media?.mediaId ||
+                                                              item.media?.media_id ||
+                                                              item.media?.id
+                                                            );
+                                                        };
+
+                                                        // Robust media type checkers from MediaContent.jsx
+                                                        const isImage = (mediaType) => {
+                                                            const type = (mediaType || '').toLowerCase();
+                                                            return (
+                                                              type.includes("image") ||
+                                                              type.includes("jpg") ||
+                                                              type.includes("jpeg") ||
+                                                              type.includes("png") ||
+                                                              type.includes("gif") ||
+                                                              type.includes("webp") ||
+                                                              type.includes("svg")
+                                                            );
+                                                        };
+
+                                                        const isVideo = (mediaType) => {
+                                                            const type = (mediaType || '').toLowerCase();
+                                                            return (
+                                                              type.includes("video") ||
+                                                              type.includes("mp4") ||
+                                                              type.includes("webm") ||
+                                                              type.includes("ogg") ||
+                                                              type.includes("mov") ||
+                                                              type.includes("avi")
+                                                            );
+                                                        };
+
                                                         return (
-                                                            <div>
-                                                                <div>{plData.media.length} media item{plData.media.length !== 1 ? 's' : ''}</div>
-                                                                {plData.media.length > 0 && (
-                                                                    <div className="flex gap-1 mt-2">
-                                                                        {plData.media.slice(0, 3).map((media, idx) => (
-                                                                            <div key={idx} className="w-8 h-8 bg-gray-700 rounded overflow-hidden">
-                                                                                <img 
-                                                                                    src={`${API_BASE_URL}/library/${media.mediaId}/thumbnail?width=50&height=50&token=${getStoredToken()}`}
-                                                                                    className="w-full h-full object-cover"
-                                                                                    alt={media.name}
-                                                                                />
+                                                            <div className="mt-2 space-y-2">
+                                                                <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1">
+                                                                    {plData.playlist.name || `Playlist ${plId}`} - {plData.media.length} items
+                                                                </div>
+                                                                {/* Increased max-height as requested */}
+                                                                <div className="space-y-1 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+                                                                    {plData.media.map((media, idx) => {
+                                                                        const mediaId = getMediaId(media);
+                                                                        const mediaType = media.mediaType || media.type || '';
+                                                                        const hasThumbnail = isImage(mediaType) || isVideo(mediaType);
+                                                                        
+                                                                        return (
+                                                                            <div key={idx} className="flex items-center gap-2 bg-gray-900/50 p-1.5 rounded border border-gray-800 hover:bg-gray-800 transition-colors">
+                                                                                {/* Thumbnail */}
+                                                                                <div className="w-8 h-8 bg-gray-800 rounded overflow-hidden shrink-0 border border-gray-700 flex items-center justify-center relative">
+                                                                                    {hasThumbnail && mediaId ? (
+                                                                                        <img 
+                                                                                            src={`${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=50&height=50&token=${getStoredToken()}`}
+                                                                                            className="w-full h-full object-cover absolute inset-0"
+                                                                                            alt={media.name}
+                                                                                            onError={(e) => {
+                                                                                                // Hide image and show fallback
+                                                                                                e.target.style.display = 'none';
+                                                                                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                                                                            }}
+                                                                                        />
+                                                                                    ) : null}
+                                                                                    
+                                                                                    {/* Fallback Icon */}
+                                                                                    <div 
+                                                                                        className={`w-full h-full flex items-center justify-center bg-gray-800 text-gray-500 ${hasThumbnail && mediaId ? 'hidden' : 'flex'}`}
+                                                                                    >
+                                                                                        {isVideo(mediaType) ? '🎬' : '📄'}
+                                                                                    </div>
+                                                                                </div>
+                                                                                {/* Details */}
+                                                                                <div className="min-w-0 flex-1">
+                                                                                    <div className="text-[10px] text-gray-300 truncate font-medium" title={media.name}>{media.name}</div>
+                                                                                    <div className="text-[9px] text-gray-500 flex justify-between">
+                                                                                        <span>{formatFileSize(media.fileSize)}</span>
+                                                                                        <span>{media.duration}s</span>
+                                                                                    </div>
+                                                                                </div>
                                                                             </div>
-                                                                        ))}
-                                                                        {plData.media.length > 3 && (
-                                                                            <div className="w-8 h-8 bg-gray-700 rounded flex items-center justify-center text-[10px]">
-                                                                                +{plData.media.length - 3}
-                                                                            </div>
-                                                                        )}
-                                                                    </div>
-                                                                )}
+                                                                        );
+                                                                    })}
+                                                                </div>
                                                             </div>
                                                         );
                                                     })() : moduleName === 'dataset' ? (() => {
