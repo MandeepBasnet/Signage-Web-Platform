@@ -66,8 +66,14 @@ export default function LayoutDesign() {
   const [editingTextValue, setEditingTextValue] = useState("");
   const [savingText, setSavingText] = useState(false);
 
+  // Canvas Rendering State
+  const [canvasScale, setCanvasScale] = useState(0.1); // Scale factor for canvas preview
+  const [selectedRegionId, setSelectedRegionId] = useState(null); // Currently selected region
+
   // Refs
   const containerRef = useRef(null);
+  const sidebarRef = useRef(null); // Ref to sidebar for auto-scrolling
+
 
   // Helper to extract option value from widgetOptions array
   const getOptionValue = (widget, optionName) => {
@@ -548,7 +554,163 @@ const handleMediaPreview = (item) => {
     }
   };
 
+  // ===== CANVAS RENDERING FUNCTIONS =====
+
+  // Calculate appropriate canvas scale
+  const calculateCanvasScale = () => {
+    if (!layout) return 0.1;
+    
+    const maxCanvasWidth = 800; // Maximum width for canvas container
+    const scaleX = maxCanvasWidth / layout.width;
+    const scaleY = (maxCanvasWidth * (layout.height / layout.width)) / layout.height;
+    
+    // Cap at 50% to avoid overly large previews
+    return Math.min(scaleX, scaleY, 0.5);
+  };
+
+  // Update canvas scale when layout changes
+  useEffect(() => {
+    if (layout) {
+      setCanvasScale(calculateCanvasScale());
+    }
+  }, [layout]);
+
+  // Render widget content directly (Client-Side Rendering)
+  const renderWidgetContent = (widget, width, height) => {
+    try {
+        if (!widget) return null;
+        
+        const moduleName = widget.moduleName?.toLowerCase();
+        const type = widget.type?.toLowerCase();
+
+        // 1. Image
+        if (moduleName === 'image' || type === 'image') {
+        const mediaId = widget.mediaIds?.[0];
+        if (mediaId) {
+            return (
+            <img 
+                src={`${API_BASE_URL}/library/thumbnail/${mediaId}`} 
+                alt={widget.name}
+                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                onError={(e) => { e.target.src = 'https://placehold.co/100x100?text=Image'; }}
+            />
+            );
+        }
+        }
+
+        // 2. Text
+        if (moduleName === 'text' || type === 'text') {
+        // Try to extract text content
+        let textContent = "Text Widget";
+        let style = { color: '#ffffff', fontSize: '14px', textAlign: 'center' };
+        
+        try {
+            let options = widget.widgetOptions || [];
+            if (typeof options === 'string') {
+                try {
+                    options = JSON.parse(options);
+                } catch (e) {
+                    options = [];
+                }
+            }
+            
+            if (Array.isArray(options)) {
+                const textOpt = options.find(o => o.option === 'text');
+                if (textOpt) textContent = textOpt.value;
+            }
+            
+            // Also check elements for more complex text
+            const textElements = extractTextElements(widget);
+            if (textElements.length > 0) {
+            // Just show the first one for preview
+            textContent = textElements[0].text;
+            style.color = textElements[0].fontColor;
+            // Scale font size roughly
+            style.fontSize = `${parseInt(textElements[0].fontSize) * canvasScale}px`; 
+            }
+        } catch (e) {
+            console.warn("Error parsing text widget options", e);
+        }
+
+        return (
+            <div style={{ 
+            width: '100%', 
+            height: '100%', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            padding: '4px',
+            overflow: 'hidden',
+            ...style
+            }}>
+            <div dangerouslySetInnerHTML={{ __html: textContent }} />
+            </div>
+        );
+        }
+
+        // 3. Video
+        if (moduleName === 'video' || type === 'video') {
+        return (
+            <div className="flex flex-col items-center justify-center w-full h-full bg-gray-900 text-white">
+            <i className="fas fa-video text-2xl mb-1"></i>
+            <span className="text-xs truncate px-1">{widget.name}</span>
+            </div>
+        );
+        }
+
+        // 4. Dataset
+        if (moduleName === 'dataset' || type === 'dataset') {
+        return (
+            <div className="flex flex-col items-center justify-center w-full h-full bg-blue-900/50 text-white border border-blue-500/30">
+            <i className="fas fa-table text-2xl mb-1"></i>
+            <span className="text-xs font-bold">Dataset</span>
+            <span className="text-[10px] truncate px-1">{widget.name}</span>
+            </div>
+        );
+        }
+        
+        // 5. Clock
+        if (moduleName === 'clock') {
+            return (
+            <div className="flex items-center justify-center w-full h-full bg-gray-800 text-white font-mono">
+            <span className="text-sm">{new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+            </div>
+        );
+        }
+
+        // Default / Fallback
+        return (
+        <div className="flex flex-col items-center justify-center w-full h-full bg-gray-800/80 text-gray-400 border border-gray-700">
+            <i className="fas fa-cube text-xl mb-1"></i>
+            <span className="text-[10px] truncate px-1 max-w-full">{widget.name || moduleName}</span>
+        </div>
+        );
+    } catch (err) {
+        console.error("Error rendering widget content:", err, widget);
+        return <div className="text-red-500 text-xs">Error</div>;
+    }
+  };
+
+  // Handle widget click from canvas - scroll to widget in sidebar
+  const handleWidgetClickFromCanvas = (widgetId) => {
+    console.log('Widget clicked from canvas:', widgetId);
+    
+    // Scroll to widget in sidebar
+    const widgetElement = document.getElementById(`widget-${widgetId}`);
+    if (widgetElement && sidebarRef.current) {
+      widgetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Highlight widget briefly
+      widgetElement.classList.add('ring-2', 'ring-blue-500');
+      setTimeout(() => {
+        widgetElement.classList.remove('ring-2', 'ring-blue-500');
+      }, 2000);
+    }
+  };
+
+  // ===== END CANVAS RENDERING FUNCTIONS =====
+
   const handlePublishLayout = async () => {
+
     if (!confirm("Are you sure you want to publish this layout? This will make it live.")) {
       return;
     }
@@ -749,6 +911,215 @@ const handleMediaPreview = (item) => {
           .join(", ");
   };
 
+  // ===== RENDER FUNCTIONS =====
+
+  const renderElement = (element) => {
+    // Render based on element type
+    if (element.elementType === 'global_library_image') {
+      return (
+        <div style={{ all: 'initial', display: 'block', width: 0, height: 0 }}>
+          <div
+            className="element-content"
+            style={{
+              width: `${element.width}px`,
+              height: `${element.height}px`,
+              transform: `scale(${canvasScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <div className="global-elements-image img-container" style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+              <img
+                src={`${API_BASE_URL}/library/download/${element.mediaId}?preview=1`}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain',
+                  objectPosition: 'center middle',
+                  opacity: '100%',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                }}
+                alt=""
+              />
+            </div>
+          </div>
+        </div>
+      );
+    }
+  
+    if (element.elementType === 'text') {
+      // Extract text properties
+      const text = element.text || '';
+      const fontSize = element.fontSize || 40;
+      const fontColor = element.fontColor || '#ffffff';
+      const textAlign = element.horizontalAlign || 'center';
+      const verticalAlign = element.verticalAlign || 'center';
+  
+      return (
+        <div style={{ all: 'initial', display: 'block', width: 0, height: 0 }}>
+          <div
+            className="element-content"
+            style={{
+              width: `${element.width}px`,
+              height: `${element.height}px`,
+              transform: `scale(${canvasScale})`,
+              transformOrigin: 'top left',
+            }}
+          >
+            <div
+              className="global-elements-text"
+              style={{
+                display: 'flex',
+                fontSize: `${fontSize}px`,
+                color: fontColor,
+                overflow: 'visible',
+                justifyContent: textAlign,
+                textAlign: textAlign,
+                alignItems: verticalAlign,
+                whiteSpace: 'break-spaces',
+                lineHeight: 1.2,
+                width: '100%',
+                height: '100%',
+              }}
+            >
+              <div dangerouslySetInnerHTML={{ __html: text }}></div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  
+    // Add more element type renderers as needed
+    return null;
+  };
+
+  const renderGlobalElements = () => {
+    if (!layout?.regions) return null;
+  
+    // Find the canvas region (global elements overlay)
+    const canvasRegion = layout.regions.find(r => 
+      r.regionPlaylist?.widgets?.some(w => w.type === 'canvas')
+    );
+  
+    if (!canvasRegion) return null;
+  
+    const canvasWidget = canvasRegion.regionPlaylist.widgets.find(w => w.type === 'canvas');
+    if (!canvasWidget) return null;
+  
+    // Parse elements from widgetOptions
+    let elements = [];
+    try {
+      // widgetOptions is already an object/array in our state, not a string
+      // But we need to check if it needs parsing or searching
+      let options = canvasWidget.widgetOptions;
+      if (typeof options === 'string') {
+        options = JSON.parse(options);
+      }
+      
+      const elementsOpt = options.find(opt => opt.option === 'elements');
+      if (elementsOpt?.value) {
+        elements = typeof elementsOpt.value === 'string' ? JSON.parse(elementsOpt.value) : elementsOpt.value;
+      }
+    } catch (error) {
+      console.error('Error parsing global elements:', error);
+      return null;
+    }
+  
+    return (
+      <div
+        className="designer-region-canvas"
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          zIndex: 1,
+          pointerEvents: 'none', // Allow clicks to pass through to regions below
+        }}
+      >
+        {elements.map((element, idx) => (
+          <div
+            key={`element-${idx}`}
+            className="designer-element"
+            style={{
+              position: 'absolute',
+              width: `${element.width * canvasScale}px`,
+              height: `${element.height * canvasScale}px`,
+              top: `${element.top * canvasScale}px`,
+              left: `${element.left * canvasScale}px`,
+              zIndex: element.layer || 0,
+              pointerEvents: 'auto', // Re-enable pointer events for elements
+              cursor: 'pointer',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleWidgetClickFromCanvas(canvasWidget.widgetId);
+            }}
+          >
+            {renderElement(element)}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderPlaylistRegion = (region) => {
+    const scaledDimensions = {
+      width: region.width * canvasScale,
+      height: region.height * canvasScale,
+      top: region.top * canvasScale,
+      left: region.left * canvasScale,
+    };
+  
+    // Get the first widget to display as preview
+    const firstWidget = region.regionPlaylist?.widgets?.[0];
+  
+    return (
+      <div
+        key={`region-${region.regionId}`}
+        className={`designer-region designer-region-playlist ${selectedRegionId === region.regionId ? 'selected' : ''}`}
+        style={{
+          position: 'absolute',
+          width: `${scaledDimensions.width}px`,
+          height: `${scaledDimensions.height}px`,
+          top: `${scaledDimensions.top}px`,
+          left: `${scaledDimensions.left}px`,
+          zIndex: region.zIndex || 0,
+          border: selectedRegionId === region.regionId ? '2px solid #3b82f6' : '1px solid rgba(255, 255, 255, 0.2)',
+          cursor: 'pointer',
+          backgroundColor: 'rgba(0,0,0,0.2)', // Slight background to see empty regions
+        }}
+        onClick={() => handleWidgetClickFromCanvas(firstWidget?.widgetId)}
+      >
+        {firstWidget ? (
+          <div className="w-full h-full overflow-hidden">
+            {renderWidgetContent(firstWidget, scaledDimensions.width, scaledDimensions.height)}
+            
+            {/* Badge for multiple widgets */}
+            {region.regionPlaylist?.widgets?.length > 1 && (
+               <div className="absolute bottom-0 right-0 bg-black/70 text-white text-[10px] px-1 rounded-tl">
+                 +{region.regionPlaylist.widgets.length - 1}
+               </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-center w-full h-full text-gray-600">
+             <span className="text-[10px]">Empty</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+  
+  const renderWidgetRegion = (region) => {
+    // For now, renderWidgetRegion and renderPlaylistRegion are basically the same
+    // since we are manually rendering content.
+    // We can just forward to renderPlaylistRegion or keep separate if we want specific styling.
+    return renderPlaylistRegion(region);
+  };
+
+  // ===== END RENDER FUNCTIONS =====
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-900 text-white">
@@ -925,169 +1296,64 @@ const handleMediaPreview = (item) => {
             />
 
             {/* Canvas Wrapper for Centering and Scaling */}
-            <div 
-                style={{
-                    width: layout.width,
-                    height: layout.height,
-                    transform: `scale(${scale})`,
-                    transformOrigin: 'center center',
-                    transition: 'transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)'
-                }}
-                className="relative bg-black shadow-2xl ring-1 ring-gray-800 overflow-hidden"
-            >
-                {/* Background Image */}
-                {bgImageUrl ? (
-                    <div 
-                        className="absolute inset-0 bg-cover bg-center z-0"
-                        style={{ backgroundImage: `url(${bgImageUrl})` }}
-                    />
-                ) : (
-                    <div className="absolute inset-0 bg-gray-900 z-0" style={{ backgroundColor: layout.backgroundColor }} />
-                )}
+            <div className="relative" style={{ background: 'rgb(243, 248, 255)', padding: '20px', boxShadow: '0 0 50px rgba(0,0,0,0.5)' }}>
+                {/* Main layout container with scaled dimensions */}
+                <div
+                  className="layout-player relative mx-auto bg-black shadow-2xl overflow-hidden"
+                  style={{
+                    width: `${layout.width * canvasScale}px`,
+                    height: `${layout.height * canvasScale}px`,
+                    background: layout.backgroundColor || '#000',
+                    backgroundImage: bgImageUrl ? `url(${bgImageUrl})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                >
+                  {/* Layout live preview container */}
+                  <div className="layout-live-preview relative w-full h-full">
+                    {/* Global elements layer (canvas region) */}
+                    {renderGlobalElements()}
 
-                {/* Regions */}
-                {layout.regions && layout.regions.map((region, idx) => (
-                    <div
-                        key={region.regionId}
-                        className="absolute border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500/10 hover:border-blue-400 transition-all duration-200 group z-10 overflow-hidden"
-                        style={{
-                            top: region.top,
-                            left: region.left,
-                            width: region.width,
-                            height: region.height,
-                            zIndex: region.zIndex + 10
-                        }}
-                    >
-                        {/* Region Header/Label Overlay - Always visible but subtle, pops on hover */}
-                        <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-black/80 to-transparent p-2 opacity-70 group-hover:opacity-100 transition-opacity z-20">
-                            <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-blue-200 uppercase tracking-wider truncate">
-                                    {region.name || `Region ${idx + 1}`}
-                                </span>
-                                <span className="text-[9px] text-gray-400 bg-black/50 px-1 rounded">
-                                    {region.width}x{region.height}
-                                </span>
-                            </div>
-                            {/* Widget Summary in Overlay */}
-                            <div className="text-[10px] text-white font-medium mt-0.5 truncate">
-                                {getRegionSummary(region.widgets)}
-                            </div>
-                        </div>
-                        
-                        {/* Widgets Visual Representation */}
-                        <div className="w-full h-full p-2 overflow-hidden flex flex-col gap-2 content-start flex-wrap">
-                            {region.widgets && region.widgets.length > 0 ? (
-                                region.widgets.flatMap((widget, wIdx) => {
-                                    // If it's a Canvas widget, split into elements
-                                    if (widget.moduleName?.toLowerCase() === 'canvas' || widget.moduleName?.toLowerCase() === 'global') {
-                                        const textElements = extractTextElements(widget);
-                                        // Extract media elements
-                                        const elementsOption = getOptionValue(widget, 'elements');
-                                        let mediaElements = [];
-                                        try {
-                                            const elementsData = JSON.parse(elementsOption || '[]');
-                                            if (Array.isArray(elementsData)) {
-                                                elementsData.forEach(page => {
-                                                    page.elements?.forEach(element => {
-                                                        if (element.mediaId || element.id?.includes('image') || element.id?.includes('video')) {
-                                                            mediaElements.push({
-                                                                ...element,
-                                                                type: element.id?.includes('video') ? 'video' : 'image',
-                                                                name: element.elementName || element.id
-                                                            });
-                                                        }
-                                                    });
-                                                });
-                                            }
-                                        } catch(e) {}
+                    {/* Regular regions container */}
+                    <div className="regions-container relative w-full h-full">
+                      {layout.regions
+                        ?.filter(region => 
+                          !region.regionPlaylist?.widgets?.some(w => w.type === 'canvas')
+                        )
+                        .map(region => {
+                          const firstWidget = region.regionPlaylist?.widgets?.[0];
+                          
+                          // Determine region type and render accordingly
+                          if (!firstWidget) return null;
 
-                                        const allElements = [
-                                            ...textElements.map(el => ({ ...el, type: 'text', isElement: true })),
-                                            ...mediaElements.map(el => ({ ...el, type: el.type || 'image', isElement: true }))
-                                        ];
+                          // Dataset, embedded content, or specific widget types use iframes
+                          // Check both moduleName and type to be safe
+                          const moduleName = (firstWidget.moduleName || '').toLowerCase();
+                          const type = (firstWidget.type || '').toLowerCase();
+                          
+                          if (
+                            moduleName === 'dataset' ||
+                            moduleName === 'embedded' ||
+                            moduleName === 'ticker' ||
+                            type === 'dataset' ||
+                            type === 'embedded' ||
+                            type === 'ticker'
+                          ) {
+                            return renderWidgetRegion(region);
+                          }
 
-                                        if (allElements.length === 0) {
-                                            // Return empty canvas widget if no elements
-                                            return [{ ...widget, isElement: false }];
-                                        }
-
-                                        return allElements.map((el, elIdx) => ({
-                                            ...widget,
-                                            ...el,
-                                            uniqueKey: `${widget.widgetId}-${el.elementId || elIdx}`,
-                                            displayName: el.elementName || el.name || `Element ${elIdx + 1}`,
-                                            displayType: el.type,
-                                            isElement: true
-                                        }));
-                                    }
-                                    return [{ ...widget, uniqueKey: widget.widgetId, isElement: false }];
-                                }).map((item, idx) => (
-                                    <div 
-                                        key={item.uniqueKey} 
-                                        className="bg-gray-900/90 backdrop-blur-md text-white text-xs px-3 py-2 rounded-md border border-gray-700 shadow-lg cursor-pointer hover:bg-gray-800 hover:border-blue-500 hover:shadow-blue-500/20 transition-all flex flex-col gap-1 min-w-[120px] max-w-full relative group/widget"
-                                        title={`${item.moduleName} - ${item.displayName || item.name}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (item.isElement && item.displayType === 'text') {
-                                                handleTextDoubleClick(item, item.text, item.elementId);
-                                            } else if (item.isElement && (item.displayType === 'image' || item.displayType === 'video')) {
-                                                if (item.mediaId) {
-                                                    handleMediaPreview({ mediaId: item.mediaId, name: item.displayName, type: item.displayType });
-                                                }
-                                            } else {
-                                                handleWidgetClick(item);
-                                            }
-                                        }}
-                                    >
-                                        <div className="flex items-center justify-between gap-2 border-b border-gray-700/50 pb-1 mb-1">
-                                            <span className="text-blue-400 font-bold text-[10px] uppercase tracking-wider">{idx + 1}. {item.displayType || item.moduleName}</span>
-                                            {/* Icon based on type */}
-                                            {['image', 'localvideo', 'video'].includes((item.displayType || item.moduleName)?.toLowerCase()) ? (
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                                                </svg>
-                                            ) : (item.displayType || item.moduleName)?.toLowerCase() === 'text' ? (
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                                                </svg>
-                                            ) : (
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                        
-                                        <span className="truncate font-medium text-gray-200">{item.displayName || item.name || item.moduleName}</span>
-                                        {!item.isElement && <span className="text-[9px] text-gray-500">{item.duration}s</span>}
-
-                                        {/* Edit Button for Text Elements */}
-                                        {(item.displayType === 'text' || item.moduleName === 'text') && (
-                                            <button 
-                                                className="absolute top-1 right-1 opacity-0 group-hover/widget:opacity-100 transition-opacity bg-blue-600 text-white p-1 rounded hover:bg-blue-500"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleTextDoubleClick(item, item.text || getOptionValue(item, 'text'), item.elementId);
-                                                }}
-                                                title="Edit Text"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
-                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="flex items-center justify-center h-full w-full opacity-20">
-                                    <span className="text-[40px] font-thin text-white">+</span>
-                                </div>
-                            )}
-                        </div>
+                          // Playlist regions (images, videos, etc.) use preview HTML
+                          return renderPlaylistRegion(region);
+                        })}
                     </div>
-                ))}
+                  </div>
+                </div>
+
+                {/* Canvas info display */}
+                <div className="mt-4 text-center text-sm text-gray-500 font-mono">
+                  <p>Scale: {(canvasScale * 100).toFixed(0)}% • {layout.width} × {layout.height}px</p>
+                </div>
             </div>
-            
-            {/* Zoom indicator removed per user request */}
         </main>
 
         {/* Right Panel: Layout Details Sidebar */}

@@ -1,0 +1,23 @@
+Loading .env from: C:\Users\sales\OneDrive\Desktop\Signage-Platform\backend\.env
+XIBO_API_URL: https://portal.signage-lab.com/api
+XIBO_CLIENT_ID: bee440876add88197eebc48908be913f0aaf713a
+Fetching layouts from Xibo...
+[xiboClient] Authenticating with:
+  - URL: https://portal.signage-lab.com/api/authorize/access_token
+  - Client ID: bee440876add88197eebc48908be913f0aaf713a
+  - Client Secret length: 254
+[xiboClient] ✓ Authentication successful
+[xiboRequest] GET https://portal.signage-lab.com/api/layout { hasData: false, dataKeys: null, headers: [ 'Authorization' ] }
+Found 10 layouts:
+- [2988]  Beko brand video
+- [2979]  Beko HygieneShield
+- [2985]  Beko SteamCure
+- [2981]  Godrej Edge Ultima SemiAutomatic
+- [2973]  Godrej Split AC 1.5T SIH 18ITC3-WWR
+- [550] 0001-18906273877
+- [552] 0001-18906318902
+- [554] 0001-18906618597
+- [556] 0001-19008807897
+- [3677] 1-sample_layout
+
+❌ Layout 4870 NOT FOUND.

@@ -1,0 +1,39 @@
+Getting access token...
+Token obtained.
+Using Xibo API URL: https://portal.signage-lab.com/api
+
+Probing: /clock
+✅ STATUS: 200
+   Type: application/json
+
+Probing: /about
+✅ STATUS: 200
+   Type: application/json
+
+Probing: /region/preview/12145
+❌ STATUS: 500
+   Error Data: {"success":false,"error":404,"message":"404 Not Found","help":"The requested resource could not be found. Please verify the URI and try again."}
+
+Probing: /region/12145/preview
+❌ STATUS: 500
+   Error Data: {"success":false,"error":404,"message":"404 Not Found","help":"The requested resource could not be found. Please verify the URI and try again."}
+
+Probing: /layout/region/preview/12145
+❌ STATUS: 500
+   Error Data: {"success":false,"error":404,"message":"404 Not Found","help":"The requested resource could not be found. Please verify the URI and try again."}
+
+Probing: /playlist/widget/resource/12145/14229
+❌ STATUS: 500
+   Error Data: {"success":false,"error":404,"message":"404 Not Found","help":"The requested resource could not be found. Please verify the URI and try again."}
+
+Probing: /widget/preview/14229
+❌ STATUS: 500
+   Error Data: {"success":false,"error":404,"message":"404 Not Found","help":"The requested resource could not be found. Please verify the URI and try again."}
+
+Probing: /playlist/widget/14229/preview
+❌ STATUS: 500
+   Error Data: {"success":false,"error":405,"message":"405 Method Not Allowed","help":"The request method is not supported for the requested resource."}
+
+Probing: /playlist/widget/data/14229
+❌ STATUS: 500
+   Error Data: {"success":false,"error":405,"message":"405 Method Not Allowed","help":"The request method is not supported for the requested resource."}

@@ -78,3 +78,36 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Layout Designer Canvas Styles */
+.designer-region {
+  transition: all 0.2s ease;
+  overflow: hidden;
+}
+
+.designer-region.selected {
+  box-shadow: 0 0 0 2px #3b82f6;
+}
+
+.designer-region:hover {
+  border-color: rgba(59, 130, 246, 0.5) !important;
+}
+
+.designer-element {
+  pointer-events: none;
+}
+
+.layout-player {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.widget-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* Hide scrollbars in preview iframes if possible */
+.widget-preview iframe {
+  overflow: hidden;
+}

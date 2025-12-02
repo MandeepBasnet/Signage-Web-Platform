@@ -1,0 +1,19 @@
+Getting access token...
+Token obtained.
+
+Testing Region Preview...
+❌ Region Preview Failed: Request failed with status code 500
+{
+  "success": false,
+  "message": "404 Not Found",
+  "error": {
+    "success": false,
+    "error": 404,
+    "message": "404 Not Found",
+    "help": "The requested resource could not be found. Please verify the URI and try again."
+  }
+}
+
+Testing Widget Resource...
+❌ Widget Resource Failed: Request failed with status code 500
+"\n        <!DOCTYPE html>\n        <html>\n          <head><title>Error Loading Widget</title></head>\n          <body style=\"display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; font-family: sans-serif; background: #1f2937; color: #9ca3af;\">\n            <div style=\"text-align: center;\">\n              <h2>Error Loading Widget</h2>\n              <p>404 Not Found</p>\n            </div>\n          </body>\n        </html>\n      "

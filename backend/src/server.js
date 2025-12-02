@@ -8,6 +8,8 @@ import libraryRoutes from "./routes/libraryRoutes.js";
 import datasetRoutes from "./routes/datasetRoutes.js";
 import displayRoutes from "./routes/displayRoutes.js";
 import scheduleRoutes from "./routes/scheduleRoutes.js";
+import regionRoutes from "./routes/regionRoutes.js";
+import widgetRoutes from "./routes/widgetRoutes.js";
 
 dotenv.config();
 
@@ -58,6 +60,8 @@ app.use("/api/library", libraryRoutes);
 app.use("/api/datasets", datasetRoutes);
 app.use("/api/displays", displayRoutes);
 app.use("/api/schedule", scheduleRoutes);
+app.use("/api/regions", regionRoutes);
+app.use("/api/widgets", widgetRoutes);
 
 
 
