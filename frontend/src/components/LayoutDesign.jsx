@@ -62,6 +62,7 @@ export default function LayoutDesign() {
 
   // Text Editing State
   const [editingTextWidgetId, setEditingTextWidgetId] = useState(null);
+  const [editingElementId, setEditingElementId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState("");
   const [savingText, setSavingText] = useState(false);
 
@@ -161,14 +162,17 @@ export default function LayoutDesign() {
   useEffect(() => {
     if (!layout || !containerSize.width || !containerSize.height) return;
     
-    const padding = 60; 
+    const padding = 40; // Reduced padding to ensure visibility
+    const targetRatio = 0.75; // Target 75% of screen size (user asked for ~60%, but 75% is safer for visibility)
+    
     const availableWidth = containerSize.width - padding;
     const availableHeight = containerSize.height - padding;
     
     const scaleX = availableWidth / layout.width;
     const scaleY = availableHeight / layout.height;
     
-    setScale(Math.min(scaleX, scaleY)); 
+    // Scale to fit, then apply target ratio
+    setScale(Math.min(scaleX, scaleY) * targetRatio); 
   }, [layout, containerSize]);
 
   // Fetch Background Image
@@ -401,18 +405,15 @@ export default function LayoutDesign() {
     
     alert(`Dataset Widget: ${widget.name}\nID: ${dsId}\n\nColumns (${dsData.columns.length}): ${columnList}\n\nRows: ${dsData.rows.length}\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? '\n...' : ''}`);
   }
-  // Handle other widgets
-  else {
-      // Skip preview/alert for text and canvas widgets as they have inline editing
-      if (moduleName === 'text' || moduleName === 'canvas') return;
+    // Handle other widgets
+    else {
+        // Skip preview/alert for text and canvas widgets as they have inline editing
+        if (moduleName === 'text' || moduleName === 'canvas') return;
 
-      let details = `Type: ${widget.moduleName}\nName: ${widget.name}`;
-      if (widget.widgetOptions) {
-          details += `\nOptions (Count): ${widget.widgetOptions.length}`;
-      }
-      alert(details);
-  }
-};
+        // For other widgets, do nothing (no alert)
+        console.log(`Clicked widget: ${widget.moduleName} - ${widget.name}`);
+    }
+  };
 
 const handleMediaPreview = (item) => {
   const mediaId = item.mediaIds?.[0] || item.mediaId || item.media_id || item.id;
@@ -655,8 +656,9 @@ const handleMediaPreview = (item) => {
     }
   };
 
-  const handleTextDoubleClick = (widget, currentText) => {
+  const handleTextDoubleClick = (widget, currentText, elementId = null) => {
     setEditingTextWidgetId(String(widget.widgetId));
+    setEditingElementId(elementId);
     setEditingTextValue(currentText);
   };
 
@@ -679,8 +681,12 @@ const handleMediaPreview = (item) => {
         elementsData.forEach(page => {
           if (page.elements && Array.isArray(page.elements)) {
             page.elements.forEach(element => {
-              if (element.id === 'text' || element.type === 'text' || 
-                  (element.properties && element.properties.some(p => p.id === 'text'))) {
+              // If editing a specific element, check ID. Otherwise check generic text type.
+              const isTargetElement = editingElementId 
+                ? (element.elementId === editingElementId || element.id === editingElementId)
+                : (element.id === 'text' || element.type === 'text' || (element.properties && element.properties.some(p => p.id === 'text')));
+
+              if (isTargetElement) {
                 const textProp = element.properties?.find(p => p.id === 'text');
                 if (textProp) {
                   textProp.value = editingTextValue;
@@ -695,26 +701,6 @@ const handleMediaPreview = (item) => {
       if (!updated) {
         throw new Error("Could not find text element to update");
       }
-
-      // Prepare the update payload
-      // We need to update the 'elements' option in widgetOptions
-      // The Xibo API for widget update usually expects the options as key-value pairs in the body
-      // or as a specific structure depending on the endpoint.
-      // Based on layoutController.js updateWidget, it sends req.body directly.
-      // We'll construct the body to match what Xibo likely expects for updating options.
-      
-      // Re-construct the widgetOptions array with the updated elements
-      const updatedOptions = widget.widgetOptions.map(opt => {
-        if (opt.option === 'elements') {
-          return { ...opt, value: JSON.stringify(elementsData) };
-        }
-        return opt;
-      });
-
-      // For Xibo API PUT /playlist/widget/{id}, we typically send the options we want to update.
-      // However, the structure might vary. Let's try sending the specific option we changed.
-      // If the API expects a specific format (like form-data or nested object), we might need to adjust.
-      // Assuming standard Xibo API behavior where we can pass option names as keys.
       
       const payload = {
         elements: JSON.stringify(elementsData)
@@ -738,6 +724,7 @@ const handleMediaPreview = (item) => {
       await fetchLayoutDetails();
       
       setEditingTextWidgetId(null);
+      setEditingElementId(null);
       setEditingTextValue("");
       alert("Text updated successfully!");
     } catch (err) {
@@ -988,36 +975,106 @@ const handleMediaPreview = (item) => {
                         </div>
                         
                         {/* Widgets Visual Representation */}
-                        <div className="w-full h-full p-8 overflow-hidden flex flex-col gap-1 content-start flex-wrap">
+                        <div className="w-full h-full p-2 overflow-hidden flex flex-col gap-2 content-start flex-wrap">
                             {region.widgets && region.widgets.length > 0 ? (
-                                region.widgets.map((widget, wIdx) => (
+                                region.widgets.flatMap((widget, wIdx) => {
+                                    // If it's a Canvas widget, split into elements
+                                    if (widget.moduleName?.toLowerCase() === 'canvas' || widget.moduleName?.toLowerCase() === 'global') {
+                                        const textElements = extractTextElements(widget);
+                                        // Extract media elements
+                                        const elementsOption = getOptionValue(widget, 'elements');
+                                        let mediaElements = [];
+                                        try {
+                                            const elementsData = JSON.parse(elementsOption || '[]');
+                                            if (Array.isArray(elementsData)) {
+                                                elementsData.forEach(page => {
+                                                    page.elements?.forEach(element => {
+                                                        if (element.mediaId || element.id?.includes('image') || element.id?.includes('video')) {
+                                                            mediaElements.push({
+                                                                ...element,
+                                                                type: element.id?.includes('video') ? 'video' : 'image',
+                                                                name: element.elementName || element.id
+                                                            });
+                                                        }
+                                                    });
+                                                });
+                                            }
+                                        } catch(e) {}
+
+                                        const allElements = [
+                                            ...textElements.map(el => ({ ...el, type: 'text', isElement: true })),
+                                            ...mediaElements.map(el => ({ ...el, type: el.type || 'image', isElement: true }))
+                                        ];
+
+                                        if (allElements.length === 0) {
+                                            // Return empty canvas widget if no elements
+                                            return [{ ...widget, isElement: false }];
+                                        }
+
+                                        return allElements.map((el, elIdx) => ({
+                                            ...widget,
+                                            ...el,
+                                            uniqueKey: `${widget.widgetId}-${el.elementId || elIdx}`,
+                                            displayName: el.elementName || el.name || `Element ${elIdx + 1}`,
+                                            displayType: el.type,
+                                            isElement: true
+                                        }));
+                                    }
+                                    return [{ ...widget, uniqueKey: widget.widgetId, isElement: false }];
+                                }).map((item, idx) => (
                                     <div 
-                                        key={widget.widgetId} 
-                                        className="bg-black/60 backdrop-blur-sm text-white text-[10px] px-2 py-1 rounded border border-white/10 cursor-pointer hover:bg-blue-600/80 hover:border-blue-400 transition-all flex items-center gap-2 max-w-full shadow-sm"
-                                        title={`${widget.moduleName} - ${widget.name}`}
+                                        key={item.uniqueKey} 
+                                        className="bg-gray-900/90 backdrop-blur-md text-white text-xs px-3 py-2 rounded-md border border-gray-700 shadow-lg cursor-pointer hover:bg-gray-800 hover:border-blue-500 hover:shadow-blue-500/20 transition-all flex flex-col gap-1 min-w-[120px] max-w-full relative group/widget"
+                                        title={`${item.moduleName} - ${item.displayName || item.name}`}
                                         onClick={(e) => {
                                             e.stopPropagation();
-                                            handleWidgetClick(widget);
+                                            if (item.isElement && item.displayType === 'text') {
+                                                handleTextDoubleClick(item, item.text, item.elementId);
+                                            } else if (item.isElement && (item.displayType === 'image' || item.displayType === 'video')) {
+                                                if (item.mediaId) {
+                                                    handleMediaPreview({ mediaId: item.mediaId, name: item.displayName, type: item.displayType });
+                                                }
+                                            } else {
+                                                handleWidgetClick(item);
+                                            }
                                         }}
                                     >
-                                        <span className="text-blue-300 font-bold">{wIdx + 1}.</span>
+                                        <div className="flex items-center justify-between gap-2 border-b border-gray-700/50 pb-1 mb-1">
+                                            <span className="text-blue-400 font-bold text-[10px] uppercase tracking-wider">{idx + 1}. {item.displayType || item.moduleName}</span>
+                                            {/* Icon based on type */}
+                                            {['image', 'localvideo', 'video'].includes((item.displayType || item.moduleName)?.toLowerCase()) ? (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : (item.displayType || item.moduleName)?.toLowerCase() === 'text' ? (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
+                                                </svg>
+                                            ) : (
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
+                                                </svg>
+                                            )}
+                                        </div>
                                         
-                                        {/* Icon based on type */}
-                                        {['image', 'localvideo', 'video'].includes(widget.moduleName?.toLowerCase()) ? (
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-green-400" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
-                                            </svg>
-                                        ) : widget.moduleName?.toLowerCase() === 'text' ? (
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
-                                                <path fillRule="evenodd" d="M3 5a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM3 15a1 1 0 011-1h6a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
-                                            </svg>
-                                        ) : (
-                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-purple-400" viewBox="0 0 20 20" fill="currentColor">
-                                                <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z" />
-                                            </svg>
+                                        <span className="truncate font-medium text-gray-200">{item.displayName || item.name || item.moduleName}</span>
+                                        {!item.isElement && <span className="text-[9px] text-gray-500">{item.duration}s</span>}
+
+                                        {/* Edit Button for Text Elements */}
+                                        {(item.displayType === 'text' || item.moduleName === 'text') && (
+                                            <button 
+                                                className="absolute top-1 right-1 opacity-0 group-hover/widget:opacity-100 transition-opacity bg-blue-600 text-white p-1 rounded hover:bg-blue-500"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleTextDoubleClick(item, item.text || getOptionValue(item, 'text'), item.elementId);
+                                                }}
+                                                title="Edit Text"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                </svg>
+                                            </button>
                                         )}
-                                        
-                                        <span className="truncate max-w-[100px]">{widget.name || widget.moduleName}</span>
                                     </div>
                                 ))
                             ) : (
@@ -1063,21 +1120,73 @@ const handleMediaPreview = (item) => {
                         {/* Widgets List */}
                         <div className="space-y-3 pl-2">
                             {region.widgets && region.widgets.length > 0 ? (
-                                region.widgets.map((widget, wIdx) => {
-                                    const moduleName = widget.moduleName?.toLowerCase();
+                                region.widgets.flatMap((widget, wIdx) => {
+                                    // If it's a Canvas widget, split into elements
+                                    if (widget.moduleName?.toLowerCase() === 'canvas' || widget.moduleName?.toLowerCase() === 'global') {
+                                        const textElements = extractTextElements(widget);
+                                        const elementsOption = getOptionValue(widget, 'elements');
+                                        let mediaElements = [];
+                                        try {
+                                            const elementsData = JSON.parse(elementsOption || '[]');
+                                            if (Array.isArray(elementsData)) {
+                                                elementsData.forEach(page => {
+                                                    page.elements?.forEach(element => {
+                                                        if (element.mediaId || element.id?.includes('image') || element.id?.includes('video')) {
+                                                            mediaElements.push({
+                                                                ...element,
+                                                                type: element.id?.includes('video') ? 'video' : 'image',
+                                                                name: element.elementName || element.id
+                                                            });
+                                                        }
+                                                    });
+                                                });
+                                            }
+                                        } catch(e) {}
+
+                                        const allElements = [
+                                            ...textElements.map(el => ({ ...el, type: 'text', isElement: true })),
+                                            ...mediaElements.map(el => ({ ...el, type: el.type || 'image', isElement: true }))
+                                        ];
+
+                                        if (allElements.length === 0) {
+                                            return [{ ...widget, isElement: false }];
+                                        }
+
+                                        return allElements.map((el, elIdx) => ({
+                                            ...widget,
+                                            ...el,
+                                            uniqueKey: `${widget.widgetId}-${el.elementId || elIdx}`,
+                                            displayName: el.elementName || el.name || `Element ${elIdx + 1}`,
+                                            displayType: el.type,
+                                            isElement: true
+                                        }));
+                                    }
+                                    return [{ ...widget, uniqueKey: widget.widgetId, isElement: false }];
+                                }).map((widget, wIdx) => {
+                                    const moduleName = (widget.displayType || widget.moduleName)?.toLowerCase();
                                     return (
                                     <div 
-                                        key={widget.widgetId}
+                                        key={widget.uniqueKey}
                                         className="bg-gray-800/40 hover:bg-gray-800 rounded-lg p-3 cursor-pointer transition-all border border-gray-700/50 hover:border-blue-500/30 group relative overflow-hidden"
-                                        onClick={() => handleWidgetClick(widget)}
+                                        onClick={() => {
+                                            if (widget.isElement && widget.displayType === 'text') {
+                                                handleTextDoubleClick(widget, widget.text, widget.elementId);
+                                            } else if (widget.isElement && (widget.displayType === 'image' || widget.displayType === 'video')) {
+                                                if (widget.mediaId) {
+                                                    handleMediaPreview({ mediaId: widget.mediaId, name: widget.displayName, type: widget.displayType });
+                                                }
+                                            } else {
+                                                handleWidgetClick(widget);
+                                            }
+                                        }}
                                     >
                                         <div className="flex gap-3">
                                             {/* Left: Thumbnail or Icon */}
                                             <div className="shrink-0 w-16 h-16 bg-gray-900 rounded-md border border-gray-700 flex items-center justify-center overflow-hidden">
-                                                {widget.mediaIds?.length > 0 ? (
+                                                {widget.mediaIds?.length > 0 || widget.mediaId ? (
                                                     <img 
-                                                        src={`${API_BASE_URL}/library/${widget.mediaIds[0]}/thumbnail?width=100&height=100&token=${getStoredToken()}`}
-                                                        alt={widget.name}
+                                                        src={`${API_BASE_URL}/library/${widget.mediaId || widget.mediaIds?.[0]}/thumbnail?width=100&height=100&token=${getStoredToken()}`}
+                                                        alt={widget.displayName || widget.name}
                                                         className="w-full h-full object-cover"
                                                         onError={(e) => {
                                                             e.target.style.display = 'none';
@@ -1087,7 +1196,7 @@ const handleMediaPreview = (item) => {
                                                 ) : null}
                                                 
                                                 {/* Fallback Icon (shown if no image or error) */}
-                                                <div className={`w-full h-full flex items-center justify-center ${widget.mediaIds?.length > 0 ? 'hidden' : 'flex'}`}>
+                                                <div className={`w-full h-full flex items-center justify-center ${widget.mediaIds?.length > 0 || widget.mediaId ? 'hidden' : 'flex'}`}>
                                                     {moduleName === 'text' ? (
                                                         <span className="text-2xl">T</span>
                                                     ) : moduleName === 'dataset' ? (
@@ -1108,18 +1217,20 @@ const handleMediaPreview = (item) => {
                                                         moduleName === 'dataset' ? 'bg-purple-500/10 text-purple-400' :
                                                         'bg-blue-500/10 text-blue-400'
                                                     }`}>
-                                                        {widget.moduleName}
+                                                        {moduleName}
                                                     </span>
-                                                    <span className="text-gray-500 text-xs ml-auto flex items-center gap-1">
-                                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                        </svg>
-                                                        {widget.duration}s
-                                                    </span>
+                                                    {!widget.isElement && (
+                                                        <span className="text-gray-500 text-xs ml-auto flex items-center gap-1">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            {widget.duration}s
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 
-                                                <h4 className="text-sm font-medium text-gray-200 truncate" title={widget.name}>
-                                                    {widget.name || "Untitled Widget"}
+                                                <h4 className="text-sm font-medium text-gray-200 truncate" title={widget.displayName || widget.name}>
+                                                    {widget.displayName || widget.name || "Untitled Widget"}
                                                 </h4>
                                                 
                                                 {/* Extra Info based on type */}
@@ -1137,6 +1248,7 @@ const handleMediaPreview = (item) => {
                                                                     <button
                                                                         onClick={() => {
                                                                             setEditingTextWidgetId(null);
+                                                                            setEditingElementId(null);
                                                                             setEditingTextValue("");
                                                                         }}
                                                                         className="px-2 py-1 text-xs text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
