@@ -162,8 +162,8 @@ export default function LayoutDesign() {
   useEffect(() => {
     if (!layout || !containerSize.width || !containerSize.height) return;
     
-    const padding = 40; // Reduced padding to ensure visibility
-    const targetRatio = 0.75; // Target 75% of screen size (user asked for ~60%, but 75% is safer for visibility)
+    const padding = 60; // Padding around canvas
+    const targetRatio = 0.4; // Target 40% of screen size to ensure all regions visible
     
     const availableWidth = containerSize.width - padding;
     const availableHeight = containerSize.height - padding;
@@ -1087,13 +1087,7 @@ const handleMediaPreview = (item) => {
                 ))}
             </div>
             
-            {/* Zoom Info */}
-            <div className="absolute bottom-6 right-6 bg-gray-900/90 backdrop-blur text-white text-xs px-3 py-1.5 rounded-full border border-gray-700 shadow-lg flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-                </svg>
-                {Math.round(scale * 100)}%
-            </div>
+            {/* Zoom indicator removed per user request */}
         </main>
 
         {/* Right Panel: Layout Details Sidebar */}
@@ -1183,7 +1177,7 @@ const handleMediaPreview = (item) => {
                                         <div className="flex gap-3">
                                             {/* Left: Thumbnail or Icon */}
                                             <div className="shrink-0 w-16 h-16 bg-gray-900 rounded-md border border-gray-700 flex items-center justify-center overflow-hidden">
-                                                {widget.mediaIds?.length > 0 || widget.mediaId ? (
+                                                {(widget.mediaIds?.length > 0 || widget.mediaId) && moduleName !== 'text' && moduleName !== 'canvas' ? (
                                                     <img 
                                                         src={`${API_BASE_URL}/library/${widget.mediaId || widget.mediaIds?.[0]}/thumbnail?width=100&height=100&token=${getStoredToken()}`}
                                                         alt={widget.displayName || widget.name}
@@ -1196,7 +1190,7 @@ const handleMediaPreview = (item) => {
                                                 ) : null}
                                                 
                                                 {/* Fallback Icon (shown if no image or error) */}
-                                                <div className={`w-full h-full flex items-center justify-center ${widget.mediaIds?.length > 0 || widget.mediaId ? 'hidden' : 'flex'}`}>
+                                                <div className={`w-full h-full flex items-center justify-center ${(widget.mediaIds?.length > 0 || widget.mediaId) &&  moduleName !== 'text' && moduleName !== 'canvas' ? 'hidden' : 'flex'}`}>
                                                     {moduleName === 'text' ? (
                                                         <span className="text-2xl">T</span>
                                                     ) : moduleName === 'dataset' ? (
@@ -1278,7 +1272,7 @@ const handleMediaPreview = (item) => {
                                                         ) : (
                                                             <div className="flex flex-col gap-1">
                                                                 <span 
-                                                                    className="truncate cursor-text hover:text-yellow-300 transition-colors" 
+                                                                    className="text-base font-medium text-gray-100 cursor-text hover:text-yellow-300 transition-colors leading-snug" 
                                                                     title="Double click to edit"
                                                                     onDoubleClick={(e) => {
                                                                         e.stopPropagation();
