@@ -14,7 +14,6 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
 
   const loginBody = useMemo(
     () => ({
@@ -68,16 +67,7 @@ export default function Login() {
 
       saveAuth(data.token, data.user ?? null);
 
-      if (!rememberMe) {
-        window.addEventListener(
-          "beforeunload",
-          () => {
-            clearAuth();
-          },
-          { once: true }
-        );
-      }
-
+      // Auth is now always persisted (Remember Me is always enabled)
       navigate("/dashboard", { replace: true });
     } catch (err) {
       setError(err.message || "Login failed. Please try again.");
@@ -193,19 +183,6 @@ export default function Login() {
                     </button>
                   </div>
                 </div>
-
-                  {/* Checkbox */}
-                  <div className="flex items-center mt-2.5">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer text-[#1a1a1a] bg-transparent">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="cursor-pointer w-4 h-4 accent-blue-900 bg-white"
-                      />
-                      <span>Remember Me</span>
-                    </label>
-                  </div>
 
                 {/* Login Button */}
                 <button
