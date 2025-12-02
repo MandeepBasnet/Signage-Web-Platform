@@ -1,0 +1,12 @@
+Fetching details for layout 3677...
+[xiboClient] Authenticating with:
+  - URL: https://portal.signage-lab.com/api/authorize/access_token
+  - Client ID: bee440876add88197eebc48908be913f0aaf713a
+  - Client Secret length: 254
+[xiboClient] Γ£ô Authentication successful
+ACCESS_TOKEN:eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJpbmZvQHhpYm9zaWduYWdlLmNvbSIsImF1ZCI6ImJlZTQ0MDg3NmFkZDg4MTk3ZWViYzQ4OTA4YmU5MTNmMGFhZjcxM2EiLCJqdGkiOiI0Yjc1Njg3OTgyZWJhZjg4MzNkZWM2MDk1Yjc3MTRiZTA1NTE1NGZhYjNkN2VkNWU3MjBiNjNkZWE3NWIyOWI4Yjc2M2Y1NjJjNmJjMzhlMCIsImlhdCI6MTc2NDY5MDY5MS43MzExNjYsIm5iZiI6MTc2NDY5MDY5MS43MzEyMTEsImV4cCI6MTc2NDY5NDI5MS43MjgzNCwic3ViIjoiMSIsInNjb3BlcyI6WyJhbGwiXX0.jI2RepMcICkKKvQwRUI9ocPovIty2qBO40oPA6L_a4lKMLk_5WvAktbtnLO_LWiE0owqUATsMKruFYq4pPmV5YKPTEMJbqKbxtgS1Nlaork5MhIiQzfnlCGrBDqRPqLEXOLQ8x7bDR1SG8fwN4bdIxvxE2RgAxlnLwB8wgkjW8X2JAlSxS5tXVl2NGFqi0oJLC8mjGQpYYIRz6NbcwgcInNmH1DphzArm_zHgTCQHBOoCLSaPMRScCoW7evZVKHJzlDbhB7bDFHtVD-nph419RR2vjS0rhNyLNPajbQK9Hx8-Uj5Vo3nwt32LjQGJ3pbbOLoblTVrSuxVi9rEfHAKQ
+Got access token: Yes
+[xiboRequest] GET https://portal.signage-lab.com/api/layout { hasData: false, dataKeys: null, headers: [ 'Authorization' ] }
+[xiboRequest] GET https://portal.signage-lab.com/api/layout?layoutId=3677&embed=regions,playlists,widgets { hasData: false, dataKeys: null, headers: [ 'Authorization' ] }
+Layout found: 1-sample_layout
+Layout details saved to C:\Users\sales\OneDrive\Desktop\Signage-Platform\backend\layout_3677_dump.json

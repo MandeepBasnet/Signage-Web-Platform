@@ -999,19 +999,19 @@ const handleMediaPreview = (item) => {
   
     // Find the canvas region (global elements overlay)
     const canvasRegion = layout.regions.find(r => 
-      r.regionPlaylist?.widgets?.some(w => w.type === 'canvas')
+      r.type === 'canvas' || r.regionPlaylist?.widgets?.some(w => w.type === 'canvas' || w.type === 'global')
     );
   
     if (!canvasRegion) return null;
   
-    const canvasWidget = canvasRegion.regionPlaylist.widgets.find(w => w.type === 'canvas');
+    // The widget type is 'global' in the dump, but could be 'canvas' in other contexts. Check both.
+    const canvasWidget = canvasRegion.regionPlaylist.widgets.find(w => w.type === 'canvas' || w.type === 'global');
     if (!canvasWidget) return null;
   
     // Parse elements from widgetOptions
     let elements = [];
     try {
       // widgetOptions is already an object/array in our state, not a string
-      // But we need to check if it needs parsing or searching
       let options = canvasWidget.widgetOptions;
       if (typeof options === 'string') {
         options = JSON.parse(options);
@@ -1019,7 +1019,19 @@ const handleMediaPreview = (item) => {
       
       const elementsOpt = options.find(opt => opt.option === 'elements');
       if (elementsOpt?.value) {
-        elements = typeof elementsOpt.value === 'string' ? JSON.parse(elementsOpt.value) : elementsOpt.value;
+        const pages = typeof elementsOpt.value === 'string' ? JSON.parse(elementsOpt.value) : elementsOpt.value;
+        // The structure is Array<{ elements: Array<Element> }>
+        if (Array.isArray(pages)) {
+           elements = pages.flatMap(page => page.elements || []).map(el => ({
+             ...el,
+             elementType: el.id, // Map 'id' to 'elementType'
+             // Ensure numeric values are numbers
+             width: Number(el.width),
+             height: Number(el.height),
+             top: Number(el.top),
+             left: Number(el.left),
+           }));
+        }
       }
     } catch (error) {
       console.error('Error parsing global elements:', error);
