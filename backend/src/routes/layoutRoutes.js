@@ -5,6 +5,8 @@ import {
   getLayoutPreview,
   getLayouts,
   publishLayout,
+  checkoutLayout,
+  updateWidget,
 } from "../controllers/layoutController.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
 
@@ -16,5 +18,7 @@ router.get("/thumbnail/:layoutId", verifyToken, getLayoutThumbnail);
 router.get("/:layoutId/preview", verifyToken, getLayoutPreview);
 router.get("/:layoutId", verifyToken, getLayoutDetails);
 router.put("/publish/:layoutId", verifyToken, publishLayout);
+router.put("/checkout/:layoutId", verifyToken, checkoutLayout);
+router.put("/widgets/:widgetId", verifyToken, updateWidget);
 
 export default router;

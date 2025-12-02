@@ -46,6 +46,26 @@ export const publishLayout = async (req, res) => {
   }
 };
 
+export const checkoutLayout = async (req, res) => {
+  const { layoutId } = req.params;
+
+  try {
+    const { token } = getUserContext(req);
+
+    // Xibo API: PUT /layout/checkout/{layoutId}
+    const result = await xiboRequest(
+      `/layout/checkout/${layoutId}`,
+      "PUT",
+      null,
+      token
+    );
+
+    res.json(result);
+  } catch (err) {
+    handleControllerError(res, err, "Failed to checkout layout");
+  }
+};
+
 export const getLayoutDetails = async (req, res) => {
   try {
     const { layoutId } = req.params;
@@ -262,4 +282,24 @@ export const getLayoutPreview = async (req, res) => {
             error: err.message
         });
     }
+};
+export const updateWidget = async (req, res) => {
+  const { widgetId } = req.params;
+  const widgetData = req.body;
+
+  try {
+    const { token } = getUserContext(req);
+
+    // Xibo API expects PUT /playlist/widget/{widgetId}
+    const result = await xiboRequest(
+      `/playlist/widget/${widgetId}`,
+      "PUT",
+      widgetData,
+      token
+    );
+
+    res.json(result);
+  } catch (err) {
+    handleControllerError(res, err, "Failed to update widget");
+  }
 };

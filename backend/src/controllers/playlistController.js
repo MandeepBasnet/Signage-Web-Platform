@@ -405,13 +405,19 @@ export const getPlaylistDetails = async (req, res) => {
               );
             }
           } catch (widgetDataError) {
-            console.warn(
-              `Could not fetch data for widget ${widgetId}:`,
-              widgetDataError.message
-            );
+            // Suppress 405 Method Not Allowed errors as some widgets don't support data retrieval
+            if (widgetDataError.message && widgetDataError.message.includes('405')) {
+                console.log(`Widget ${widgetId} does not support data retrieval (405). Using basic info.`);
+            } else {
+                console.warn(
+                `Could not fetch data for widget ${widgetId}:`,
+                widgetDataError.message
+                );
+            }
+            
             // If widget data fetch fails but widget has basic info, include it
             if (widget.name || widget.type) {
-              console.log(`Including widget ${widgetId} with basic info`);
+              // console.log(`Including widget ${widgetId} with basic info`);
               mediaItems.push({
                 ...widget,
                 widgetId: widgetId,

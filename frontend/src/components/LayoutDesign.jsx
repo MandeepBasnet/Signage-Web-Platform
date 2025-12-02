@@ -55,6 +55,16 @@ export default function LayoutDesign() {
   const [publishError, setPublishError] = useState(null);
   const [publishSuccess, setPublishSuccess] = useState(false);
 
+  // Checkout Layout State
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [checkoutError, setCheckoutError] = useState(null);
+  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+
+  // Text Editing State
+  const [editingTextWidgetId, setEditingTextWidgetId] = useState(null);
+  const [editingTextValue, setEditingTextValue] = useState("");
+  const [savingText, setSavingText] = useState(false);
+
   // Refs
   const containerRef = useRef(null);
 
@@ -325,7 +335,6 @@ export default function LayoutDesign() {
   };
 
   const handleWidgetClick = (widget) => {
-    console.log("Widget clicked:", widget);
     const moduleName = widget.moduleName?.toLowerCase();
     
     // Handle media widgets
@@ -387,33 +396,36 @@ export default function LayoutDesign() {
         const rowData = dsData.columns.map(col => 
           row[col.heading] || row[`col_${col.dataSetColumnId}`] || '-'
         ).join(' | ');
-        return `Row ${idx + 1}: ${rowData}`;
-      }).join('\n');
-      
-      alert(`Dataset Widget: ${widget.name}\nID: ${dsId}\n\nColumns (${dsData.columns.length}): ${columnList}\n\nRows: ${dsData.rows.length}\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? '\n...' : ''}`);
-    }
-    // Handle other widgets
-    else {
-        let details = `Type: ${widget.moduleName}\nName: ${widget.name}`;
-        if (widget.widgetOptions) {
-            details += `\nOptions (Count): ${widget.widgetOptions.length}`;
-        }
-        alert(details);
-    }
-  };
-
-  const handleMediaPreview = (item) => {
-    const mediaId = item.mediaIds?.[0] || item.mediaId || item.media_id || item.id;
-    const token = localStorage.getItem("auth_token");
-    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+      return `Row ${idx + 1}: ${rowData}`;
+    }).join('\n');
     
-    setPreviewMedia({
-      url: previewUrl,
-      type: item.type || item.moduleName || item.mediaType,
-      name: item.name || `Media ${mediaId}`
-    });
-    setPreviewModalOpen(true);
-  };
+    alert(`Dataset Widget: ${widget.name}\nID: ${dsId}\n\nColumns (${dsData.columns.length}): ${columnList}\n\nRows: ${dsData.rows.length}\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? '\n...' : ''}`);
+  }
+  // Handle other widgets
+  else {
+      // Skip preview/alert for text and canvas widgets as they have inline editing
+      if (moduleName === 'text' || moduleName === 'canvas') return;
+
+      let details = `Type: ${widget.moduleName}\nName: ${widget.name}`;
+      if (widget.widgetOptions) {
+          details += `\nOptions (Count): ${widget.widgetOptions.length}`;
+      }
+      alert(details);
+  }
+};
+
+const handleMediaPreview = (item) => {
+  const mediaId = item.mediaIds?.[0] || item.mediaId || item.media_id || item.id;
+  const token = localStorage.getItem("auth_token");
+  const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+  
+  setPreviewMedia({
+    url: previewUrl,
+    type: item.type || item.moduleName || item.mediaType,
+    name: item.name || `Media ${mediaId}`
+  });
+  setPreviewModalOpen(true);
+};
 
   const handleDeletePlaylistMedia = async (playlistId, widgetId, mediaName) => {
     if (!confirm(`Are you sure you want to remove "${mediaName}" from the playlist?`)) {
@@ -599,6 +611,143 @@ export default function LayoutDesign() {
     }
   };
 
+  const handleCheckoutLayout = async () => {
+    try {
+      setCheckingOut(true);
+      setCheckoutError(null);
+      setCheckoutSuccess(false);
+
+      const response = await fetch(
+        `${API_BASE_URL}/layouts/checkout/${layoutId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to checkout layout");
+      }
+
+      const data = await response.json();
+      setCheckoutSuccess(true);
+      
+      // Refresh layout data to show updated status
+      await fetchLayoutDetails();
+      
+      // Show success message
+      alert("Layout checked out successfully! You can now edit.");
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => {
+        setCheckoutSuccess(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error checking out layout:", err);
+      setCheckoutError(err.message);
+      alert(`Failed to checkout layout: ${err.message}`);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
+  const handleTextDoubleClick = (widget, currentText) => {
+    setEditingTextWidgetId(String(widget.widgetId));
+    setEditingTextValue(currentText);
+  };
+
+  const handleTextSave = async (widget) => {
+    try {
+      setSavingText(true);
+      
+      // Parse current elements to find the text element
+      const elementsOption = getOptionValue(widget, 'elements');
+      let elementsData = [];
+      try {
+        elementsData = JSON.parse(elementsOption || '[]');
+      } catch (e) {
+        console.error('Failed to parse elements JSON', e);
+      }
+
+      // Update the text value in the elements structure
+      let updated = false;
+      if (Array.isArray(elementsData)) {
+        elementsData.forEach(page => {
+          if (page.elements && Array.isArray(page.elements)) {
+            page.elements.forEach(element => {
+              if (element.id === 'text' || element.type === 'text' || 
+                  (element.properties && element.properties.some(p => p.id === 'text'))) {
+                const textProp = element.properties?.find(p => p.id === 'text');
+                if (textProp) {
+                  textProp.value = editingTextValue;
+                  updated = true;
+                }
+              }
+            });
+          }
+        });
+      }
+
+      if (!updated) {
+        throw new Error("Could not find text element to update");
+      }
+
+      // Prepare the update payload
+      // We need to update the 'elements' option in widgetOptions
+      // The Xibo API for widget update usually expects the options as key-value pairs in the body
+      // or as a specific structure depending on the endpoint.
+      // Based on layoutController.js updateWidget, it sends req.body directly.
+      // We'll construct the body to match what Xibo likely expects for updating options.
+      
+      // Re-construct the widgetOptions array with the updated elements
+      const updatedOptions = widget.widgetOptions.map(opt => {
+        if (opt.option === 'elements') {
+          return { ...opt, value: JSON.stringify(elementsData) };
+        }
+        return opt;
+      });
+
+      // For Xibo API PUT /playlist/widget/{id}, we typically send the options we want to update.
+      // However, the structure might vary. Let's try sending the specific option we changed.
+      // If the API expects a specific format (like form-data or nested object), we might need to adjust.
+      // Assuming standard Xibo API behavior where we can pass option names as keys.
+      
+      const payload = {
+        elements: JSON.stringify(elementsData)
+      };
+
+      const response = await fetch(`${API_BASE_URL}/layouts/widgets/${widget.widgetId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to update text");
+      }
+
+      // Refresh layout to show changes
+      await fetchLayoutDetails();
+      
+      setEditingTextWidgetId(null);
+      setEditingTextValue("");
+      alert("Text updated successfully!");
+    } catch (err) {
+      console.error("Error updating text:", err);
+      alert(`Failed to update text: ${err.message}`);
+    } finally {
+      setSavingText(false);
+    }
+  };
+
   const getRegionSummary = (widgets) => {
       if (!widgets || widgets.length === 0) return "Empty";
       
@@ -696,6 +845,45 @@ export default function LayoutDesign() {
                 Designer Mode
             </div>
             
+            {/* Checkout Layout Button - Show if not draft (assuming 1 is draft) */}
+            {layout.publishedStatusId !== 1 && (
+                <button
+                onClick={handleCheckoutLayout}
+                disabled={checkingOut}
+                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-2 mr-2 ${
+                    checkoutSuccess
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    : checkingOut
+                    ? 'bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed'
+                    : 'bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30'
+                }`}
+                >
+                {checkingOut ? (
+                    <>
+                    <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Checking out...
+                    </>
+                ) : checkoutSuccess ? (
+                    <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Checked Out
+                    </>
+                ) : (
+                    <>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    Checkout
+                    </>
+                )}
+                </button>
+            )}
+
             {/* Publish Layout Button */}
             <button
               onClick={handlePublishLayout}
@@ -936,8 +1124,109 @@ export default function LayoutDesign() {
                                                 
                                                 {/* Extra Info based on type */}
                                                 <div className="text-xs text-gray-500 mt-1">
-                                                    {moduleName === 'text' ? (
-                                                        <span className="truncate">{getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '') || "Text Content"}</span>
+                                                    {moduleName === 'text' || moduleName === 'canvas' ? (
+                                                        String(editingTextWidgetId) === String(widget.widgetId) ? (
+                                                            <div className="mt-2 space-y-2" onClick={e => e.stopPropagation()}>
+                                                                <textarea
+                                                                    value={editingTextValue}
+                                                                    onChange={(e) => setEditingTextValue(e.target.value)}
+                                                                    className="w-full bg-gray-900 text-gray-200 text-xs p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none resize-y min-h-[80px]"
+                                                                    placeholder="Enter text content..."
+                                                                />
+                                                                <div className="flex justify-end gap-2">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            setEditingTextWidgetId(null);
+                                                                            setEditingTextValue("");
+                                                                        }}
+                                                                        className="px-2 py-1 text-xs text-gray-400 hover:text-white bg-gray-700 hover:bg-gray-600 rounded transition-colors"
+                                                                        disabled={savingText}
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleTextSave(widget)}
+                                                                        className="px-2 py-1 text-xs text-white bg-blue-600 hover:bg-blue-500 rounded transition-colors flex items-center gap-1"
+                                                                        disabled={savingText}
+                                                                    >
+                                                                        {savingText ? (
+                                                                            <>
+                                                                                <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                                </svg>
+                                                                                Saving...
+                                                                            </>
+                                                                        ) : (
+                                                                            "Save"
+                                                                        )}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex flex-col gap-1">
+                                                                <span 
+                                                                    className="truncate cursor-text hover:text-yellow-300 transition-colors" 
+                                                                    title="Double click to edit"
+                                                                    onDoubleClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        if (!text) {
+                                                                            try {
+                                                                                const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
+                                                                                elements.forEach(page => {
+                                                                                    page.elements?.forEach(el => {
+                                                                                        if (el.id === 'text' || el.type === 'text') {
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                        }
+                                                                                    });
+                                                                                });
+                                                                            } catch(e) {}
+                                                                        }
+                                                                        handleTextDoubleClick(widget, text || "");
+                                                                    }}
+                                                                >
+                                                                    {(() => {
+                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        if (!text) {
+                                                                            try {
+                                                                                const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
+                                                                                elements.forEach(page => {
+                                                                                    page.elements?.forEach(el => {
+                                                                                        if (el.id === 'text' || el.type === 'text') {
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                        }
+                                                                                    });
+                                                                                });
+                                                                            } catch(e) {}
+                                                                        }
+                                                                        return text || "Text Content";
+                                                                    })()}
+                                                                </span>
+                                                                <button 
+                                                                    className="text-[10px] text-blue-400 hover:text-blue-300 self-start underline"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        if (!text) {
+                                                                            try {
+                                                                                const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
+                                                                                elements.forEach(page => {
+                                                                                    page.elements?.forEach(el => {
+                                                                                        if (el.id === 'text' || el.type === 'text') {
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                        }
+                                                                                    });
+                                                                                });
+                                                                            } catch(e) {}
+                                                                        }
+                                                                        handleTextDoubleClick(widget, text || "");
+                                                                    }}
+                                                                >
+                                                                    Edit Text
+                                                                </button>
+                                                            </div>
+                                                        )
                                                     ) : moduleName === 'playlist' || moduleName === 'subplaylist' ? (() => {
                                                         const plId = getPlaylistId(widget);
                                                         const plData = playlistData.get(String(plId));
