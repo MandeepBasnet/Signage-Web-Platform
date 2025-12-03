@@ -36,7 +36,7 @@ export const publishLayout = async (req, res) => {
     const result = await xiboRequest(
       `/layout/publish/${layoutId}`,
       "PUT",
-      null,
+      req.body,
       token
     );
 

@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
 export default function DisplayContent() {
+  const navigate = useNavigate();
   const [displays, setDisplays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -255,7 +257,7 @@ export default function DisplayContent() {
                         <div 
                             key={layout.id || Math.random()} 
                             className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group cursor-pointer"
-                            onClick={() => window.location.href = `/layout/designer/${layoutId}`}
+                            onClick={() => navigate(`/layout/designer/${layoutId}`)}
                         >
                           {/* Visual Representation */}
                           <div

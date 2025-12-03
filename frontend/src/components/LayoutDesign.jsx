@@ -762,13 +762,9 @@ const handleMediaPreview = (item) => {
       // Refresh layout data to show updated status
       await fetchLayoutDetails();
       
-      // Show success message
-      alert("Layout published successfully!");
-      
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setPublishSuccess(false);
-      }, 3000);
+      // Show success message and redirect
+      alert("Layout published successfully! Redirecting to dashboard...");
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       console.error("Error publishing layout:", err);
       setPublishError(err.message);
@@ -868,6 +864,47 @@ const handleMediaPreview = (item) => {
       
     } catch (err) {
       console.error("[Auto-Checkout] Error during auto-checkout:", err);
+      
+      // Handle "already checked out" error
+      if (err.message && (err.message.includes("already checked out") || err.message.includes("422"))) {
+        console.log("[Auto-Checkout] Layout already checked out, searching for existing draft...");
+        try {
+          // Search for the existing draft layout
+          const draftsResponse = await fetch(
+            `${API_BASE_URL}/layouts?parentId=${publishedLayoutId}&publishedStatusId=2&embed=regions,playlists,widgets`,
+            {
+              headers: getAuthHeaders(),
+            }
+          );
+          
+          if (draftsResponse.ok) {
+            const draftsData = await draftsResponse.json();
+            const drafts = draftsData.data || [];
+            // Find the draft that matches our parent
+            const existingDraft = drafts.find(d => String(d.parentId) === String(publishedLayoutId));
+            
+            if (existingDraft) {
+               const draftId = existingDraft.layoutId || existingDraft.layout_id || existingDraft.id;
+               
+               if (draftId) {
+                 console.log(`[Auto-Checkout] Found existing draft object:`, existingDraft);
+                 console.log(`[Auto-Checkout] Redirecting to: /layout/designer/${draftId}`);
+                 navigate(`/layout/designer/${draftId}`, { replace: true });
+                 return;
+               } else {
+                 console.warn("[Auto-Checkout] Draft found but has no ID:", existingDraft);
+               }
+            } else {
+               console.warn("[Auto-Checkout] Draft not found in search results");
+            }
+          } else {
+             console.error("[Auto-Checkout] Failed to search for drafts:", draftsResponse.status);
+          }
+        } catch (searchErr) {
+          console.error("[Auto-Checkout] Failed to find existing draft:", searchErr);
+        }
+      }
+
       setCheckoutError(err.message);
       setError(`Failed to checkout layout: ${err.message}`);
       alert(`Failed to checkout layout: ${err.message}`);
@@ -1292,8 +1329,8 @@ const handleMediaPreview = (item) => {
                 </div>
             )}
             
-            {/* Checkout Layout Button - Show if not draft (assuming 1 is draft) */}
-            {layout.publishedStatusId !== 1 && (
+            {/* Checkout Layout Button - Show if Published (status 1) */}
+            {layout.publishedStatusId === 1 && (
                 <button
                 onClick={handleCheckoutLayout}
                 disabled={checkingOut}
