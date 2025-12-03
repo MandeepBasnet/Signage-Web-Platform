@@ -1,0 +1,635 @@
+Layout Checkout and Global Element Text Editing - Complete Documentation
+Executive Summary
+This document provides comprehensive documentation on how the Xibo CMS handles layout checkout workflows and global element text editing, based on live investigation of the portal at https://portal.signage-lab.com. It includes network analysis, API endpoints, console logs, and a detailed comparison with the current platform implementation.
+
+Table of Contents
+Overview
+Key Findings
+Layout Checkout Workflow
+Global Element Text Editing
+API Endpoints and Network Analysis
+Current Platform Issues
+Implementation Recommendations
+Overview
+Purpose
+Understanding the complete workflow for editing layouts in Xibo CMS, specifically:
+
+When and how layouts are checked out (creating drafts)
+How global text elements are edited and saved
+The API endpoints and request/response patterns involved
+Why the current platform shows "This Layout is not a Draft, please checkout" errors
+Investigation Methodology
+Live Portal Testing: Logged into portal.signage-lab.com and performed actual editing operations
+Network Traffic Analysis: Monitored browser network tab during all operations
+Console Log Review: Captured browser console output
+Documentation Review: Analyzed provided API documentation and network request files
+Code Comparison: Compared portal behavior with current platform implementation
+Key Findings
+Critical Discovery: Draft vs Published Workflow
+IMPORTANT: The Xibo portal distinguishes between Published Layouts and Draft Layouts. The checkout workflow depends on the layout's current state.
+
+When Opening a Layout in Designer Mode:
+If Layout is Published (publishedStatusId = 1):
+
+User MUST click "Checkout" to create a draft copy
+Draft gets a new layoutId (e.g., original: 4877, draft: 4878)
+Draft has publishedStatusId = 2 and publishedStatus = "Draft"
+Draft has parentId pointing to original layout
+All edits are made to the draft layout
+If Layout is Already a Draft (publishedStatusId = 2):
+
+NO checkout prompt appears
+User can edit directly
+Changes are auto-saved to the draft
+"Publish" button makes the draft live
+Layout State Indicators
+{
+  "layoutId": 4878,           // Draft layout ID
+  "parentId": 4877,           // Original published layout ID
+  "publishedStatusId": 2,     // 1 = Published, 2 = Draft
+  "publishedStatus": "Draft", // Human-readable status
+  "isLocked": {
+    "layoutId": 4878,
+    "userId": 82,
+    "entryPoint": "web",
+    "expires": "2025-12-03 13:27:10",
+    "lockedUser": false
+  }
+}
+Layout Checkout Workflow
+Step 1: Opening a Published Layout in Designer
+User Action: Click "Design" on a published layout (ID 1053, actual layoutId 4877)
+
+Network Request:
+
+GET /layout/designer/4877
+What Happens:
+
+Portal loads the layout designer interface
+Displays a modal/prompt: "This layout is not editable, would you like to checkout?"
+User must explicitly click "Checkout" to proceed
+Step 2: Checkout API Call
+User Action: Click "Checkout" button
+
+Network Request:
+
+PUT /layout/checkout/4877
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer {token}
+Response (Status 200):
+
+{
+  "success": true,
+  "message": "Layout checked out successfully",
+  "data": {
+    "layoutId": 4878,  // NEW draft layout ID
+    "parentId": 4877,  // Original layout ID
+    "publishedStatusId": 2,
+    "publishedStatus": "Draft"
+  }
+}
+What Happens:
+
+Xibo creates a NEW layout (draft) with a different layoutId
+Original layout (4877) remains unchanged and continues to play on displays
+Draft layout (4878) is where all edits will be made
+Portal redirects to /layout/designer/4878 (the draft)
+Step 3: Working with the Draft
+Network Request (after checkout):
+
+GET /layout?layoutId=4878&embed=regions,playlists,widgets,widget_validity,tags,permissions,actions
+Response:
+
+{
+  "data": [{
+    "layoutId": 4878,
+    "parentId": 4877,
+    "publishedStatusId": 2,
+    "publishedStatus": "Draft",
+    "campaignId": 1053,
+    "layout": "Mandeep Test",
+    "regions": [
+      {
+        "regionId": 15944,
+        "layoutId": 4878,  // Note: belongs to DRAFT layout
+        "regionPlaylist": {
+          "playlistId": 16092,
+          "widgets": [
+            {
+              "widgetId": 19816,
+              "playlistId": 16092,
+              // ... widget details
+            }
+          ]
+        }
+      },
+      {
+        "regionId": 15945,
+        "type": "canvas",
+        "regionPlaylist": {
+          "playlistId": 16093,
+          "widgets": [
+            {
+              "widgetId": 19817,  // Global/Canvas widget with text elements
+              "type": "global",
+              "widgetOptions": [
+                {
+                  "option": "elements",
+                  "value": "[{\"elements\":[...]}]"  // JSON string containing text elements
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }]
+}
+Global Element Text Editing
+Understanding Canvas/Global Widgets
+Canvas widgets (type: "global") contain multiple elements including text, images, shapes, etc. The elements are stored as a JSON string in the widgetOptions array under the elements option.
+
+Elements Structure
+{
+  "widgetId": 19817,
+  "type": "global",
+  "widgetOptions": [
+    {
+      "option": "elements",
+      "value": "[{\"elements\":[{\"id\":\"text\",\"elementId\":\"element_text_301507\",\"type\":\"global\",\"left\":1211,\"top\":411,\"width\":200,\"height\":100,\"properties\":[{\"id\":\"text\",\"value\":\"Testing23test\"},{\"id\":\"fontColor\",\"value\":\"#f9f9f9\"},{\"id\":\"fontSize\",\"value\":\"40\"}]}]}]"
+    }
+  ]
+}
+Text Editing Workflow
+Step 1: Select Text Element
+User Action: Click on text element in Layer Manager or double-click on canvas
+
+What Happens:
+
+Properties panel appears on the right side
+Text content is displayed in a textarea
+User can edit directly (no additional checkout needed since layout is already a draft)
+Step 2: Edit Text Content
+User Action: Type new text in the textarea (e.g., change "Testing23test" to "Testing23Text")
+
+What Happens:
+
+Text is updated in the UI immediately
+Changes are auto-saved when focus leaves the textarea
+Step 3: Save Text Changes (Auto-save)
+Network Request (triggered on blur/change):
+
+PUT /playlist/widget/19817/elements
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer {token}
+X-XSRF-Token: {csrf_token}
+Request Payload (form-urlencoded):
+
+elements=[{"elements":[{"id":"text","elementId":"element_text_301507","type":"global","left":1211,"top":411,"width":200,"height":100,"properties":[{"id":"text","value":"Testing23Text"},{"id":"fontColor","value":"#f9f9f9"},{"id":"fontSize","value":"40"}]}]}]
+Response (Status 200):
+
+{
+  "success": true,
+  "message": "Saved elements",
+  "data": []
+}
+Key Points:
+
+Endpoint: /playlist/widget/{widgetId}/elements
+Method: PUT
+Content-Type: application/x-www-form-urlencoded (NOT JSON!)
+Payload: Form data with elements parameter containing JSON string
+Widget ID used is from the DRAFT layout (19817)
+API Endpoints and Network Analysis
+1. Layout Checkout
+PUT /layout/checkout/{layoutId}
+Purpose: Create a draft copy of a published layout
+
+Parameters:
+
+{layoutId}: The published layout ID
+Response:
+
+Returns new draft layout with different layoutId
+Original layout remains unchanged
+Example:
+
+curl -X PUT "https://portal.signage-lab.com/layout/checkout/4877" \
+  -H "Authorization: Bearer {token}" \
+  -H "Content-Type: application/x-www-form-urlencoded"
+2. Get Layout Details
+GET /layout?layoutId={layoutId}&embed=regions,playlists,widgets,widget_validity,tags,permissions,actions
+Purpose: Fetch complete layout structure including all widgets
+
+Parameters:
+
+layoutId: Layout ID (use draft ID after checkout)
+embed: Comma-separated list of related data to include
+Response: Complete layout object with regions, playlists, widgets
+
+3. Save Widget Elements (Text Editing)
+PUT /playlist/widget/{widgetId}/elements
+Purpose: Update elements within a canvas/global widget
+
+Headers:
+
+Content-Type: application/x-www-form-urlencoded
+Authorization: Bearer {token}
+Body (form-urlencoded):
+
+elements=[{JSON_STRING_OF_ELEMENTS}]
+Response:
+
+{
+  "success": true,
+  "message": "Saved elements"
+}
+Critical Notes:
+
+Must use form-urlencoded, NOT JSON
+Elements must be JSON-stringified
+Widget ID must be from the DRAFT layout
+Layout must be in draft state (publishedStatusId = 2)
+4. Publish Layout
+PUT /layout/publish/{layoutId}
+Purpose: Publish a draft layout (makes it live)
+
+Parameters:
+
+{layoutId}: The draft layout ID
+Body (form-urlencoded):
+
+publishNow=1
+Response:
+
+{
+  "success": true,
+  "message": "Layout published successfully"
+}
+What Happens:
+
+Draft layout replaces the original
+Draft becomes the new published version
+Original layout is discarded
+Current Platform Issues
+Issue 1: "This Layout is not a Draft, please checkout" Error
+Root Cause: The platform is trying to save widget changes using widget IDs from the PUBLISHED layout instead of the DRAFT layout.
+
+Evidence from Code (
+LayoutDesign.jsx:871
+):
+
+const response = await fetch(`${API_BASE_URL}/layouts/widgets/${widget.widgetId}`, {
+  method: "PUT",
+  headers: {
+    "Content-Type": "application/json",  // ❌ Should be application/x-www-form-urlencoded
+    ...getAuthHeaders(),
+  },
+  body: JSON.stringify(payload),  // ❌ Should be URLSearchParams
+});
+Problems:
+
+Using wrong Content-Type (JSON instead of form-urlencoded)
+Using wrong endpoint (/layouts/widgets/ instead of /playlist/widget/{widgetId}/elements)
+Not ensuring layout is checked out before editing
+Not tracking draft vs published layout IDs
+Issue 2: Missing Auto-Checkout Functionality
+Current Behavior: Platform opens layout designer without checking if layout is published
+
+Expected Behavior:
+
+Check layout's publishedStatusId
+If published (status = 1), automatically call checkout API
+Redirect to draft layout ID
+Then allow editing
+Issue 3: Incorrect API Endpoint for Text Editing
+Current Implementation:
+
+// ❌ WRONG
+fetch(`${API_BASE_URL}/layouts/widgets/${widget.widgetId}`, {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ elements: JSON.stringify(elementsData) })
+});
+Correct Implementation:
+
+// ✅ CORRECT
+const formData = new URLSearchParams();
+formData.append('elements', JSON.stringify(elementsData));
+fetch(`${API_BASE_URL}/playlists/widgets/${widget.widgetId}/elements`, {
+  method: "PUT",
+  headers: { 
+    "Content-Type": "application/x-www-form-urlencoded",
+    ...getAuthHeaders() 
+  },
+  body: formData
+});
+Issue 4: Not Tracking Draft Layout ID
+Problem: After checkout, the platform continues to use the original layout ID instead of the new draft ID.
+
+Solution:
+
+Store draft layout ID in state after checkout
+Update URL to reflect draft ID
+Use draft ID for all subsequent API calls
+Implementation Recommendations
+Phase 1: Auto-Checkout on Designer Load
+Objective: Automatically checkout published layouts when opening designer
+
+Changes Required:
+
+Modify 
+fetchLayoutDetails
+ in LayoutDesign.jsx:
+const fetchLayoutDetails = async () => {
+  try {
+    setLoading(true);
+    const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to fetch layout details");
+    }
+    const data = await response.json();
+    const layout = data.layout;
+    
+    // ✅ NEW: Check if layout is published and auto-checkout
+    if (layout.publishedStatusId === 1) {
+      console.log('Layout is published, checking out...');
+      await handleAutoCheckout(layout.layoutId);
+      return; // fetchLayoutDetails will be called again after checkout
+    }
+    
+    setLayout(layout);
+  } catch (err) {
+    console.error("Error fetching layout:", err);
+    setError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+Add Auto-Checkout Function:
+const handleAutoCheckout = async (publishedLayoutId) => {
+  try {
+    setCheckingOut(true);
+    
+    const response = await fetch(
+      `${API_BASE_URL}/layouts/checkout/${publishedLayoutId}`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...getAuthHeaders(),
+        },
+      }
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || "Failed to checkout layout");
+    }
+    const data = await response.json();
+    const draftLayoutId = data.data?.layoutId || data.layoutId;
+    
+    // ✅ Redirect to draft layout
+    navigate(`/layouts/designer/${draftLayoutId}`, { replace: true });
+    
+    // Fetch the draft layout details
+    await fetchLayoutDetails();
+    
+  } catch (err) {
+    console.error("Error during auto-checkout:", err);
+    setError(`Failed to checkout layout: ${err.message}`);
+  } finally {
+    setCheckingOut(false);
+  }
+};
+Phase 2: Fix Text Element Saving
+Objective: Use correct API endpoint and format for saving text changes
+
+Changes Required:
+
+Update 
+handleTextSave
+ in LayoutDesign.jsx:
+const handleTextSave = async (widget) => {
+  try {
+    setSavingText(true);
+    
+    // Parse current elements
+    const elementsOption = getOptionValue(widget, 'elements');
+    let elementsData = [];
+    try {
+      elementsData = JSON.parse(elementsOption || '[]');
+    } catch (e) {
+      console.error('Failed to parse elements JSON', e);
+      throw new Error('Invalid elements data');
+    }
+    // Update the text value in the elements structure
+    let updated = false;
+    if (Array.isArray(elementsData)) {
+      elementsData.forEach(page => {
+        if (page.elements && Array.isArray(page.elements)) {
+          page.elements.forEach(element => {
+            const isTargetElement = editingElementId 
+              ? (element.elementId === editingElementId)
+              : (element.id === 'text' || element.type === 'text');
+            if (isTargetElement) {
+              const textProp = element.properties?.find(p => p.id === 'text');
+              if (textProp) {
+                textProp.value = editingTextValue;
+                updated = true;
+              }
+            }
+          });
+        }
+      });
+    }
+    if (!updated) {
+      throw new Error("Could not find text element to update");
+    }
+    
+    // ✅ CORRECTED: Use form-urlencoded and correct endpoint
+    const formData = new URLSearchParams();
+    formData.append('elements', JSON.stringify(elementsData));
+    const response = await fetch(
+      `${API_BASE_URL}/playlists/widgets/${widget.widgetId}/elements`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          ...getAuthHeaders(),
+        },
+        body: formData,
+      }
+    );
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.message || "Failed to update text");
+    }
+    // Refresh layout to show changes
+    await fetchLayoutDetails();
+    
+    setEditingTextWidgetId(null);
+    setEditingElementId(null);
+    setEditingTextValue("");
+    
+    console.log("Text updated successfully!");
+  } catch (err) {
+    console.error("Error updating text:", err);
+    alert(`Failed to update text: ${err.message}`);
+  } finally {
+    setSavingText(false);
+  }
+};
+Phase 3: Backend Route Updates
+Objective: Add missing backend routes for widget element updates
+
+Changes Required:
+
+Add Widget Controller (
+backend/src/controllers/widgetController.js
+):
+import { xiboRequest, getUserContext, handleControllerError } from "../utils/xiboClient.js";
+export const updateWidgetElements = async (req, res) => {
+  const { widgetId } = req.params;
+  const { elements } = req.body;
+  try {
+    const { token } = getUserContext(req);
+    // Xibo API expects form-urlencoded data
+    const formData = new URLSearchParams();
+    formData.append('elements', elements);
+    const result = await xiboRequest(
+      `/playlist/widget/${widgetId}/elements`,
+      "PUT",
+      formData.toString(),
+      token,
+      { 'Content-Type': 'application/x-www-form-urlencoded' }
+    );
+    res.json(result);
+  } catch (err) {
+    handleControllerError(res, err, "Failed to update widget elements");
+  }
+};
+Add Route (
+backend/src/routes/playlistRoutes.js
+):
+import express from 'express';
+import { updateWidgetElements } from '../controllers/widgetController.js';
+const router = express.Router();
+// Update widget elements (for canvas/global widgets)
+router.put('/widgets/:widgetId/elements', updateWidgetElements);
+export default router;
+Register Route (backend/src/index.js):
+import playlistRoutes from './routes/playlistRoutes.js';
+app.use('/api/playlists', playlistRoutes);
+Phase 4: UI Improvements
+Objective: Provide clear feedback about draft status
+
+Changes Required:
+
+Add Draft Badge:
+{layout?.publishedStatusId === 2 && (
+  <div className="bg-yellow-500 text-black px-3 py-1 rounded-full text-sm font-semibold">
+    DRAFT
+  </div>
+)}
+Show Checkout Status:
+{checkingOut && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white p-6 rounded-lg shadow-xl">
+      <p className="text-lg font-semibold">Checking out layout...</p>
+      <p className="text-sm text-gray-600 mt-2">Creating draft copy for editing</p>
+    </div>
+  </div>
+)}
+Publish Button:
+<button
+  onClick={handlePublishLayout}
+  disabled={publishing || layout?.publishedStatusId !== 2}
+  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+>
+  {publishing ? 'Publishing...' : 'Publish Layout'}
+</button>
+Testing Checklist
+Before Implementation
+ Document current error messages
+ Capture network logs of failed save attempts
+ Note which widget IDs are being used
+After Phase 1 (Auto-Checkout)
+ Open published layout - should auto-checkout
+ Verify URL changes to draft layout ID
+ Confirm draft badge appears
+ Check console for checkout success message
+After Phase 2 (Text Editing)
+ Edit text element
+ Verify correct API endpoint is called
+ Confirm Content-Type is form-urlencoded
+ Check network tab for successful response
+ Verify text changes persist after refresh
+After Phase 3 (Backend)
+ Test backend route directly with Postman
+ Verify form data is correctly forwarded to Xibo
+ Check error handling for invalid widget IDs
+After Phase 4 (UI)
+ Verify draft badge visibility
+ Test publish button functionality
+ Confirm loading states work correctly
+Appendix: Network Request Examples
+Example 1: Checkout Request
+PUT https://portal.signage-lab.com/layout/checkout/4877 HTTP/1.1
+Host: portal.signage-lab.com
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
+Content-Type: application/x-www-form-urlencoded
+X-XSRF-Token: 54d8aaf3ea443c36814c9fe89c9fe7d08447629b
+Cookie: PHPSESSID=51t3vd1m85q4mcdh9djdn1hn42
+Response:
+
+{
+  "success": true,
+  "data": {
+    "layoutId": 4878,
+    "parentId": 4877,
+    "publishedStatusId": 2
+  }
+}
+Example 2: Save Text Elements
+PUT https://portal.signage-lab.com/playlist/widget/19817/elements HTTP/1.1
+Host: portal.signage-lab.com
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
+Content-Type: application/x-www-form-urlencoded
+Content-Length: 2019
+X-XSRF-Token: 54d8aaf3ea443c36814c9fe89c9fe7d08447629b
+elements=[{"elements":[{"id":"global_library_image","elementName":"","elementId":"element_global_library_image_829624","type":"global","left":1454,"top":42,"width":250,"height":250,"layer":0,"rotation":0,"properties":[{"id":"opacity","value":100},{"id":"objectFit","value":"contain"},{"id":"alignId","value":"center"},{"id":"valignId","value":"middle"},{"id":"roundBorder","value":false},{"id":"borderRadius","value":20},{"id":"assetId"}],"effect":"noTransition","mediaId":4383},{"id":"text","elementName":"","elementId":"element_text_301507","type":"global","left":1211,"top":411,"width":200,"height":100,"layer":1,"rotation":0,"properties":[{"id":"text","value":"Testing23Text\n\n"},{"id":"fontFamily","value":""},{"id":"fontColor","value":"#f9f9f9"},{"id":"fontSize","value":"40"},{"id":"lineHeight","value":"1.2"},{"id":"bold","value":false},{"id":"italics","value":false},{"id":"underline","value":false},{"id":"textWrap","value":true},{"id":"justify","value":false},{"id":"showOverflow","value":true},{"id":"textShadow","value":false},{"id":"textShadowColor","value":""},{"id":"shadowX","value":"1"},{"id":"shadowY","value":"1"},{"id":"shadowBlur","value":"2"},{"id":"horizontalAlign","value":"center"},{"id":"verticalAlign","value":"center"}],"effect":"noTransition"},{"id":"text","elementName":"","elementId":"element_text_631833","type":"global","left":1079,"top":555,"width":200,"height":100,"layer":2,"rotation":0,"properties":[{"id":"text","value":"Text"},{"id":"fontFamily","value":null},{"id":"fontColor","value":"#f9f9f9"},{"id":"fontSize","value":40},{"id":"lineHeight","value":1.2},{"id":"bold","value":0},{"id":"italics","value":0},{"id":"underline","value":0},{"id":"textWrap","value":1},{"id":"justify","value":0},{"id":"showOverflow","value":1},{"id":"textShadow","value":0},{"id":"textShadowColor","value":null},{"id":"shadowX","value":1},{"id":"shadowY","value":1},{"id":"shadowBlur","value":2},{"id":"horizontalAlign","value":"center"},{"id":"verticalAlign","value":"center"}],"effect":"noTransition"}]}]
+Response:
+
+{
+  "success": true,
+  "message": "Saved elements",
+  "data": []
+}
+Example 3: Get Draft Layout
+GET https://portal.signage-lab.com/layout?layoutId=4878&embed=regions,playlists,widgets,widget_validity,tags,permissions,actions HTTP/1.1
+Host: portal.signage-lab.com
+Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGc...
+X-XSRF-Token: 54d8aaf3ea443c36814c9fe89c9fe7d08447629b
+Response (abbreviated):
+
+{
+  "data": [{
+    "layoutId": 4878,
+    "parentId": 4877,
+    "publishedStatusId": 2,
+    "publishedStatus": "Draft",
+    "layout": "Mandeep Test",
+    "regions": [...]
+  }]
+}
+Conclusion
+The key to fixing the "This Layout is not a Draft, please checkout" error is understanding that:
+
+Layouts must be in draft state before editing - Implement auto-checkout
+Draft layouts have different IDs - Track and use the draft layout ID
+Widget IDs belong to the draft - Use widget IDs from the draft layout
+Correct API endpoint and format - Use /playlist/widget/{widgetId}/elements with form-urlencoded data
+Publish makes draft live - Publish button should only be enabled for drafts
+By implementing these changes in phases, the platform will correctly handle the checkout workflow and allow seamless text editing without errors.

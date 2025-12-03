@@ -250,7 +250,16 @@ export default function LayoutDesign() {
       }
 
       const data = await response.json();
-      setLayout(data.layout);
+      const fetchedLayout = data.layout;
+      
+      // ✅ AUTO-CHECKOUT: Check if layout is published and needs checkout
+      if (fetchedLayout.publishedStatusId === 1) {
+        console.log('Layout is published (status=1), initiating auto-checkout...');
+        await handleAutoCheckout(fetchedLayout.layoutId);
+        return; // fetchLayoutDetails will be called again after checkout
+      }
+      
+      setLayout(fetchedLayout);
     } catch (err) {
       console.error("Error fetching layout:", err);
       setError(err.message);
@@ -818,6 +827,55 @@ const handleMediaPreview = (item) => {
     }
   };
 
+  const handleAutoCheckout = async (publishedLayoutId) => {
+    try {
+      setCheckingOut(true);
+      setCheckoutError(null);
+      
+      console.log(`[Auto-Checkout] Checking out published layout ${publishedLayoutId}...`);
+
+      const response = await fetch(
+        `${API_BASE_URL}/layouts/checkout/${publishedLayoutId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to checkout layout");
+      }
+
+      const data = await response.json();
+      
+      // Extract draft layout ID from response
+      const draftLayoutId = data.data?.layoutId || data.layoutId;
+      
+      if (!draftLayoutId) {
+        throw new Error("No draft layout ID returned from checkout");
+      }
+      
+      console.log(`[Auto-Checkout] Successfully created draft layout ${draftLayoutId}`);
+      
+      // ✅ Redirect to draft layout URL
+      navigate(`/layouts/designer/${draftLayoutId}`, { replace: true });
+      
+      // The useEffect will trigger fetchLayoutDetails again with the new layoutId
+      
+    } catch (err) {
+      console.error("[Auto-Checkout] Error during auto-checkout:", err);
+      setCheckoutError(err.message);
+      setError(`Failed to checkout layout: ${err.message}`);
+      alert(`Failed to checkout layout: ${err.message}`);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
   const handleTextDoubleClick = (widget, currentText, elementId = null) => {
     setEditingTextWidgetId(String(widget.widgetId));
     setEditingElementId(elementId);
@@ -826,6 +884,7 @@ const handleMediaPreview = (item) => {
 
   const handleTextSave = async (widget) => {
     try {
+      console.log("[handleTextSave] Widget details:", JSON.stringify(widget, null, 2));
       setSavingText(true);
       
       // Parse current elements to find the text element
@@ -835,6 +894,7 @@ const handleMediaPreview = (item) => {
         elementsData = JSON.parse(elementsOption || '[]');
       } catch (e) {
         console.error('Failed to parse elements JSON', e);
+        throw new Error('Invalid elements data');
       }
 
       // Update the text value in the elements structure
@@ -864,23 +924,30 @@ const handleMediaPreview = (item) => {
         throw new Error("Could not find text element to update");
       }
       
-      const payload = {
-        elements: JSON.stringify(elementsData)
-      };
+      console.log(`[Text Save] Updating widget ${widget.widgetId} with new text elements`);
+      
+      // ✅ CORRECTED: Use form-urlencoded and correct endpoint
+      const formData = new URLSearchParams();
+      formData.append('elements', JSON.stringify(elementsData));
 
-      const response = await fetch(`${API_BASE_URL}/layouts/widgets/${widget.widgetId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/playlists/widgets/${widget.widgetId}/elements`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            ...getAuthHeaders(),
+          },
+          body: formData,
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.message || "Failed to update text");
       }
+
+      console.log(`[Text Save] Successfully updated widget ${widget.widgetId}`);
 
       // Refresh layout to show changes
       await fetchLayoutDetails();
@@ -1214,6 +1281,16 @@ const handleMediaPreview = (item) => {
                 </span>
                 Designer Mode
             </div>
+             
+            {/* Draft Badge - Show if layout is a draft (publishedStatusId === 2) */}
+            {layout.publishedStatusId === 2 && (
+                <div className="px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-full text-xs font-bold border border-yellow-500/20 flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  DRAFT
+                </div>
+            )}
             
             {/* Checkout Layout Button - Show if not draft (assuming 1 is draft) */}
             {layout.publishedStatusId !== 1 && (
@@ -2058,6 +2135,24 @@ const handleMediaPreview = (item) => {
         columns={addRowModalState.columns}
         onSave={handleAddRow}
       />
+
+      {/* Checkout Loading Overlay */}
+      {checkingOut && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-gray-900 p-8 rounded-lg shadow-2xl border border-gray-700 max-w-md">
+            <div className="flex items-center gap-4">
+              <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              <div>
+                <p className="text-lg font-semibold text-white">Checking out layout...</p>
+                <p className="text-sm text-gray-400 mt-1">Creating draft copy for editing</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

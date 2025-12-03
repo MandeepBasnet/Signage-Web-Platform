@@ -1,4 +1,5 @@
 import { xiboRequest } from '../utils/xiboClient.js';
+import { getUserContext, handleControllerError } from '../utils/xiboDataHelpers.js';
 
 /**
  * Widget Controller
@@ -112,3 +113,48 @@ export const getWidgetResource = async (req, res) => {
     `);
   }
 };
+
+/**
+ * Update widget elements (for canvas/global widgets)
+ * PUT /api/playlists/widgets/:widgetId/elements
+ * 
+ * This endpoint handles updating the elements array within a widget
+ * Used primarily for text editing in canvas widgets
+ * 
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+export const updateWidgetElements = async (req, res) => {
+  const { widgetId } = req.params;
+  const { elements } = req.body;
+
+  try {
+    const { token } = getUserContext(req);
+
+    if (!widgetId) {
+      return res.status(400).json({ message: "Widget ID is required" });
+    }
+
+    if (!elements) {
+      return res.status(400).json({ message: "Elements data is required" });
+    }
+
+    console.log(`[updateWidgetElements] Updating widget ${widgetId}`);
+
+    // Xibo API expects form-urlencoded data
+    // xiboRequest handles the conversion for PUT requests automatically
+    const result = await xiboRequest(
+      `/playlist/widget/${widgetId}/elements`,
+      "PUT",
+      { elements }, // Pass as object
+      token
+    );
+
+    console.log(`[updateWidgetElements] Successfully updated widget ${widgetId}`);
+    res.json(result);
+  } catch (err) {
+    console.error(`[updateWidgetElements] Error updating widget ${widgetId}:`, err.message);
+    handleControllerError(res, err, "Failed to update widget elements");
+  }
+};
+

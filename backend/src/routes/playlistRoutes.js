@@ -16,6 +16,7 @@ import {
 } from "../controllers/addMediaPlaylistController.js";
 import { deleteMediaPlaylist } from "../controllers/deleteMediaPlaylist.js";
 import { deletePlaylist } from "../controllers/deletePlaylist.js";
+import { updateWidgetElements } from "../controllers/widgetController.js";
 
 const router = express.Router();
 
@@ -60,5 +61,8 @@ router.post(
   uploadMediaToPlaylist
 );
 router.get("/media/:mediaId/preview", verifyToken, getMediaPreview);
+
+// Widget element updates (for canvas/global widgets)
+router.put("/widgets/:widgetId/elements", verifyToken, updateWidgetElements);
 
 export default router;
