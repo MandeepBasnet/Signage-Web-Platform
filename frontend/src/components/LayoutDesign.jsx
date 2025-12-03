@@ -1585,7 +1585,7 @@ const handleMediaPreview = (item) => {
                                                 {/* Extra Info based on type */}
                                                 <div className="text-xs text-gray-500 mt-1">
                                                     {moduleName === 'text' || moduleName === 'canvas' ? (
-                                                        String(editingTextWidgetId) === String(widget.widgetId) ? (
+                                                        String(editingTextWidgetId) === String(widget.widgetId) && (!widget.isElement || widget.elementId === editingElementId) ? (
                                                             <div className="mt-2 space-y-2" onClick={e => e.stopPropagation()}>
                                                                 <textarea
                                                                     value={editingTextValue}
@@ -1631,57 +1631,66 @@ const handleMediaPreview = (item) => {
                                                                     title="Double click to edit"
                                                                     onDoubleClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        // Use pre-extracted text if available (for elements), otherwise check options
+                                                                        let text = widget.text || getOptionValue(widget, 'text');
+                                                                        
+                                                                        // Fallback: try to parse elements if not found (legacy support)
                                                                         if (!text) {
                                                                             try {
                                                                                 const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
                                                                                 elements.forEach(page => {
                                                                                     page.elements?.forEach(el => {
                                                                                         if (el.id === 'text' || el.type === 'text') {
-                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value;
                                                                                         }
                                                                                     });
                                                                                 });
                                                                             } catch(e) {}
                                                                         }
-                                                                        handleTextDoubleClick(widget, text || "");
+                                                                        
+                                                                        const cleanText = text?.replace(/<[^>]*>/g, '') || "";
+                                                                        handleTextDoubleClick(widget, cleanText, widget.elementId);
                                                                     }}
                                                                 >
                                                                     {(() => {
-                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        let text = widget.text || getOptionValue(widget, 'text');
+                                                                        
                                                                         if (!text) {
                                                                             try {
                                                                                 const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
                                                                                 elements.forEach(page => {
                                                                                     page.elements?.forEach(el => {
                                                                                         if (el.id === 'text' || el.type === 'text') {
-                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value;
                                                                                         }
                                                                                     });
                                                                                 });
                                                                             } catch(e) {}
                                                                         }
-                                                                        return text || "Text Content";
+                                                                        return text?.replace(/<[^>]*>/g, '') || "Text Content";
                                                                     })()}
                                                                 </span>
                                                                 <button 
                                                                     className="text-[10px] text-blue-400 hover:text-blue-300 self-start underline"
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
-                                                                        let text = getOptionValue(widget, 'text')?.replace(/<[^>]*>/g, '');
+                                                                        let text = widget.text || getOptionValue(widget, 'text');
+                                                                        
                                                                         if (!text) {
                                                                             try {
                                                                                 const elements = JSON.parse(getOptionValue(widget, 'elements') || '[]');
                                                                                 elements.forEach(page => {
                                                                                     page.elements?.forEach(el => {
                                                                                         if (el.id === 'text' || el.type === 'text') {
-                                                                                            text = el.properties?.find(p => p.id === 'text')?.value?.replace(/<[^>]*>/g, '');
+                                                                                            text = el.properties?.find(p => p.id === 'text')?.value;
                                                                                         }
                                                                                     });
                                                                                 });
                                                                             } catch(e) {}
                                                                         }
-                                                                        handleTextDoubleClick(widget, text || "");
+                                                                        
+                                                                        const cleanText = text?.replace(/<[^>]*>/g, '') || "";
+                                                                        handleTextDoubleClick(widget, cleanText, widget.elementId);
                                                                     }}
                                                                 >
                                                                     Edit Text
