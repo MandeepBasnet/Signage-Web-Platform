@@ -858,7 +858,8 @@ const handleMediaPreview = (item) => {
       console.log(`[Auto-Checkout] Successfully created draft layout ${draftLayoutId}`);
       
       // ✅ Redirect to draft layout URL
-      navigate(`/layouts/designer/${draftLayoutId}`, { replace: true });
+      // FIXED: Route path was /layouts/designer/ but App.jsx defines /layout/designer/
+      navigate(`/layout/designer/${draftLayoutId}`, { replace: true });
       
       // The useEffect will trigger fetchLayoutDetails again with the new layoutId
       
