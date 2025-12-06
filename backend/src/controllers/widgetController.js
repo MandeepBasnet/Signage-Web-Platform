@@ -140,20 +140,42 @@ export const updateWidgetElements = async (req, res) => {
     }
 
     console.log(`[updateWidgetElements] Updating widget ${widgetId}`);
+    console.log(`[updateWidgetElements] Elements type:`, typeof elements);
+    console.log(`[updateWidgetElements] Elements length:`, elements?.length);
+    
+    // ✅ ENHANCED: Log data preview for debugging
+    console.log(`[updateWidgetElements] Elements preview:`, 
+      typeof elements === 'string' 
+        ? elements.substring(0, 200) + (elements.length > 200 ? '...' : '')
+        : JSON.stringify(elements).substring(0, 200) + '...'
+    );
 
     // Xibo API expects form-urlencoded data
     // xiboRequest handles the conversion for PUT requests automatically
+    // Send as form-urlencoded (Xibo API expects this for PUT requests)
     const result = await xiboRequest(
       `/playlist/widget/${widgetId}/elements`,
       "PUT",
-      { elements }, // Pass as object
+      { elements }, // Pass as object - xiboClient will convert to form data
       token
+      // Don't force JSON - let it use form-urlencoded for PUT
     );
 
-    console.log(`[updateWidgetElements] Successfully updated widget ${widgetId}`);
+    console.log(`[updateWidgetElements] ✓ Successfully updated widget ${widgetId}`);
     res.json(result);
   } catch (err) {
-    console.error(`[updateWidgetElements] Error updating widget ${widgetId}:`, err.message);
+    console.error(`[updateWidgetElements] ✗ Error updating widget ${widgetId}:`, err.message);
+    
+    // ✅ ENHANCED: Log full error details for debugging
+    if (err.response) {
+      console.error(`[updateWidgetElements] Response status:`, err.response.status);
+      console.error(`[updateWidgetElements] Response statusText:`, err.response.statusText);
+      console.error(`[updateWidgetElements] Response data:`, err.response.data);
+      console.error(`[updateWidgetElements] Response headers:`, err.response.headers);
+    } else {
+      console.error(`[updateWidgetElements] No response received:`, err.code || 'Unknown error');
+    }
+    
     handleControllerError(res, err, "Failed to update widget elements");
   }
 };

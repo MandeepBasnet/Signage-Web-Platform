@@ -915,6 +915,31 @@ const handleMediaPreview = (item) => {
   };
 
   const handleTextDoubleClick = (widget, currentText, elementId = null) => {
+    // ⚠️ XIBO API LIMITATION: Canvas/Global widget elements cannot be edited via API
+    // Detect Canvas/Global widgets (case-insensitive)
+    const isCanvasWidget = 
+      widget.type?.toLowerCase() === "canvas" || 
+      widget.type?.toLowerCase() === "global" || 
+      widget.moduleName?.toLowerCase() === "canvas" ||
+      widget.moduleName?.toLowerCase() === "global";
+    
+    if (isCanvasWidget) {
+      // Provide user-friendly option to edit in Xibo CMS
+      const openXibo = confirm(
+        "⚠️ Canvas Widget Editing Limitation\n\n" +
+        "Canvas/Global widget text elements cannot be edited through this interface due to Xibo API restrictions.\n\n" +
+        "Would you like to open this layout in the official Xibo CMS to make your changes?\n\n" +
+        "Click OK to open Xibo CMS in a new tab, or Cancel to stay here."
+      );
+      
+      if (openXibo) {
+        const xiboUrl = `https://portal.signage-lab.com/layout/designer/${layoutId}`;
+        window.open(xiboUrl, '_blank', 'noopener,noreferrer');
+      }
+      return;
+    }
+    
+    // For non-canvas widgets, proceed with editing
     setEditingTextWidgetId(String(widget.widgetId));
     setEditingElementId(elementId);
     setEditingTextValue(currentText);

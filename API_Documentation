@@ -1,0 +1,1761 @@
+# CMS API Documentation
+
+Complete API reference for managing Layouts, Playlists, Regions, and Widgets in the CMS system.
+
+---
+
+## Table of Contents
+
+1. [Layout Management](#layout-management)
+2. [Region Management](#region-management)
+3. [Playlist Management](#playlist-management)
+4. [Widget Management](#widget-management)
+
+---
+
+## Layout Management
+
+Layouts are the canvas for displaying content on digital signage displays. They contain regions that hold playlists and widgets.
+
+### GET /layout
+
+**Description:** Search for Layouts viewable by the authenticated user.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | query | No | Filter by specific Layout ID |
+| parentId | integer | query | No | Filter by parent Layout ID |
+| showDrafts | integer | query | No | Flag indicating whether to show draft layouts (0 or 1) |
+| layout | string | query | No | Filter by partial Layout name |
+| userId | integer | query | No | Filter by owner user ID |
+| retired | integer | query | No | Filter by retired status (0 or 1) |
+| tags | string | query | No | Filter by tags (comma-separated) |
+| exactTags | integer | query | No | Flag for exact tag matching (0 or 1) |
+| logicalOperator | string | query | No | Logical operator for multiple tags (AND or OR) |
+| ownerUserGroupId | integer | query | No | Filter by users in this UserGroupId |
+| publishedStatusId | integer | query | No | Filter by published status (1 = Published, 2 = Draft) |
+| embed | string | query | No | Embed related data (regions, playlists, widgets, tags, campaigns, permissions) |
+| campaignId | integer | query | No | Get all Layouts for a specific campaign |
+| folderId | integer | query | No | Filter by Folder ID |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Array of Layout objects
+
+```json
+[
+  {
+    "layoutId": 0,
+    "ownerId": 0,
+    "campaignId": 0,
+    "parentId": 0,
+    "publishedStatusId": 0,
+    "publishedStatus": "string",
+    "publishedDate": "string",
+    "backgroundImageId": 0,
+    "schemaVersion": 0,
+    "layout": "string",
+    "description": "string",
+    "backgroundColor": "string",
+    "createdDt": "string",
+    "modifiedDt": "string",
+    "status": 0,
+    "retired": 0,
+    "backgroundzIndex": 0,
+    "width": 0,
+    "height": 0,
+    "orientation": "string",
+    "displayOrder": 0,
+    "duration": 0,
+    "statusMessage": "string",
+    "enableStat": 0,
+    "autoApplyTransitions": 0,
+    "code": "string",
+    "isLocked": true,
+    "regions": [],
+    "tags": [],
+    "folderId": 0,
+    "permissionsFolderId": 0
+  }
+]
+```
+
+---
+
+### POST /layout
+
+**Description:** Add a new Layout to the CMS.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| name | string | formData | Yes | The layout name |
+| description | string | formData | No | The layout description |
+| layoutId | integer | formData | No | Template ID to create Layout from |
+| resolutionId | integer | formData | No | Resolution ID if not using a template |
+| returnDraft | boolean | formData | No | Return Draft Layout or Published Layout on success |
+| code | string | formData | No | Code identifier for this Layout |
+| folderId | integer | formData | No | Folder ID to assign this Layout to |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** Layout object (same structure as GET response)
+
+---
+
+### PUT /layout/{layoutId}
+
+**Description:** Edit an existing Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to edit |
+| name | string | formData | Yes | The Layout name |
+| description | string | formData | No | The Layout description |
+| tags | string | formData | No | Comma-separated list of tags |
+| retired | integer | formData | No | Retired flag (0 or 1) |
+| enableStat | integer | formData | No | Enable statistics collection (0 or 1) |
+| code | string | formData | No | Code identifier for this Layout |
+| folderId | integer | formData | No | Folder ID to assign this Layout to |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Layout object
+
+---
+
+### POST /layout/{layoutId}
+
+**Description:** Clear a draft layout's canvas of all widgets and elements, leaving it blank.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to clear (must be a draft) |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** Cleared Layout object
+
+---
+
+### DELETE /layout/{layoutId}
+
+**Description:** Delete a Layout from the CMS.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to delete |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /layout/background/{layoutId}
+
+**Description:** Edit the background properties of a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID |
+| backgroundColor | string | formData | Yes | HEX color code for background (e.g., #000000) |
+| backgroundImageId | integer | formData | No | Media ID to use as background image |
+| backgroundzIndex | integer | formData | Yes | Layer number for the background |
+| resolutionId | integer | formData | No | Resolution ID to use for this Layout |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Layout object
+
+---
+
+### PUT /layout/applyTemplate/{layoutId}
+
+**Description:** Apply a new template to an existing Layout, replacing its content.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID |
+| templateId | integer | formData | No | Template ID to apply |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /layout/retire/{layoutId}
+
+**Description:** Retire a Layout so it isn't available for scheduling. Existing schedules will continue to play.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to retire |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /layout/unretire/{layoutId}
+
+**Description:** Unretire a Layout, making it available for scheduling again.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to unretire |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /layout/setenablestat/{layoutId}
+
+**Description:** Enable or disable Proof of Play statistics collection for a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID |
+| enableStat | integer | formData | Yes | Enable statistics flag (0 or 1) |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### POST /layout/copy/{layoutId}
+
+**Description:** Copy a Layout with a new name and optional media file duplication.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to copy |
+| name | string | formData | Yes | Name for the new Layout |
+| description | string | formData | No | Description for the new Layout |
+| copyMediaFiles | integer | formData | Yes | Flag to copy all media files (0 or 1) |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New Layout object
+
+---
+
+### POST /layout/{layoutId}/tag
+
+**Description:** Tag a Layout with one or more tags.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to tag |
+| tag | array[string] | formData | Yes | Array of tag names |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Layout object with tags
+
+---
+
+### POST /layout/{layoutId}/untag
+
+**Description:** Remove one or more tags from a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to untag |
+| tag | array[string] | formData | Yes | Array of tag names to remove |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Layout object
+
+---
+
+### GET /layout/status/{layoutId}
+
+**Description:** Calculate and return the status of a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Layout object with calculated status
+
+---
+
+### PUT /layout/checkout/{layoutId}
+
+**Description:** Checkout a Layout for editing (creates a draft). The original Layout continues to play.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to checkout |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Draft Layout object
+
+---
+
+### PUT /layout/publish/{layoutId}
+
+**Description:** Publish a draft Layout, replacing the original.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID to publish |
+| publishNow | integer | formData | No | Flag to publish immediately (0 or 1) |
+| publishDate | string | formData | No | Date/time to publish (Y-m-d H:i:s format) |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Published Layout object
+
+---
+
+### PUT /layout/discard/{layoutId}
+
+**Description:** Discard a draft Layout, restoring the original.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The draft Layout ID to discard |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Original Layout object
+
+---
+
+### POST /layout/fullscreen
+
+**Description:** Create a new full-screen Layout with specified Media or Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | formData | Yes | Media or Playlist ID to add |
+| type | string | formData | Yes | Type of content (media or playlist) |
+| resolutionId | integer | formData | No | Resolution ID (defaults to 1080p for playlist) |
+| backgroundColor | string | formData | No | HEX color for background (default: #000) |
+| layoutDuration | boolean | formData | No | Use media duration for layout duration |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New full-screen Layout object
+
+---
+
+## Region Management
+
+Regions are areas within a Layout that contain content (playlists and widgets).
+
+### PUT /region/{id}
+
+**Description:** Edit properties of an existing Region.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Region ID to edit |
+| width | integer | formData | No | Region width (default: 250) |
+| height | integer | formData | No | Region height |
+| top | integer | formData | No | Top coordinate position |
+| left | integer | formData | No | Left coordinate position |
+| zIndex | integer | formData | No | Layer/z-index for this Region |
+| transitionType | string | formData | No | Transition code (from /transition) |
+| transitionDuration | integer | formData | No | Transition duration in milliseconds |
+| transitionDirection | string | formData | No | Transition direction |
+| loop | integer | formData | Yes | Loop flag if only 1 media item (0 or 1) |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Region object
+
+```json
+{
+  "regionId": 0,
+  "layoutId": 0,
+  "ownerId": 0,
+  "type": "string",
+  "name": "string",
+  "width": 0,
+  "height": 0,
+  "top": 0,
+  "left": 0,
+  "zIndex": 0,
+  "syncKey": "string",
+  "regionOptions": [],
+  "permissions": [],
+  "duration": 0,
+  "isDrawer": 0,
+  "regionPlaylist": {}
+}
+```
+
+---
+
+### POST /region/{id}
+
+**Description:** Add a new Region to a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Layout ID to add Region to |
+| type | string | formData | No | Region type (zone, frame, playlist, canvas) - default: frame |
+| width | integer | formData | No | Region width (default: 250) |
+| height | integer | formData | No | Region height |
+| top | integer | formData | No | Top coordinate position |
+| left | integer | formData | No | Left coordinate position |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New Region object
+
+---
+
+### DELETE /region/{regionId}
+
+**Description:** Delete an existing Region from a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| regionId | integer | path | Yes | The Region ID to delete |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /region/position/all/{layoutId}
+
+**Description:** Update positions of all Regions for a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| layoutId | integer | path | Yes | The Layout ID |
+| regions | array[string] | formData | Yes | Array of JSON-encoded region objects with regionId, top, left, width, height |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Layout object with repositioned Regions
+
+---
+
+### PUT /region/drawer/{id}
+
+**Description:** Save properties of a Drawer Region.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Drawer Region ID |
+| width | integer | formData | No | Drawer width (default: 250) |
+| height | integer | formData | No | Drawer height |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Drawer Region object
+
+---
+
+### POST /region/drawer/{id}
+
+**Description:** Add a Drawer Region to a Layout.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Layout ID to add Drawer to |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New Drawer Region object
+
+---
+
+## Playlist Management
+
+Playlists contain widgets and media items that are displayed in Regions.
+
+### GET /playlist
+
+**Description:** Search for Playlists viewable by the authenticated user.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | query | No | Filter by specific Playlist ID |
+| name | string | query | No | Filter by partial Playlist name |
+| userId | integer | query | No | Filter by owner user ID |
+| tags | string | query | No | Filter by tags (comma-separated) |
+| exactTags | integer | query | No | Flag for exact tag matching (0 or 1) |
+| logicalOperator | string | query | No | Logical operator for multiple tags (AND or OR) |
+| ownerUserGroupId | integer | query | No | Filter by users in this UserGroupId |
+| embed | string | query | No | Embed related data (regions, widgets, permissions, tags) |
+| folderId | integer | query | No | Filter by Folder ID |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Array of Playlist objects
+
+```json
+[
+  {
+    "playlistId": 0,
+    "ownerId": 0,
+    "name": "string",
+    "regionId": 0,
+    "isDynamic": 0,
+    "filterMediaName": "string",
+    "filterMediaNameLogicalOperator": "string",
+    "filterMediaTags": "string",
+    "filterExactTags": 0,
+    "filterMediaTagsLogicalOperator": "string",
+    "filterFolderId": 0,
+    "maxNumberOfItems": 0,
+    "createdDt": "string",
+    "modifiedDt": "string",
+    "duration": 0,
+    "requiresDurationUpdate": 0,
+    "enableStat": "string",
+    "tags": [],
+    "widgets": [],
+    "permissions": [],
+    "folderId": 0,
+    "permissionsFolderId": 0
+  }
+]
+```
+
+---
+
+### POST /playlist
+
+**Description:** Add a new Playlist to the CMS.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| name | string | formData | Yes | The Playlist name |
+| tags | string | formData | No | Comma-separated tags |
+| isDynamic | integer | formData | Yes | Dynamic Playlist flag (0 or 1) |
+| filterMediaName | string | formData | No | Add Library Media matching name filter |
+| logicalOperatorName | string | formData | No | Logical operator for name filter (AND or OR) |
+| filterMediaTag | string | formData | No | Add Library Media matching tag filter |
+| exactTags | integer | formData | No | Exact tag matching flag (0 or 1) |
+| logicalOperator | string | formData | No | Logical operator for tags (AND or OR) |
+| maxNumberOfItems | integer | formData | No | Maximum items for dynamic Playlist |
+| folderId | integer | formData | No | Folder ID to assign Playlist to |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New Playlist object
+
+---
+
+### PUT /playlist/{playlistId}
+
+**Description:** Edit an existing Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID to edit |
+| name | string | formData | Yes | The Playlist name |
+| tags | string | formData | No | Comma-separated tags |
+| isDynamic | integer | formData | Yes | Dynamic Playlist flag (0 or 1) |
+| filterMediaName | string | formData | No | Add Library Media matching name filter |
+| logicalOperatorName | string | formData | No | Logical operator for name filter (AND or OR) |
+| filterMediaTag | string | formData | No | Add Library Media matching tag filter |
+| exactTags | integer | formData | No | Exact tag matching flag (0 or 1) |
+| logicalOperator | string | formData | No | Logical operator for tags (AND or OR) |
+| maxNumberOfItems | integer | formData | No | Maximum items for dynamic Playlist |
+| folderId | integer | formData | No | Folder ID to assign Playlist to |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### DELETE /playlist/{playlistId}
+
+**Description:** Delete a Playlist from the CMS.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID to delete |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### POST /playlist/copy/{playlistId}
+
+**Description:** Copy a Playlist with a new name and optional media file duplication.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID to copy |
+| name | string | formData | Yes | Name for the new Playlist |
+| copyMediaFiles | integer | formData | Yes | Flag to copy all media files (0 or 1) |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+**Response Body:** New Playlist object
+
+---
+
+### POST /playlist/library/assign/{playlistId}
+
+**Description:** Assign Media from the Library to a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID to assign to |
+| media | array[integer] | formData | Yes | Array of Media IDs to assign |
+| duration | integer | formData | No | Optional duration for all media (in seconds) |
+| useDuration | integer | formData | No | Enable useDuration flag (0 or 1) |
+| displayOrder | integer | formData | No | Position for first assigned item |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Playlist object with assigned media
+
+---
+
+### POST /playlist/order/{playlistId}
+
+**Description:** Set the display order of widgets in a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID |
+| widgets | array | formData | Yes | Array of widget IDs and positions |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Updated Playlist object with reordered widgets
+
+---
+
+### GET /playlist/usage/{playlistId}
+
+**Description:** Get usage report for Playlist items.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Usage report data
+
+---
+
+### GET /playlist/usage/layouts/{playlistId}
+
+**Description:** Get usage report for Playlist items specifically in Layouts.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID |
+
+**Response:** HTTP 200 (Success)
+
+**Response Body:** Layout-specific usage report data
+
+---
+
+### PUT /playlist/setenablestat/{playlistId}
+
+**Description:** Enable or disable Proof of Play statistics collection for a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID |
+| enableStat | string | formData | Yes | Statistics collection option (On, Off, or Inherit) |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /playlist/{id}/selectfolder
+
+**Description:** Select a Folder for a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID |
+| folderId | integer | formData | No | Folder ID to assign to |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### POST /playlist/{id}/convert
+
+**Description:** Convert an inline editor Playlist to a global Playlist and assign via sub-playlist Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| playlistId | integer | path | Yes | The Playlist ID to convert |
+| name | string | formData | No | Optional name for the global Playlist |
+
+**Response:** HTTP 201 (Created)
+
+---
+
+## Widget Management
+
+Widgets are individual content items within Playlists (text, images, videos, etc.).
+
+### POST /playlist/widget/{type}/{playlistId}
+
+**Description:** Add a new Widget to a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| type | string | path | Yes | Widget type (e.g., text). Media-based widgets use library/assign endpoint |
+| playlistId | integer | path | Yes | The Playlist ID |
+| displayOrder | integer | formData | No | Position in the Playlist |
+| templateId | string | formData | No | Template ID if widget has dataType |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+---
+
+### PUT /playlist/widget/{id}
+
+**Description:** Edit properties of an existing Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | string | path | Yes | The Widget ID |
+| useDuration | integer | formData | No | Use custom duration flag (0 or 1) |
+| duration | integer | formData | No | Duration in seconds |
+| name | string | formData | No | Optional widget name |
+| enableStat | string | formData | No | Statistics collection (On, Off, or Inherit) |
+| isRepeatData | integer | formData | No | Repeat data to meet item count (0 or 1) |
+| showFallback | string | formData | No | Fallback data display (never, always, empty, error) |
+| properties | integer | formData | No | Additional module-specific properties |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### DELETE /playlist/widget/{widgetId}
+
+**Description:** Delete a Widget from a Playlist.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID to delete |
+
+**Response:** HTTP 200 (Success)
+
+---
+
+### PUT /playlist/widget/transition/{type}/{widgetId}
+
+**Description:** Add In/Out transition to a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| type | string | path | Yes | Transition type (in or out) |
+| widgetId | integer | path | Yes | The Widget ID |
+| transitionType | string | formData | Yes | Transition effect (fly, fadeIn, fadeOut) |
+| transitionDuration | integer | formData | No | Duration in milliseconds |
+| transitionDirection | integer | formData | No | Direction (N, NE, E, SE, S, SW, W, NW) |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new widget (string)
+
+**Response Body:** Widget object with transition
+
+```json
+{
+  "widgetId": 0,
+  "playlistId": 0,
+  "ownerId": 0,
+  "type": "string",
+  "duration": 0,
+  "displayOrder": 0,
+  "useDuration": 0,
+  "calculatedDuration": 0,
+  "createdDt": "string",
+  "modifiedDt": "string",
+  "fromDt": 0,
+  "toDt": 0,
+  "schemaVersion": 0,
+  "transitionIn": 0,
+  "transitionOut": 0,
+  "transitionDurationIn": 0,
+  "transitionDurationOut": 0,
+  "widgetOptions": [],
+  "mediaIds": [],
+  "audio": [],
+  "permissions": [],
+  "playlist": "string"
+}
+```
+
+---
+
+### PUT /playlist/widget/{widgetId}/audio
+
+**Description:** Edit or add audio file to a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+| mediaId | integer | formData | No | Audio file Media ID from library |
+| volume | integer | formData | No | Volume percentage (0-100) |
+| loop | integer | formData | No | Loop flag (0 or 1) |
+
+**Response:** HTTP 200 (Success)
+
+**Response Headers:**
+- `Location`: Location of the new widget (string)
+
+**Response Body:** Widget object with audio
+
+---
+
+### DELETE /playlist/widget/{widgetId}/audio
+
+**Description:** Delete audio from a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+
+**Response:** HTTP 200 (Success)
+
+---
+
+### PUT /playlist/widget/{widgetId}/expiry
+
+**Description:** Set From/To dates to control when Widget is active.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+| fromDt | string | formData | No | Start date (Y-m-d H:i:s format) |
+| toDt | string | formData | No | End date (Y-m-d H:i:s format) |
+| deleteOnExpiry | integer | formData | No | Delete widget on expiry (0 or 1) |
+
+**Response:** HTTP 200 (Success)
+
+**Response Headers:**
+- `Location`: Location of the new widget (string)
+
+**Response Body:** Widget object with expiry dates
+
+---
+
+### PUT /playlist/widget/{widgetId}/region
+
+**Description:** Set the target Region for a Widget (for Drawer Widgets).
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+| targetRegionId | string | formData | Yes | The target Region ID |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /playlist/widget/{widgetId}/elements
+
+**Description:** Save elements associated with a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+| elements | string | body | Yes | JSON string representing elements |
+
+**Content-Type:** application/json
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### PUT /playlist/widget/{widgetId}/dataType
+
+**Description:** Get DataType for a Widget based on module definition.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| widgetId | integer | path | Yes | The Widget ID |
+| dataType | string | body | Yes | JSON representation of dataType |
+
+**Content-Type:** application/json
+
+**Response:** HTTP 200 (Success)
+
+---
+
+### GET /playlist/widget/data/{id}
+
+**Description:** Get all fallback data assigned to a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Widget ID |
+
+**Response:** HTTP 201 (Created)
+
+**Response Body:** Array of widget data objects
+
+```json
+[
+  {
+    "id": 0,
+    "widgetId": 0,
+    "data": ["string"],
+    "displayOrder": 0,
+    "createdDt": "string",
+    "modifiedDt": "string"
+  }
+]
+```
+
+---
+
+### POST /playlist/widget/data/{id}
+
+**Description:** Add fallback data to a data Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Widget ID to add data to |
+| data | string | path | Yes | JSON formatted string containing data item |
+| displayOrder | integer | formData | No | Position for this data item |
+
+**Response:** HTTP 201 (Created)
+
+**Response Headers:**
+- `Location`: Location of the new record (string)
+
+---
+
+### PUT /playlist/widget/data/{id}/{dataId}
+
+**Description:** Edit fallback data on a data Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Widget ID |
+| dataId | integer | path | Yes | The data ID to edit |
+| data | string | path | Yes | JSON formatted string containing updated data |
+| displayOrder | integer | formData | No | Position for this data item |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### DELETE /playlist/widget/data/{id}/{dataId}
+
+**Description:** Delete fallback data from a data Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Widget ID |
+| dataId | integer | path | Yes | The data ID to delete |
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+### POST /playlist/widget/data/{id}/order
+
+**Description:** Update the order of all data items on a Widget.
+
+**Parameters:**
+
+| Parameter | Type | Location | Required | Description |
+|-----------|------|----------|----------|-------------|
+| id | integer | path | Yes | The Widget ID |
+| dataId | integer | path | Yes | The data ID reference |
+| order | array | body | Yes | Array of widget data records with order |
+
+**Request Body Example:**
+```json
+["string"]
+```
+
+**Content-Type:** application/json
+
+**Response:** HTTP 204 (No Content)
+
+---
+
+## Data Models
+
+### Layout Object
+
+Complete structure of a Layout object:
+
+```json
+{
+  "layoutId": 0,
+  "ownerId": 0,
+  "campaignId": 0,
+  "parentId": 0,
+  "publishedStatusId": 0,
+  "publishedStatus": "string",
+  "publishedDate": "string",
+  "backgroundImageId": 0,
+  "schemaVersion": 0,
+  "layout": "string",
+  "description": "string",
+  "backgroundColor": "string",
+  "createdDt": "string",
+  "modifiedDt": "string",
+  "status": 0,
+  "retired": 0,
+  "backgroundzIndex": 0,
+  "width": 0,
+  "height": 0,
+  "orientation": "string",
+  "displayOrder": 0,
+  "duration": 0,
+  "statusMessage": "string",
+  "enableStat": 0,
+  "autoApplyTransitions": 0,
+  "code": "string",
+  "isLocked": true,
+  "regions": [],
+  "tags": [],
+  "folderId": 0,
+  "permissionsFolderId": 0
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| layoutId | integer | Unique identifier for the layout |
+| ownerId | integer | User ID of the layout owner |
+| campaignId | integer | Campaign this layout belongs to |
+| parentId | integer | Parent layout ID (for drafts) |
+| publishedStatusId | integer | Publication status (1=Published, 2=Draft) |
+| publishedStatus | string | Human-readable publication status |
+| publishedDate | string | Date/time of publication |
+| backgroundImageId | integer | Media ID of background image |
+| schemaVersion | integer | Layout schema version |
+| layout | string | Layout name |
+| description | string | Layout description |
+| backgroundColor | string | HEX color code for background |
+| createdDt | string | Creation date/time |
+| modifiedDt | string | Last modification date/time |
+| status | integer | Layout status code |
+| retired | integer | Retired flag (0 or 1) |
+| backgroundzIndex | integer | Z-index layer for background |
+| width | integer | Layout width in pixels |
+| height | integer | Layout height in pixels |
+| orientation | string | Layout orientation (landscape/portrait) |
+| displayOrder | integer | Display order in lists |
+| duration | integer | Total layout duration in seconds |
+| statusMessage | string | Human-readable status message |
+| enableStat | integer | Statistics collection enabled (0 or 1) |
+| autoApplyTransitions | integer | Auto-apply transitions flag (0 or 1) |
+| code | string | Custom code identifier |
+| isLocked | boolean | Whether layout is locked for editing |
+| regions | array | Array of Region objects |
+| tags | array | Array of Tag objects |
+| folderId | integer | Folder ID containing this layout |
+| permissionsFolderId | integer | Folder ID for permissions inheritance |
+
+---
+
+### Region Object
+
+Complete structure of a Region object:
+
+```json
+{
+  "regionId": 0,
+  "layoutId": 0,
+  "ownerId": 0,
+  "type": "string",
+  "name": "string",
+  "width": 0,
+  "height": 0,
+  "top": 0,
+  "left": 0,
+  "zIndex": 0,
+  "syncKey": "string",
+  "regionOptions": [
+    {
+      "regionId": 0,
+      "option": "string",
+      "value": "string"
+    }
+  ],
+  "permissions": [],
+  "duration": 0,
+  "isDrawer": 0,
+  "regionPlaylist": {}
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| regionId | integer | Unique identifier for the region |
+| layoutId | integer | Parent layout ID |
+| ownerId | integer | User ID of the region owner |
+| type | string | Region type (zone, frame, playlist, canvas) |
+| name | string | Region name |
+| width | integer | Region width in pixels |
+| height | integer | Region height in pixels |
+| top | integer | Top position coordinate |
+| left | integer | Left position coordinate |
+| zIndex | integer | Z-index layer number |
+| syncKey | string | Synchronization key for multi-screen |
+| regionOptions | array | Array of region option objects |
+| permissions | array | Array of permission objects |
+| duration | integer | Total region duration in seconds |
+| isDrawer | integer | Drawer region flag (0 or 1) |
+| regionPlaylist | object | Associated Playlist object |
+
+---
+
+### Playlist Object
+
+Complete structure of a Playlist object:
+
+```json
+{
+  "playlistId": 0,
+  "ownerId": 0,
+  "name": "string",
+  "regionId": 0,
+  "isDynamic": 0,
+  "filterMediaName": "string",
+  "filterMediaNameLogicalOperator": "string",
+  "filterMediaTags": "string",
+  "filterExactTags": 0,
+  "filterMediaTagsLogicalOperator": "string",
+  "filterFolderId": 0,
+  "maxNumberOfItems": 0,
+  "createdDt": "string",
+  "modifiedDt": "string",
+  "duration": 0,
+  "requiresDurationUpdate": 0,
+  "enableStat": "string",
+  "tags": [],
+  "widgets": [],
+  "permissions": [],
+  "folderId": 0,
+  "permissionsFolderId": 0
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| playlistId | integer | Unique identifier for the playlist |
+| ownerId | integer | User ID of the playlist owner |
+| name | string | Playlist name |
+| regionId | integer | Associated region ID (for inline playlists) |
+| isDynamic | integer | Dynamic playlist flag (0 or 1) |
+| filterMediaName | string | Media name filter for dynamic playlists |
+| filterMediaNameLogicalOperator | string | Logical operator for name filter (AND/OR) |
+| filterMediaTags | string | Tag filter for dynamic playlists |
+| filterExactTags | integer | Exact tag matching flag (0 or 1) |
+| filterMediaTagsLogicalOperator | string | Logical operator for tag filter (AND/OR) |
+| filterFolderId | integer | Folder ID filter for dynamic playlists |
+| maxNumberOfItems | integer | Maximum items in dynamic playlist |
+| createdDt | string | Creation date/time |
+| modifiedDt | string | Last modification date/time |
+| duration | integer | Total playlist duration in seconds |
+| requiresDurationUpdate | integer | Duration update required flag (0 or 1) |
+| enableStat | string | Statistics collection (On/Off/Inherit) |
+| tags | array | Array of Tag objects |
+| widgets | array | Array of Widget objects |
+| permissions | array | Array of Permission objects |
+| folderId | integer | Folder ID containing this playlist |
+| permissionsFolderId | integer | Folder ID for permissions inheritance |
+
+---
+
+### Widget Object
+
+Complete structure of a Widget object:
+
+```json
+{
+  "widgetId": 0,
+  "playlistId": 0,
+  "ownerId": 0,
+  "type": "string",
+  "duration": 0,
+  "displayOrder": 0,
+  "useDuration": 0,
+  "calculatedDuration": 0,
+  "createdDt": "string",
+  "modifiedDt": "string",
+  "fromDt": 0,
+  "toDt": 0,
+  "schemaVersion": 0,
+  "transitionIn": 0,
+  "transitionOut": 0,
+  "transitionDurationIn": 0,
+  "transitionDurationOut": 0,
+  "widgetOptions": [
+    {
+      "widgetId": 0,
+      "type": "string",
+      "option": "string",
+      "value": "string"
+    }
+  ],
+  "mediaIds": [0],
+  "audio": [
+    {
+      "widgetId": 0,
+      "mediaId": 0,
+      "volume": 0,
+      "loop": 0
+    }
+  ],
+  "permissions": [],
+  "playlist": "string"
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| widgetId | integer | Unique identifier for the widget |
+| playlistId | integer | Parent playlist ID |
+| ownerId | integer | User ID of the widget owner |
+| type | string | Widget type (text, image, video, etc.) |
+| duration | integer | Widget duration in seconds |
+| displayOrder | integer | Display order in the playlist |
+| useDuration | integer | Use custom duration flag (0 or 1) |
+| calculatedDuration | integer | System-calculated duration |
+| createdDt | string | Creation date/time |
+| modifiedDt | string | Last modification date/time |
+| fromDt | integer | Start date/time (Unix timestamp) |
+| toDt | integer | End date/time (Unix timestamp) |
+| schemaVersion | integer | Widget schema version |
+| transitionIn | integer | Transition in effect ID |
+| transitionOut | integer | Transition out effect ID |
+| transitionDurationIn | integer | Transition in duration (milliseconds) |
+| transitionDurationOut | integer | Transition out duration (milliseconds) |
+| widgetOptions | array | Array of widget option objects |
+| mediaIds | array | Array of associated media IDs |
+| audio | array | Array of audio configuration objects |
+| permissions | array | Array of permission objects |
+| playlist | string | Playlist name reference |
+
+---
+
+### Tag Object
+
+```json
+{
+  "tag": "string",
+  "tagId": 0,
+  "value": "string"
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| tag | string | Tag name/label |
+| tagId | integer | Unique identifier for the tag |
+| value | string | Tag value (optional metadata) |
+
+---
+
+### Permission Object
+
+```json
+{
+  "permissionId": 0,
+  "entityId": 0,
+  "groupId": 0,
+  "objectId": 0,
+  "isUser": 0,
+  "entity": "string",
+  "objectIdString": "string",
+  "group": "string",
+  "view": 0,
+  "edit": 0,
+  "delete": 0,
+  "modifyPermissions": 0
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| permissionId | integer | Unique identifier for the permission |
+| entityId | integer | Entity ID (user or group) |
+| groupId | integer | Group ID if applicable |
+| objectId | integer | Object ID this permission applies to |
+| isUser | integer | Flag indicating if entity is a user (0 or 1) |
+| entity | string | Entity type name |
+| objectIdString | string | String representation of object ID |
+| group | string | Group name |
+| view | integer | View permission flag (0 or 1) |
+| edit | integer | Edit permission flag (0 or 1) |
+| delete | integer | Delete permission flag (0 or 1) |
+| modifyPermissions | integer | Modify permissions flag (0 or 1) |
+
+---
+
+### Widget Audio Object
+
+```json
+{
+  "widgetId": 0,
+  "mediaId": 0,
+  "volume": 0,
+  "loop": 0
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| widgetId | integer | Widget this audio is attached to |
+| mediaId | integer | Media ID of the audio file |
+| volume | integer | Volume percentage (0-100) |
+| loop | integer | Loop flag (0 or 1) |
+
+---
+
+### Widget Option Object
+
+```json
+{
+  "widgetId": 0,
+  "type": "string",
+  "option": "string",
+  "value": "string"
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| widgetId | integer | Widget this option belongs to |
+| type | string | Option type category |
+| option | string | Option name/key |
+| value | string | Option value |
+
+---
+
+### Widget Data Object
+
+```json
+{
+  "id": 0,
+  "widgetId": 0,
+  "data": ["string"],
+  "displayOrder": 0,
+  "createdDt": "string",
+  "modifiedDt": "string"
+}
+```
+
+**Field Descriptions:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| id | integer | Unique identifier for the data record |
+| widgetId | integer | Widget this data belongs to |
+| data | array | Array of data items (JSON) |
+| displayOrder | integer | Display order in the widget |
+| createdDt | string | Creation date/time |
+| modifiedDt | string | Last modification date/time |
+
+---
+
+## Common Response Codes
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 200 | OK | Request successful, resource returned |
+| 201 | Created | Resource successfully created |
+| 204 | No Content | Request successful, no content to return |
+| 400 | Bad Request | Invalid request parameters |
+| 401 | Unauthorized | Authentication required |
+| 403 | Forbidden | Insufficient permissions |
+| 404 | Not Found | Resource not found |
+| 409 | Conflict | Resource conflict (e.g., duplicate) |
+| 422 | Unprocessable Entity | Validation error |
+| 500 | Internal Server Error | Server error occurred |
+
+---
+
+## Common Patterns
+
+### Pagination
+
+Most GET endpoints that return collections support pagination through query parameters:
+
+- `start` - Starting record (default: 0)
+- `length` - Number of records to return (default: 10)
+
+### Filtering
+
+Collection endpoints support various filtering options:
+
+- **Name/Text Filters**: Use partial matching (LIKE queries)
+- **Tag Filters**: Support exact or partial matching with AND/OR operators
+- **Date Filters**: Use standard date formats (Y-m-d H:i:s)
+- **Boolean Filters**: Use 0 for false, 1 for true
+
+### Embedding Related Data
+
+Use the `embed` parameter to include related objects in responses:
+
+- `embed=regions` - Include region data
+- `embed=widgets` - Include widget data
+- `embed=tags` - Include tag data
+- `embed=permissions` - Include permission data
+- `embed=playlists` - Include playlist data
+
+Multiple embeds can be comma-separated: `embed=regions,widgets,tags`
+
+---
+
+## Workflow Examples
+
+### Creating a Complete Layout
+
+1. **Create Layout**
+   ```
+   POST /layout
+   - name: "My Digital Signage"
+   - resolutionId: 9 (1920x1080)
+   ```
+
+2. **Add Region**
+   ```
+   POST /region/{layoutId}
+   - width: 1920
+   - height: 1080
+   - top: 0
+   - left: 0
+   ```
+
+3. **Add Widget to Region's Playlist**
+   ```
+   POST /playlist/widget/text/{playlistId}
+   - displayOrder: 1
+   ```
+
+4. **Configure Widget**
+   ```
+   PUT /playlist/widget/{widgetId}
+   - duration: 10
+   - useDuration: 1
+   ```
+
+5. **Publish Layout**
+   ```
+   PUT /layout/publish/{layoutId}
+   - publishNow: 1
+   ```
+
+---
+
+### Working with Dynamic Playlists
+
+1. **Create Dynamic Playlist**
+   ```
+   POST /playlist
+   - name: "Dynamic News"
+   - isDynamic: 1
+   - filterMediaTags: "news,breaking"
+   - logicalOperator: "OR"
+   - maxNumberOfItems: 10
+   ```
+
+2. **Assign to Region**
+   ```
+   POST /playlist/widget/subplaylist/{playlistId}
+   ```
+
+---
+
+### Managing Widget Lifecycle
+
+1. **Add Widget with Duration**
+   ```
+   POST /playlist/widget/image/{playlistId}
+   - displayOrder: 1
+   ```
+
+2. **Set Expiry Dates**
+   ```
+   PUT /playlist/widget/{widgetId}/expiry
+   - fromDt: "2024-01-01 00:00:00"
+   - toDt: "2024-12-31 23:59:59"
+   - deleteOnExpiry: 1
+   ```
+
+3. **Add Transition Effects**
+   ```
+   PUT /playlist/widget/transition/in/{widgetId}
+   - transitionType: "fadeIn"
+   - transitionDuration: 1000
+   ```
+
+4. **Add Audio**
+   ```
+   PUT /playlist/widget/{widgetId}/audio
+   - mediaId: 123
+   - volume: 75
+   - loop: 1
+   ```
+
+---
+
+## Best Practices
+
+### Layout Design
+
+1. **Use Templates**: Start with templates when creating similar layouts
+2. **Checkout Before Editing**: Always checkout published layouts before making changes
+3. **Test Drafts**: Preview drafts before publishing to avoid display issues
+4. **Set Appropriate Durations**: Ensure widget durations match content type
+
+### Playlist Management
+
+1. **Dynamic vs Static**: Use dynamic playlists for content that changes frequently
+2. **Order Matters**: Set displayOrder explicitly to control playback sequence
+3. **Enable Statistics**: Enable stats collection for proof of play reporting
+4. **Tag Consistently**: Use consistent tagging for effective filtering
+
+### Widget Configuration
+
+1. **Set Expiry Dates**: Use expiry dates for time-sensitive content
+2. **Optimize Media**: Ensure media files are optimized for display resolution
+3. **Use Transitions Sparingly**: Too many transitions can be distracting
+4. **Test Audio Levels**: Verify audio volumes are appropriate for the environment
+
+### Performance
+
+1. **Limit Embeds**: Only embed data you need to reduce response size
+2. **Use Filters**: Filter at the API level rather than client-side
+3. **Batch Operations**: Use batch endpoints when updating multiple items
+4. **Cache Lookups**: Cache frequently accessed reference data
+
+---
+
+## Error Handling
+
+### Common Error Responses
+
+**Validation Error (422)**
+```json
+{
+  "error": {
+    "message": "Validation failed",
+    "errors": [
+      {
+        "field": "name",
+        "message": "Name is required"
+      }
+    ]
+  }
+}
+```
+
+**Permission Error (403)**
+```json
+{
+  "error": {
+    "message": "You do not have permission to perform this action"
+  }
+}
+```
+
+**Not Found Error (404)**
+```json
+{
+  "error": {
+    "message": "Layout not found"
+  }
+}
+```
+
+---
+
+## Authentication
+
+All API endpoints require authentication. Include your API key or authentication token in the request headers:
+
+```
+Authorization: Bearer {your_api_token}
+```
+
+Or use Basic Authentication:
+
+```
+Authorization: Basic {base64_encoded_credentials}
+```
+
+---
+
+## Rate Limiting
+
+The API implements rate limiting to ensure fair usage:
+
+- **Standard**: 100 requests per minute per user
+- **Burst**: 1000 requests per hour per user
+
+Rate limit headers are included in responses:
+
+```
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1640000000
+```
+
+---
+
+## Support and Resources
+
+- **API Base URL**: `https://your-cms-domain.com/api/`
+- **API Version**: Check response headers for `X-API-Version`
+- **Content-Type**: All requests should use `application/json` or `application/x-www-form-urlencoded`
+- **Date Format**: ISO 8601 (Y-m-d H:i:s) for all date/time fields
+
+---
+
+*End of API Documentation*

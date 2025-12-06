@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import multer from "multer";  // ✅ Added for FormData parsing
 import authRoutes from "./routes/authRoutes.js";
 import layoutRoutes from "./routes/layoutRoutes.js";
 import playlistRoutes from "./routes/playlistRoutes.js";
@@ -28,6 +29,11 @@ app.use((req, res, next) => {
 
 // Middleware - order matters!
 app.use(cors());
+
+// ✅ Multer middleware for multipart/form-data (FormData API)
+// This handles form data without file uploads
+const upload = multer();
+app.use(upload.none()); // Parse form fields only (no files)
 
 // Body parsing middleware with error handling
 app.use(express.json({ limit: "10mb" }));

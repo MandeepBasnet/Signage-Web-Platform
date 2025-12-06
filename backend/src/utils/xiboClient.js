@@ -284,7 +284,8 @@ export async function xiboRequest(
   endpoint,
   method = "GET",
   data = null,
-  userToken = null
+  userToken = null,
+  customHeaders = {}
 ) {
   // Use user's token if provided, otherwise use application token
   const accessToken = userToken || (await getAccessToken());
@@ -297,12 +298,16 @@ export async function xiboRequest(
     url: `${process.env.XIBO_API_URL}${endpoint}`,
     headers: {
       Authorization: `Bearer ${accessToken}`,
+      ...customHeaders,
     },
   };
 
   if (data) {
-    if (isPutRequest) {
-      // Xibo requires application/x-www-form-urlencoded for PUT requests
+    // Check if Content-Type is explicitly set to JSON for PUT requests
+    const isJsonPut = isPutRequest && requestConfig.headers["Content-Type"] === "application/json";
+
+    if (isPutRequest && !isJsonPut) {
+      // Xibo requires application/x-www-form-urlencoded for PUT requests (default behavior)
       // We need to use URLSearchParams to properly format the data
       const params = new URLSearchParams();
       Object.keys(data).forEach((key) => {
@@ -313,12 +318,14 @@ export async function xiboRequest(
       requestConfig.headers["Content-Type"] =
         "application/x-www-form-urlencoded";
     } else {
-      // Use JSON for other methods
+      // Use JSON for other methods OR if explicitly requested for PUT
       requestConfig.data = data;
-      requestConfig.headers["Content-Type"] = "application/json";
+      if (!requestConfig.headers["Content-Type"]) {
+        requestConfig.headers["Content-Type"] = "application/json";
+      }
     }
-  } else if (isPutRequest) {
-    // Even if no data, PUT requests need form data content type
+  } else if (isPutRequest && !requestConfig.headers["Content-Type"]) {
+    // Even if no data, PUT requests need form data content type by default
     requestConfig.headers["Content-Type"] = "application/x-www-form-urlencoded";
   }
 
