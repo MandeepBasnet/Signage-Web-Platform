@@ -16,6 +16,9 @@ export default function DisplayContent() {
   const [editingDisplay, setEditingDisplay] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState(null);
+  
+  // Checkout Layout State
+  const [checkingOut, setCheckingOut] = useState(false);
 
   useEffect(() => {
     fetchDisplays();
@@ -175,6 +178,142 @@ export default function DisplayContent() {
     }
   };
 
+  // Helper to handle layout clicks
+  const handleLayoutClick = (layout) => {
+    const layoutId = layout.layoutId || layout.layout_id || layout.id;
+    navigate(`/layout/designer/${layoutId}`);
+  };
+
+  const handleAutoCheckout = async (publishedLayoutId) => {
+    try {
+      setCheckingOut(true);
+      
+      console.log(
+        `[Auto-Checkout] START: Checking out published layout ${publishedLayoutId}...`
+      );
+
+      const checkoutUrl = `${API_BASE_URL}/layouts/checkout/${publishedLayoutId}`;
+      console.log(`[Auto-Checkout] Request: PUT ${checkoutUrl}`);
+
+      const response = await fetch(
+        checkoutUrl,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            ...getAuthHeaders(),
+          },
+        }
+      );
+
+      console.log(`[Auto-Checkout] Response Status: ${response.status}`);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error(`[Auto-Checkout] Error Response Body:`, errorData);
+        const errorMsg =
+          errorData.message || errorData.error || `HTTP ${response.status}`;
+
+        // Check for "already checked out" in error message or status code
+        if (
+          response.status === 422 ||
+          errorMsg.toLowerCase().includes("already checked out")
+        ) {
+          console.log(
+            "[Auto-Checkout] Layout already checked out (422), searching for existing draft..."
+          );
+          await findAndNavigateToDraft(publishedLayoutId);
+          return;
+        }
+
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      console.log(`[Auto-Checkout] Success Response Body:`, JSON.stringify(data, null, 2));
+
+      let draftLayoutId = null;
+      if (data.data?.layoutId) draftLayoutId = data.data.layoutId;
+      else if (data.layoutId) draftLayoutId = data.layoutId;
+      else if (data.layout?.layoutId) draftLayoutId = data.layout.layoutId;
+      else if (data.id) draftLayoutId = data.id;
+
+      if (!draftLayoutId) {
+        throw new Error(
+          "No draft layout ID returned from checkout. Response: " +
+            JSON.stringify(data)
+        );
+      }
+
+      console.log(
+        `[Auto-Checkout] Successfully created draft layout ID: ${draftLayoutId} (Derived from response)`
+      );
+
+      // ✅ Redirect to draft layout URL
+      console.log(`[Auto-Checkout] Navigating to: /layout/designer/${draftLayoutId}`);
+      navigate(`/layout/designer/${draftLayoutId}`);
+    } catch (err) {
+      console.error("[Auto-Checkout] Error during auto-checkout:", err);
+      
+      if (
+        err.message?.includes("ALREADY_CHECKED_OUT") ||
+        err.message?.includes("already checked out") ||
+        err.message?.includes("422")
+      ) {
+         await findAndNavigateToDraft(publishedLayoutId);
+         return;
+      }
+      
+      alert(`Failed to checkout layout: ${err.message}`);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
+  const findAndNavigateToDraft = async (parentId) => {
+      try {
+          console.log(`[Auto-Checkout] Searching for existing draft for parent ${parentId}...`);
+          const url = `${API_BASE_URL}/layouts?parentId=${parentId}&publishedStatusId=2&embed=regions,playlists,widgets`;
+          console.log(`[Auto-Checkout] Search URL: ${url}`);
+
+          const draftsResponse = await fetch(
+            url,
+            {
+              headers: getAuthHeaders(),
+            }
+          );
+          
+          console.log(`[Auto-Checkout] Search Status: ${draftsResponse.status}`);
+
+          if (draftsResponse.ok) {
+            const draftsData = await draftsResponse.json();
+            console.log(`[Auto-Checkout] Search Result:`, JSON.stringify(draftsData, null, 2));
+
+            const drafts = Array.isArray(draftsData.data)
+              ? draftsData.data
+              : [];
+
+            const existingDraft = drafts.find(
+              (d) => String(d.parentId) === String(parentId)
+            );
+
+            if (existingDraft) {
+               const draftId = existingDraft.layoutId || existingDraft.layout_id || existingDraft.id;
+               console.log(`[Auto-Checkout] Found existing draft (ID: ${draftId}), navigating...`);
+               console.log(`[Auto-Checkout] Navigating to: /layout/designer/${draftId}`);
+               navigate(`/layout/designer/${draftId}`);
+               return;
+            } else {
+                console.warn("[Auto-Checkout] No draft found with parentId", parentId);
+                alert("Could not find the draft for this layout. Please try manually.");
+            }
+          }
+      } catch (searchErr) {
+          console.error("[Auto-Checkout] Failed to find existing draft:", searchErr);
+          alert("Failed to find existing draft.");
+      }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -200,6 +339,15 @@ export default function DisplayContent() {
 
   return (
     <section className="flex flex-col gap-8 p-4">
+      {checkingOut && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+              <div className="bg-white p-6 rounded-lg shadow-xl flex flex-col items-center gap-4">
+                  <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-700 font-medium">Checking out layout...</p>
+              </div>
+          </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">Displays</h2>
@@ -257,7 +405,7 @@ export default function DisplayContent() {
                         <div 
                             key={layout.id || Math.random()} 
                             className="border border-gray-200 rounded-lg overflow-hidden hover:shadow-md transition-shadow bg-white flex flex-col group cursor-pointer"
-                            onClick={() => navigate(`/layout/designer/${layoutId}`)}
+                            onClick={() => handleLayoutClick(layout)}
                         >
                           {/* Visual Representation */}
                           <div

@@ -1,0 +1,49 @@
+# Publish Workflow Comparison Report
+
+## Reference Portal Workflow (portal.signage-lab.com)
+**Observed Behavior:**
+1.  **Initial State**: Layout is "Published".
+2.  **Checkout**:
+    - User clicks "Checkout" from the dropdown menu in the Layouts list.
+    - A confirmation dialog appears.
+    - Upon confirmation, the page refreshes.
+    - High-level layout status updates to "Draft".
+    - **Crucial Note**: The user remains on the Layouts list view. They are *not* automatically redirected to the designer.
+3.  **Design**:
+    - User clicks "Design" from the dropdown menu on the "Draft" layout.
+    - Opens the Layout Designer.
+4.  **Publish**:
+    - Inside the Designer (or from the Layouts list), the user can click "Publish".
+    - A confirmation dialog appears (options to "Publish Now" or schedule).
+    - Upon confirmation, the layout status updates to "Published".
+
+## Current Platform Status (Our System)
+**Current Implementation Gaps:**
+- The current platform may not explicitly force a "Checkout" when entering the designer, or if it does, it might be buggy (based on previous task context about "already checked out" errors).
+- The user request implies the current flow does NOT automatically open the designer after checkout from the Display page.
+
+## Desired Workflow (User Request)
+**Target Behavior:**
+1.  **Trigger**: User clicks on a Layout in the "Display page" (Layouts List).
+2.  **Automatic Checkout**:
+    - The system should explicitly perform a `checkout` operation (API: `PUT /layout/checkout/{layoutId}`).
+    - Status changes to "Draft".
+3.  **Automatic Redirect**:
+    - *Immediately* after successful checkout, the system must navigate the user to the Layout Designer for that draft.
+4.  **Publishing**:
+    - Inside the Layout Designer, the "Publish" button must function correctly.
+    - It should call the publish API (`PUT /layout/publish/{layoutId}`, typically with `publishNow=1`).
+    - After publishing, the user should ideally be notified or redirected as appropriate (user implies "Publish button should let the user Publish the layout live").
+
+## API Reference (Based on Xibo API Docs)
+### Checkout
+- **Endpoint**: `PUT /layout/checkout/{layoutId}`
+- **Response**: Returns the Draft Layout object.
+
+### Publish
+- **Endpoint**: `PUT /layout/publish/{layoutId}`
+- **Payload**: `publishNow=1` (form-data)
+- **Response**: Returns the Published Layout object.
+
+## Plan vs Reference
+The key difference is the **Streamlined Entry**: The reference portal requires two steps (Checkout -> wait -> Design), whereas we want a single click (Checkout -> Auto-open Design). This improves the UX for quick edits.

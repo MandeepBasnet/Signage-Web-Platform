@@ -52,7 +52,11 @@ export const checkoutLayout = async (req, res) => {
   try {
     const { token } = getUserContext(req);
 
-    // Xibo API: PUT /layout/checkout/{layoutId}
+    console.log(`[checkoutLayout] Requesting checkout for layoutId: ${layoutId}`);
+
+    // Use standard Xibo Checkout API
+    // PUT /layout/checkout/{layoutId}
+    // This creates a draft of the published layout
     const result = await xiboRequest(
       `/layout/checkout/${layoutId}`,
       "PUT",
@@ -60,8 +64,18 @@ export const checkoutLayout = async (req, res) => {
       token
     );
 
+    console.log(`[checkoutLayout] Checkout successful. Result:`, JSON.stringify(result));
+
+    // Result should contain the new draft layout object or ID
     res.json(result);
+
   } catch (err) {
+    if (err.response && err.response.status === 422) {
+       // 422 usually means "Already checked out"
+       console.warn(`[checkoutLayout] 422 Error: Already checked out?`, err.response.data);
+       // We might want to try to find the existing draft here, or just let the frontend handle the error
+       // For now, let's pass the error to frontend so it can decide (frontend has findDraft logic)
+    }
     handleControllerError(res, err, "Failed to checkout layout");
   }
 };

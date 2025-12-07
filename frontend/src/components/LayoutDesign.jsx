@@ -21,7 +21,7 @@ export default function LayoutDesign() {
   const [scale, setScale] = useState(1);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [bgImageUrl, setBgImageUrl] = useState(null);
-  const [skipAutoCheckout, setSkipAutoCheckout] = useState(false); // 🔧 NEW: Prevent auto-checkout after publish
+
 
   // Preview Modal State
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -61,11 +61,13 @@ export default function LayoutDesign() {
   const [checkoutError, setCheckoutError] = useState(null);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
 
-  // Text Editing State
   const [editingTextWidgetId, setEditingTextWidgetId] = useState(null);
   const [editingElementId, setEditingElementId] = useState(null);
   const [editingTextValue, setEditingTextValue] = useState("");
   const [savingText, setSavingText] = useState(false);
+
+  // Checkout Prompt State
+  const [showCheckoutPrompt, setShowCheckoutPrompt] = useState(false);
 
   // Canvas Rendering State
   const [canvasScale, setCanvasScale] = useState(0.1); // Scale factor for canvas preview
@@ -175,7 +177,16 @@ export default function LayoutDesign() {
     }
   };
 
-  // Fetch Layout Details
+  useEffect(() => {
+    // Show prompt if layout is published (Status ID 1)
+    if (layout?.publishedStatusId === 1 && !checkingOut) {
+      setShowCheckoutPrompt(true);
+    } else {
+      setShowCheckoutPrompt(false);
+    }
+  }, [layout, checkingOut]);
+
+  // Initial data fetch
   useEffect(() => {
     fetchLayoutDetails();
   }, [layoutId]);
@@ -256,7 +267,7 @@ export default function LayoutDesign() {
     };
   }, []);
 
-  const fetchLayoutDetails = async (skipCheckout = false) => {
+  const fetchLayoutDetails = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/layouts/${layoutId}`, {
@@ -270,18 +281,10 @@ export default function LayoutDesign() {
       const data = await response.json();
       const fetchedLayout = data.layout;
 
-      // ✅ AUTO-CHECKOUT: Check if layout is published and needs checkout
-      // 🔧 SKIP if we just came from publish (skipCheckout=true)
-      if (fetchedLayout.publishedStatusId === 1 && !skipCheckout) {
-        console.log(
-          "Layout is published (status=1), initiating auto-checkout..."
-        );
-        await handleAutoCheckout(fetchedLayout.layoutId);
-        return; // fetchLayoutDetails will be called again after checkout
-      }
+      console.log(`[LayoutDesign] Fetched Layout: ID=${fetchedLayout.layoutId}, Status=${fetchedLayout.publishedStatusId}`);
 
       setLayout(fetchedLayout);
-      setSkipAutoCheckout(false); // Reset skip flag after loading
+
     } catch (err) {
       console.error("Error fetching layout:", err);
       setError(err.message);
@@ -864,8 +867,7 @@ export default function LayoutDesign() {
       const _ = await response.json();
       setPublishSuccess(true);
 
-      // 🔧 NEW: Set skip flag to prevent auto-checkout after publish
-      setSkipAutoCheckout(true);
+
 
       // Show success message and redirect
       alert("Layout published successfully! Redirecting to dashboard...");
@@ -909,14 +911,25 @@ export default function LayoutDesign() {
         throw new Error(errorData.message || "Failed to checkout layout");
       }
 
-      const _ = await response.json();
+      const data = await response.json();
       setCheckoutSuccess(true);
 
-      // 🔧 NEW: Refresh layout data with skipCheckout=true to prevent recursion
-      await fetchLayoutDetails(true);
+      // Extract new Draft Layout ID
+      // The controller returns the result of POST /layout/copy, which is the new layout object
+      const newLayoutId = data.layoutId || data.id || (data.layout && data.layout.layoutId);
+
+      if (newLayoutId) {
+        console.log(`[Checkout] Redirecting to new draft: ${newLayoutId}`);
+        // Redirect to the new draft
+        navigate(`/layout/designer/${newLayoutId}`, { replace: true });
+      } else {
+        console.warn("[Checkout] No new layout ID found in response", data);
+        // Fallback: Refresh current layout (unlikely to work if ID changed, but safe fallback)
+        await fetchLayoutDetails();
+      }
 
       // Show success message
-      alert("Layout checked out successfully! You can now edit.");
+      alert("Layout checked out successfully! Redirecting to draft...");
 
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -931,160 +944,6 @@ export default function LayoutDesign() {
     }
   };
 
-  const handleAutoCheckout = async (publishedLayoutId) => {
-    try {
-      setCheckingOut(true);
-      setCheckoutError(null);
-
-      console.log(
-        `[Auto-Checkout] Checking out published layout ${publishedLayoutId}...`
-      );
-
-      const response = await fetch(
-        `${API_BASE_URL}/layouts/checkout/${publishedLayoutId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            ...getAuthHeaders(),
-          },
-        }
-      );
-
-      // 🔧 IMPROVED: Better error response handling
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMsg =
-          errorData.message || errorData.error || `HTTP ${response.status}`;
-
-        // 🔧 NEW: Check for "already checked out" in error message or status code
-        if (
-          response.status === 422 ||
-          errorMsg.toLowerCase().includes("already checked out")
-        ) {
-          console.log(
-            "[Auto-Checkout] Layout already checked out (422), searching for existing draft..."
-          );
-          throw new Error(`ALREADY_CHECKED_OUT:${errorMsg}`);
-        }
-
-        throw new Error(errorMsg);
-      }
-
-      const data = await response.json();
-
-      // 🔧 IMPROVED: Better draft ID extraction from multiple possible response formats
-      let draftLayoutId = null;
-      if (data.data?.layoutId) draftLayoutId = data.data.layoutId;
-      else if (data.layoutId) draftLayoutId = data.layoutId;
-      else if (data.layout?.layoutId) draftLayoutId = data.layout.layoutId;
-      else if (data.id) draftLayoutId = data.id;
-
-      if (!draftLayoutId) {
-        console.warn(
-          "[Auto-Checkout] Response structure:",
-          JSON.stringify(data)
-        );
-        throw new Error(
-          "No draft layout ID returned from checkout. Response: " +
-            JSON.stringify(data)
-        );
-      }
-
-      console.log(
-        `[Auto-Checkout] Successfully created draft layout ${draftLayoutId}`
-      );
-
-      // ✅ Redirect to draft layout URL
-      navigate(`/layout/designer/${draftLayoutId}`, { replace: true });
-
-      // The useEffect will trigger fetchLayoutDetails again with the new layoutId
-    } catch (err) {
-      console.error("[Auto-Checkout] Error during auto-checkout:", err);
-
-      // 🔧 IMPROVED: Handle "already checked out" error more robustly
-      if (
-        err.message?.includes("ALREADY_CHECKED_OUT") ||
-        err.message?.includes("already checked out") ||
-        err.message?.includes("422")
-      ) {
-        console.log(
-          "[Auto-Checkout] Layout already checked out, searching for existing draft..."
-        );
-        try {
-          // Search for the existing draft layout by parent ID
-          const draftsResponse = await fetch(
-            `${API_BASE_URL}/layouts?parentId=${publishedLayoutId}&publishedStatusId=2&embed=regions,playlists,widgets`,
-            {
-              headers: getAuthHeaders(),
-            }
-          );
-
-          if (draftsResponse.ok) {
-            const draftsData = await draftsResponse.json();
-            const drafts = Array.isArray(draftsData.data)
-              ? draftsData.data
-              : [];
-
-            console.log(
-              `[Auto-Checkout] Found ${drafts.length} drafts for parent ${publishedLayoutId}`
-            );
-
-            // Find the draft that matches our parent ID
-            const existingDraft = drafts.find(
-              (d) => String(d.parentId) === String(publishedLayoutId)
-            );
-
-            if (existingDraft) {
-              // 🔧 IMPROVED: Try all possible ID field names
-              const draftId =
-                existingDraft.layoutId ||
-                existingDraft.layout_id ||
-                existingDraft.id ||
-                existingDraft.identifier;
-
-              if (draftId) {
-                console.log(
-                  `[Auto-Checkout] Found existing draft (ID: ${draftId}), navigating...`
-                );
-                navigate(`/layout/designer/${draftId}`, { replace: true });
-                return;
-              } else {
-                console.warn(
-                  "[Auto-Checkout] Draft found but has no ID field:",
-                  existingDraft
-                );
-              }
-            } else {
-              console.warn(
-                "[Auto-Checkout] No draft found with parentId",
-                publishedLayoutId,
-                "Available drafts:",
-                drafts.map((d) => ({ id: d.layoutId, parentId: d.parentId }))
-              );
-            }
-          } else {
-            console.error(
-              "[Auto-Checkout] Failed to search for drafts:",
-              draftsResponse.status,
-              await draftsResponse.text()
-            );
-          }
-        } catch (searchErr) {
-          console.error(
-            "[Auto-Checkout] Failed to find existing draft:",
-            searchErr
-          );
-        }
-      }
-
-      setCheckoutError(err.message);
-      setError(`Failed to checkout layout: ${err.message}`);
-      alert(`Failed to checkout layout: ${err.message}`);
-    } finally {
-      setCheckingOut(false);
-    }
-  };
 
   const handleTextDoubleClick = (widget, currentText, elementId = null) => {
     // Enable direct text editing for all widgets
@@ -1147,6 +1006,10 @@ export default function LayoutDesign() {
       console.log(
         `[Text Save] Updating widget ${widget.widgetId} with new text elements`
       );
+      
+      console.log(`[Text Save] CURRENT LAYOUT CONTEXT: ID=${layoutId}, Status=${layout?.publishedStatusId}`);
+      console.log(`[Text Save] Target Widget ID: ${widget.widgetId}`);
+      
       console.log(
         `[Text Save] Elements data:`,
         JSON.stringify(elementsData).substring(0, 300) + "..."
@@ -2951,7 +2814,13 @@ export default function LayoutDesign() {
                                                 (textEl, idx) => (
                                                   <div
                                                     key={`text-${idx}`}
-                                                    className="bg-gray-900/50 p-2 rounded border border-gray-800 hover:bg-gray-800 transition-colors"
+                                                    className="bg-gray-900/50 p-2 rounded border border-gray-800 hover:bg-gray-800 transition-colors cursor-pointer group"
+                                                    onDoubleClick={(e) => {
+                                                      e.stopPropagation();
+                                                      // Enable editing for this text element
+                                                      handleTextDoubleClick(widget, textEl.text, textEl.elementId);
+                                                    }}
+                                                    title="Double click to edit text"
                                                   >
                                                     <div className="flex items-start gap-2">
                                                       {/* Text Icon */}
@@ -3048,6 +2917,51 @@ export default function LayoutDesign() {
         columns={addRowModalState.columns}
         onSave={handleAddRow}
       />
+
+      {/* Checkout Prompt Modal */}
+      {showCheckoutPrompt && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl border border-gray-200 animate-in fade-in zoom-in duration-200">
+            <div className="text-center mb-6">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 mb-4">
+                <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Checkout Required</h3>
+              <p className="text-gray-500 text-sm">
+                This layout is currently <strong>published</strong> (Read-Only).<br/>
+                To make changes, you need to checkout a draft version.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleCheckoutLayout}
+                disabled={checkingOut}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+              >
+                {checkingOut ? (
+                  <>
+                     <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                     </svg>
+                     <span>Checkout...</span>
+                  </>
+                ) : (
+                  "Checkout & Edit"
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Checkout Loading Overlay */}
       {checkingOut && (
