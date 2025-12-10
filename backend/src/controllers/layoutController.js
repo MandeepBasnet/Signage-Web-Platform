@@ -186,8 +186,48 @@ export const getLayoutDetails = async (req, res) => {
         layout.thumbnail || `/layout/thumbnail/${layout.layoutId || layoutId}`,
     };
 
+    // CHECK FOR EXISTING DRAFTS
+    // Check if there is an open Draft (status 2) for this layout.
+    // This allows us to redirect from Parent (Read Only) -> Child (Editable Draft)
+    // We check if this layout IS a parent (parentId is 0 or null)
+    let existingDraftId = null;
+    const isParent = !normalizedLayout.parentId || normalizedLayout.parentId === 0;
+
+    if (isParent) {
+       try {
+          // Look for children of this layout that are Drafts (status 2)
+          const draftResponse = await xiboRequest(
+            `/layout?parentId=${layoutId}&publishedStatusId=2&embed=`, // Minimal fetch
+            "GET",
+            null,
+            token
+          );
+          
+          let drafts = [];
+          if (Array.isArray(draftResponse)) {
+            drafts = draftResponse;
+          } else if (draftResponse && Array.isArray(draftResponse.data)) {
+            drafts = draftResponse.data;
+          } else if (draftResponse) {
+               drafts = [draftResponse];
+          }
+
+          // Filter just in case API returns loose matches
+           const exactDraft = drafts.find(d => String(d.parentId) === String(layoutId));
+           
+           if (exactDraft) {
+               existingDraftId = exactDraft.layoutId;
+               console.log(`[getLayoutDetails] Found existing draft ${existingDraftId} for layout ${layoutId}`);
+           }
+
+       } catch (draftErr) {
+           console.warn("[getLayoutDetails] Failed to check for existing drafts:", draftErr.message);
+       }
+    }
+
     res.json({
       layout: normalizedLayout,
+      existingDraftId: existingDraftId, // Send valid draft ID if found
       preview: {
         thumbnailEndpoint: `/layouts/${layoutId}/thumbnail`,
         thumbnailPath: normalizedLayout.thumbnail,

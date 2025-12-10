@@ -279,6 +279,17 @@ export default function LayoutDesign() {
       }
 
       const data = await response.json();
+      
+      // AUTO-REDIRECT TO DRAFT IF EXISTS
+      // If we opened a published layout but a draft exists, redirect to the draft to avoid "Not a Draft" errors
+      if (data.existingDraftId && String(data.existingDraftId) !== String(layoutId)) {
+          console.log(`[LayoutDesign] Found existing draft ${data.existingDraftId}. Redirecting...`);
+          // Optional: Show a toast/notice
+          // alert("Redirecting to the editable draft version of this layout..."); 
+          navigate(`/layout/designer/${data.existingDraftId}`, { replace: true });
+          return; // Stop processing this read-only layout
+      }
+
       const fetchedLayout = data.layout;
 
       console.log(
@@ -1021,6 +1032,15 @@ export default function LayoutDesign() {
         `[Text Save] Elements data:`,
         JSON.stringify(elementsData).substring(0, 300) + "..."
       );
+
+      // BLOCK EDITING IF NOT DRAFT
+      // Status 1 = Published, 2 = Draft. Xibo requires Draft to edit.
+      // If we are here and status is NOT 2, it means the Auto-Redirect failed or User is in a weird state.
+      if (layout?.publishedStatusId && String(layout.publishedStatusId) !== '2') {
+           const msg = `This layout is NOT in Draft mode (Status: ${layout.publishedStatusId}). You cannot edit it directly. Please reload to redirect to the Draft version if it exists.`;
+           alert(msg);
+           throw new Error(msg);
+      }
 
       // ✅ SOLUTION: Use URLSearchParams for application/x-www-form-urlencoded
       // Xibo API v4 explicitly requires this content type for PUT requests
