@@ -7,6 +7,7 @@ import { getAuthHeaders, getStoredToken } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import AddRowModal from "./AddRowModal";
+import MediaPickerModal from "./MediaPickerModal";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -68,6 +69,14 @@ export default function LayoutDesign() {
 
   // Checkout Prompt State
   const [showCheckoutPrompt, setShowCheckoutPrompt] = useState(false);
+
+  // Replace Media State
+  const [replaceMediaModalState, setReplaceMediaModalState] = useState({
+    isOpen: false,
+    widgetId: null,
+    currentMediaId: null,
+  });
+  const [replacingWidget, setReplacingWidget] = useState(null);
 
   // Canvas Rendering State
   const [canvasScale, setCanvasScale] = useState(0.1); // Scale factor for canvas preview
@@ -663,6 +672,53 @@ export default function LayoutDesign() {
       alert(`Failed to delete row: ${err.message}`);
     } finally {
       setDeletingRowId(null);
+    }
+  };
+
+  const handleReplaceMedia = async (newMediaId) => {
+    const { widgetId } = replaceMediaModalState;
+    if (!widgetId || !newMediaId) return;
+
+    try {
+      setReplacingWidget(widgetId);
+      console.log(`Replacing media for widget ${widgetId} with media ${newMediaId}`);
+
+      // Call backend to update widget with new mediaId
+      const response = await fetch(`${API_BASE_URL}/widgets/${widgetId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          mediaIds: [newMediaId],
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to replace media");
+      }
+
+      console.log("Media replaced successfully");
+
+      // Close modal
+      setReplaceMediaModalState({
+        isOpen: false,
+        widgetId: null,
+        currentMediaId: null,
+      });
+
+      // Refresh layout to show new media
+      await fetchLayoutDetails();
+
+      // Show success notification
+      alert("Media replaced successfully!");
+    } catch (err) {
+      console.error("Error replacing media:", err);
+      alert(`Failed to replace media: ${err.message}`);
+    } finally {
+      setReplacingWidget(null);
     }
   };
 
@@ -2250,6 +2306,80 @@ export default function LayoutDesign() {
                                           </button>
                                         </div>
                                       )
+                                    ) : (moduleName === "image" ||
+                                      moduleName === "video" ||
+                                      moduleName === "global_library_image") &&
+                                      (widget.mediaIds?.length > 0 ||
+                                        widget.mediaId) ? (
+                                      <div className="flex flex-col gap-1">
+                                        <span className="text-xs text-gray-400">
+                                          Media ID:{" "}
+                                          {widget.mediaId ||
+                                            widget.mediaIds?.[0] ||
+                                            "N/A"}
+                                        </span>
+                                        <button
+                                          className="text-[10px] text-blue-400 hover:text-blue-300 self-start underline flex items-center gap-1"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const currentMediaId =
+                                              widget.mediaId ||
+                                              widget.mediaIds?.[0];
+                                            setReplaceMediaModalState({
+                                              isOpen: true,
+                                              widgetId: widget.widgetId,
+                                              currentMediaId: currentMediaId,
+                                            });
+                                          }}
+                                          disabled={
+                                            replacingWidget ===
+                                            widget.widgetId
+                                          }
+                                        >
+                                          {replacingWidget ===
+                                          widget.widgetId ? (
+                                            <>
+                                              <svg
+                                                className="animate-spin h-3 w-3"
+                                                viewBox="0 0 24 24"
+                                              >
+                                                <circle
+                                                  className="opacity-25"
+                                                  cx="12"
+                                                  cy="12"
+                                                  r="10"
+                                                  stroke="currentColor"
+                                                  strokeWidth="4"
+                                                ></circle>
+                                                <path
+                                                  className="opacity-75"
+                                                  fill="currentColor"
+                                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                                ></path>
+                                              </svg>
+                                              Replacing...
+                                            </>
+                                          ) : (
+                                            <>
+                                              <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                className="h-3 w-3"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                              >
+                                                <path
+                                                  strokeLinecap="round"
+                                                  strokeLinejoin="round"
+                                                  strokeWidth={2}
+                                                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                                />
+                                              </svg>
+                                              Replace Media
+                                            </>
+                                          )}
+                                        </button>
+                                      </div>
                                     ) : moduleName === "playlist" ||
                                       moduleName === "subplaylist" ? (
                                       (() => {
@@ -3098,6 +3228,21 @@ export default function LayoutDesign() {
           </div>
         </div>
       )}
+
+      {/* Media Picker Modal for Replace Media */}
+      <MediaPickerModal
+        isOpen={replaceMediaModalState.isOpen}
+        onClose={() =>
+          setReplaceMediaModalState({
+            isOpen: false,
+            widgetId: null,
+            currentMediaId: null,
+          })
+        }
+        onSelect={handleReplaceMedia}
+        currentMediaId={replaceMediaModalState.currentMediaId}
+        filterTypes={["image", "video"]}
+      />
     </div>
   );
 }
