@@ -1016,27 +1016,66 @@ export default function LayoutDesign() {
         JSON.stringify(elementsData).substring(0, 300) + "..."
       );
 
-      // ✅ SOLUTION 1: Use FormData API for proper form encoding
-      // FormData automatically handles encoding of form fields correctly
-      const formDataObj = new FormData();
-      const elementsStr = JSON.stringify(elementsData);
-      formDataObj.append("elements", elementsStr);
+      // ✅ SOLUTION: Use URLSearchParams for application/x-www-form-urlencoded
+      // Xibo API v4 explicitly requires this content type for PUT requests
+      const params = new URLSearchParams();
+
+      // SANITIZATION: Filter out purely undefined properties, but ALLOW nulls (as per reference logs)
+      // Use deep clone to avoid mutating original state
+      let parsedElements = typeof elementsData === 'string' 
+        ? JSON.parse(elementsData) 
+        : JSON.parse(JSON.stringify(elementsData));
+
+      // Helper to clean properties recursively
+      const cleanElementData = (data) => {
+        if (Array.isArray(data)) {
+          return data.map(cleanElementData);
+        } else if (typeof data === 'object' && data !== null) {
+          const newData = { ...data };
+          
+          // If this is a widget options/properties object, filter only undefined items or truly invalid ones
+          // Reference logs show "value": null is VALID.
+          if (Array.isArray(newData.properties)) {
+            newData.properties = newData.properties.filter(prop => 
+              prop && 
+              typeof prop.id !== 'undefined' && prop.id !== null
+              // ALLOW value: null or empty string
+            );
+          }
+           // Check for 'elements' array inside (nested structure)
+          if (Array.isArray(newData.elements)) {
+             newData.elements = newData.elements.map(cleanElementData);
+          }
+          return newData;
+        }
+        return data;
+      };
+
+      parsedElements = cleanElementData(parsedElements);
+      
+      // Ensure elements is a string, not an object/array, when sending to Xibo
+       const elementsStr = JSON.stringify(parsedElements);
+      
+      console.log(`[Text Save] Final elements JSON for Xibo:`, elementsStr);
+      
+      // We append it to params as usual, but backend will extract it to send as raw body if needed
+      params.append("elements", elementsStr);
 
       console.log(
-        `[Text Save] FormData prepared with elements (${elementsStr.length} chars)`
+        `[Text Save] URLSearchParams prepared with elements (${elementsStr.length} chars)`
       );
-      console.log(`[Text Save] Auth headers:`, Object.keys(getAuthHeaders()));
-
+      
       const response = await fetch(
         `${API_BASE_URL}/playlists/widgets/${widget.widgetId}/elements`,
         {
           method: "PUT",
-          // ⚠️ DO NOT set Content-Type - let FormData set it automatically with boundary
-          // Browser will automatically set: Content-Type: multipart/form-data; boundary=...
           headers: {
             ...getAuthHeaders(),
+            // Content-Type will be automatically set to application/x-www-form-urlencoded by the browser
+            // when using URLSearchParams as body
+            "Content-Type": "application/x-www-form-urlencoded",
           },
-          body: formDataObj,
+          body: params,
         }
       );
 

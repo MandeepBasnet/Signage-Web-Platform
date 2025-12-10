@@ -1,5 +1,6 @@
 import axios from "axios";
 import FormData from "form-data";
+import qs from "qs";
 let token = null;
 
 // Get application access token (for API operations)
@@ -308,13 +309,18 @@ export async function xiboRequest(
 
     if (isPutRequest && !isJsonPut) {
       // Xibo requires application/x-www-form-urlencoded for PUT requests (default behavior)
-      // We need to use URLSearchParams to properly format the data
-      const params = new URLSearchParams();
-      Object.keys(data).forEach((key) => {
-        params.append(key, String(data[key]));
-      });
-
-      requestConfig.data = params;
+      // SPECIAL HANDLING: If 'elements' is present and is a string, send it as RAW BODY
+      // This mimics the "lying header" behavior seen in reference logs (Header: x-www-form-urlencoded, Body: raw JSON string)
+      if (data && typeof data.elements === 'string') {
+          console.log(`[xiboRequest] Detected 'elements' string. Sending as RAW BODY with x-www-form-urlencoded header.`);
+          requestConfig.data = data.elements;
+      } else {
+          // Use qs to stringify the data for standard form encoding
+          const serializedData = qs.stringify(data);
+          console.log(`[xiboRequest] Serialized data preview:`, serializedData.substring(0, 500) + (serializedData.length > 500 ? "..." : ""));
+          requestConfig.data = serializedData;
+      }
+      
       requestConfig.headers["Content-Type"] =
         "application/x-www-form-urlencoded";
     } else {
