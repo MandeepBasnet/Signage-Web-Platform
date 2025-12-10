@@ -838,8 +838,14 @@ export default function LayoutDesign() {
       setPublishError(null);
       setPublishSuccess(false);
 
+      // Use Parent ID for publishing if it exists (Draft), otherwise use current ID
+      // Xibo requires the Parent ID to publish a draft
+      const publishId = (layout && layout.parentId && layout.parentId !== 0) ? layout.parentId : layoutId;
+      
+      console.log(`[Publish] Publishing Layout. Current ID: ${layoutId}, Parent ID: ${layout?.parentId}, Target Publish ID: ${publishId}`);
+
       const response = await fetch(
-        `${API_BASE_URL}/layouts/publish/${layoutId}`,
+        `${API_BASE_URL}/layouts/publish/${publishId}`,
         {
           method: "PUT",
           headers: {
