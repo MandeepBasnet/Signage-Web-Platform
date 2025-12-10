@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -44,7 +45,7 @@ export default function MediaContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const ITEMS_PER_PAGE = 8;
-  
+
   // Preview state
   const [previewMedia, setPreviewMedia] = useState(null);
 
@@ -93,10 +94,10 @@ export default function MediaContent() {
     const mediaId = getMediaId(item);
     const token = localStorage.getItem("auth_token");
     const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
-    
+
     setPreviewMedia({
       ...item,
-      previewUrl
+      previewUrl,
     });
   };
 
@@ -150,16 +151,19 @@ export default function MediaContent() {
 
           // Use the new thumbnail endpoint for previews
           if (isImageType || isVideoType) {
-             // For images and videos, use the thumbnail endpoint with query param token
-             // This allows the browser to handle caching and parallel loading
-             const token = localStorage.getItem("auth_token"); // Correct key from auth.js
-             urlMap.set(mediaId, `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`);
+            // For images and videos, use the thumbnail endpoint with query param token
+            // This allows the browser to handle caching and parallel loading
+            const token = localStorage.getItem("auth_token"); // Correct key from auth.js
+            urlMap.set(
+              mediaId,
+              `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
+            );
           } else if (isAudioType) {
-             // For audio, we might still want the download URL or a specific icon
-             // Keeping download URL for audio for now if it's used for playback
-             // But for previewing in a grid, we usually just show an icon.
-             // If there's a waveform thumbnail, we could use that.
-             // For now, let's stick to the pattern but maybe just use the icon logic in render.
+            // For audio, we might still want the download URL or a specific icon
+            // Keeping download URL for audio for now if it's used for playback
+            // But for previewing in a grid, we usually just show an icon.
+            // If there's a waveform thumbnail, we could use that.
+            // For now, let's stick to the pattern but maybe just use the icon logic in render.
           }
         }
       }
@@ -437,13 +441,19 @@ export default function MediaContent() {
 
       if (response.status === 409) {
         const data = await response.json();
-        alert(`Cannot delete media:\n\n${data.message}\n\nDetails: ${data.details || "It is currently assigned to a playlist or layout."}`);
+        alert(
+          `Cannot delete media:\n\n${data.message}\n\nDetails: ${
+            data.details || "It is currently assigned to a playlist or layout."
+          }`
+        );
         return;
       }
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data.message || `Failed to delete media: ${response.status}`);
+        throw new Error(
+          data.message || `Failed to delete media: ${response.status}`
+        );
       }
 
       // Refresh media list
@@ -587,10 +597,7 @@ export default function MediaContent() {
                   >
                     Modified Date
                   </th>
-                  <th
-                    scope="col"
-                    className="relative px-6 py-3 w-10"
-                  >
+                  <th scope="col" className="relative px-6 py-3 w-10">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -695,7 +702,9 @@ export default function MediaContent() {
                               e.stopPropagation();
                               handleDeleteMedia(mediaId);
                             }}
-                            onMouseEnter={() => setDeleteHoveredMediaId(mediaId)}
+                            onMouseEnter={() =>
+                              setDeleteHoveredMediaId(mediaId)
+                            }
                             onMouseLeave={() => setDeleteHoveredMediaId(null)}
                             className="text-gray-400 hover:text-red-600 transition-colors"
                             title="Delete media"

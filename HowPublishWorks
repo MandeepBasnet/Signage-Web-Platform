@@ -1,0 +1,427 @@
+First it asks user in a form to confirm the publish and make it live,here the layout was checkout so its status was Draft
+
+fetch("https://portal.signage-lab.com/layout/form/publish/4914?_=1765074032050", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest",
+    "x-xsrf-token": "c378b9097a5bd6b39e57c3d496faf8492eb3b3c9",
+    "cookie": "_ga=GA1.1.345907668.1762334605; _ga_33MMSZE1P1=GS2.1.s1762341251$o2$g1$t1762341326$j60$l0$h0; _ga_5M7G72GZKT=GS2.1.s1762341251$o2$g1$t1762341326$j60$l0$h0; PHPSESSID=4de5j2futu7o82m9mh9q3id95e",
+    "Referer": "https://portal.signage-lab.com/layout/view"
+  },
+  "body": null,
+  "method": "GET"
+});
+
+{
+    "html": "    <div class=\"row\">\n        <div class=\"col-md-12\">\n            <form id=\"layoutPublishForm\" class=\"XiboForm form-horizontal\" method=\"put\" action=\"\/layout\/publish\/4914\">\n\t\t\t\t    <div class=\"row\">\n        <div class=\" col-sm-12 \">\n            <p>Are you sure you want to publish this Layout? If it is already in use the update will automatically get pushed.<\/p>\n        <\/div>\n    <\/div>\n\n\n                                                    <div class=\"form-group row \">\n        <div class=\"offset-sm-2 col-sm-10\">\n            <div class=\"form-check\">\n                <input class=\"form-check-input\" type=\"checkbox\"  id=\"publishNow\"  name=\"publishNow\" checked >\n                <label class=\"form-check-label\"  for=\"publishNow\"  accesskey=\"\">Publish Now?<\/label>\n            <\/div>\n            <small class=\"form-text text-muted\">When selected, layout will be published immediately, if it should be published at a specific time, uncheck this checkbox and pick a date in the field below<\/small>\n        <\/div>\n    <\/div>\n\n\n                                                    <div class=\"form-group row publish-date-control\">\n        <label class=\"col-sm-2 control-label\" for=\"publishDate\" accesskey=\"\">Publish Date<\/label>\n        <div class=\"col-sm-10\">\n            <div class=\"input-group\">\n                <span class=\"input-group-prepend input-group-text date-open-button\" role=\"button\"><i class=\"fa fa-calendar\"><\/i><\/span>\n                <input class=\"form-control dateControl dateTime\" type=\"text\"  name=\"publishDate\" id=\"publishDate\" value=\"\" \/>\n                <span class=\"input-group-append input-group-addon input-group-text date-clear-button d-none\" role=\"button\"><i class=\"fa fa-times\"><\/i><\/span>\n            <\/div>\n            <small class=\"form-text text-muted\">Select the date and time to publish the layout<\/small>\n        <\/div>\n    <\/div>\n\n            <\/form>\n        <\/div>\n    <\/div>\n",
+    "buttons": {
+        "Cancel": "XiboDialogClose()",
+        "Publish": "$(\"#layoutPublishForm\").submit()"
+    },
+    "fieldActions": [
+        {
+            "field": "publishNow",
+            "trigger": "init",
+            "value": true,
+            "operation": "is:checked",
+            "actions": {
+                ".publish-date-control": {
+                    "display": "none"
+                }
+            }
+        },
+        {
+            "field": "publishNow",
+            "trigger": "change",
+            "value": true,
+            "operation": "is:checked",
+            "actions": {
+                ".publish-date-control": {
+                    "display": "none"
+                }
+            }
+        },
+        {
+            "field": "publishNow",
+            "trigger": "init",
+            "value": false,
+            "operation": "is:checked",
+            "actions": {
+                ".publish-date-control": {
+                    "display": ""
+                }
+            }
+        },
+        {
+            "field": "publishNow",
+            "trigger": "change",
+            "value": false,
+            "operation": "is:checked",
+            "actions": {
+                ".publish-date-control": {
+                    "display": ""
+                }
+            }
+        }
+    ],
+    "dialogTitle": "Publish Mandeep Test",
+    "callBack": "layoutPublishFormOpen",
+    "autoSubmit": null,
+    "success": true,
+    "message": null,
+    "clockUpdate": null,
+    "login": null,
+    "id": 0,
+    "extra": [],
+    "data": {
+        "layout": {
+            "layoutId": 4914,
+            "ownerId": 82,
+            "campaignId": 1053,
+            "parentId": null,
+            "publishedStatusId": 2,
+            "publishedStatus": "Draft",
+            "publishedDate": null,
+            "backgroundImageId": null,
+            "schemaVersion": 4,
+            "layout": "Mandeep Test",
+            "description": "",
+            "backgroundColor": "#000",
+            "createdDt": "2025-12-06 20:03:20",
+            "modifiedDt": "2025-12-07 08:05:00",
+            "status": 1,
+            "retired": 0,
+            "backgroundzIndex": 0,
+            "width": 1920,
+            "height": 1080,
+            "orientation": "landscape",
+            "displayOrder": null,
+            "duration": 292,
+            "statusMessage": null,
+            "enableStat": 0,
+            "autoApplyTransitions": 0,
+            "code": null,
+            "isLocked": null,
+            "regions": [],
+            "tags": [],
+            "drawers": [],
+            "actions": [],
+            "permissions": [],
+            "campaigns": [],
+            "owner": "mandeep_basnet",
+            "groupsWithPermissions": null,
+            "folderId": 1,
+            "permissionsFolderId": 1
+        }
+    }
+}
+
+
+
+
+If User tells confirm,this is how publish works and after this the status of layout is changed to Published
+fetch("https://portal.signage-lab.com/layout/publish/4914", {
+  "headers": {
+    "accept": "application/json, text/javascript, */*; q=0.01",
+    "accept-language": "en-US,en;q=0.9",
+    "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+    "sec-ch-ua": "\"Google Chrome\";v=\"143\", \"Chromium\";v=\"143\", \"Not A(Brand\";v=\"24\"",
+    "sec-ch-ua-mobile": "?0",
+    "sec-ch-ua-platform": "\"Windows\"",
+    "sec-fetch-dest": "empty",
+    "sec-fetch-mode": "cors",
+    "sec-fetch-site": "same-origin",
+    "x-requested-with": "XMLHttpRequest",
+    "x-xsrf-token": "c378b9097a5bd6b39e57c3d496faf8492eb3b3c9",
+    "cookie": "_ga=GA1.1.345907668.1762334605; _ga_33MMSZE1P1=GS2.1.s1762341251$o2$g1$t1762341326$j60$l0$h0; _ga_5M7G72GZKT=GS2.1.s1762341251$o2$g1$t1762341326$j60$l0$h0; PHPSESSID=4de5j2futu7o82m9mh9q3id95e",
+    "Referer": "https://portal.signage-lab.com/layout/view"
+  },
+  "body": "publishNow=on&publishDate=",
+  "method": "PUT"
+});
+
+{
+    "html": null,
+    "buttons": "",
+    "fieldActions": "",
+    "dialogTitle": null,
+    "callBack": null,
+    "autoSubmit": null,
+    "success": true,
+    "message": "Published Mandeep Test",
+    "clockUpdate": null,
+    "login": null,
+    "id": 0,
+    "extra": [],
+    "data": {
+        "layoutId": 4930,
+        "ownerId": 82,
+        "campaignId": 1053,
+        "parentId": null,
+        "publishedStatusId": 1,
+        "publishedStatus": "Draft",
+        "publishedDate": null,
+        "backgroundImageId": null,
+        "schemaVersion": 4,
+        "layout": "Mandeep Test",
+        "description": "",
+        "backgroundColor": "#000",
+        "createdDt": "2025-12-07 08:05:00",
+        "modifiedDt": "2025-12-07 08:05:00",
+        "status": 1,
+        "retired": 0,
+        "backgroundzIndex": 0,
+        "width": 1920,
+        "height": 1080,
+        "orientation": "landscape",
+        "displayOrder": null,
+        "duration": 292,
+        "statusMessage": null,
+        "enableStat": 0,
+        "autoApplyTransitions": 0,
+        "code": null,
+        "isLocked": null,
+        "regions": [
+            {
+                "regionId": 16152,
+                "layoutId": 4930,
+                "ownerId": 82,
+                "type": "playlist",
+                "name": "",
+                "width": 961,
+                "height": 1086,
+                "top": 0,
+                "left": -4,
+                "zIndex": 0,
+                "syncKey": null,
+                "regionOptions": [
+                    {
+                        "regionId": 16152,
+                        "option": "loop",
+                        "value": "0"
+                    },
+                    {
+                        "regionId": 16152,
+                        "option": "transitionDirection",
+                        "value": null
+                    },
+                    {
+                        "regionId": 16152,
+                        "option": "transitionDuration",
+                        "value": null
+                    },
+                    {
+                        "regionId": 16152,
+                        "option": "transitionType",
+                        "value": null
+                    }
+                ],
+                "permissions": [],
+                "duration": 292,
+                "isDrawer": 0,
+                "actions": [],
+                "tempId": null,
+                "regionPlaylist": {
+                    "playlistId": 16300,
+                    "ownerId": 82,
+                    "name": "",
+                    "regionId": 16152,
+                    "isDynamic": 0,
+                    "filterMediaName": null,
+                    "filterMediaNameLogicalOperator": "OR",
+                    "filterMediaTags": null,
+                    "filterExactTags": 0,
+                    "filterMediaTagsLogicalOperator": "OR",
+                    "maxNumberOfItems": 0,
+                    "createdDt": "2025-12-07 08:05:00",
+                    "modifiedDt": "2025-12-07 08:05:00",
+                    "duration": 0,
+                    "requiresDurationUpdate": 0,
+                    "enableStat": null,
+                    "tags": [],
+                    "widgets": [],
+                    "permissions": [],
+                    "tempId": null,
+                    "owner": "mandeep_basnet",
+                    "groupsWithPermissions": null,
+                    "folderId": 1,
+                    "permissionsFolderId": 1
+                }
+            },
+            {
+                "regionId": 16153,
+                "layoutId": 4930,
+                "ownerId": 82,
+                "type": "canvas",
+                "name": "",
+                "width": 1920,
+                "height": 1080,
+                "top": 0,
+                "left": 0,
+                "zIndex": 1,
+                "syncKey": null,
+                "regionOptions": [],
+                "permissions": [],
+                "duration": 60,
+                "isDrawer": 0,
+                "actions": [],
+                "tempId": null,
+                "regionPlaylist": {
+                    "playlistId": 16301,
+                    "ownerId": 82,
+                    "name": "",
+                    "regionId": 16153,
+                    "isDynamic": 0,
+                    "filterMediaName": null,
+                    "filterMediaNameLogicalOperator": "OR",
+                    "filterMediaTags": null,
+                    "filterExactTags": 0,
+                    "filterMediaTagsLogicalOperator": "OR",
+                    "maxNumberOfItems": 0,
+                    "createdDt": "2025-12-07 08:05:00",
+                    "modifiedDt": "2025-12-07 08:05:00",
+                    "duration": 0,
+                    "requiresDurationUpdate": 0,
+                    "enableStat": null,
+                    "tags": [],
+                    "widgets": [],
+                    "permissions": [],
+                    "tempId": null,
+                    "owner": "mandeep_basnet",
+                    "groupsWithPermissions": null,
+                    "folderId": 1,
+                    "permissionsFolderId": 1
+                }
+            },
+            {
+                "regionId": 16154,
+                "layoutId": 4930,
+                "ownerId": 82,
+                "type": "frame",
+                "name": "",
+                "width": 966,
+                "height": 263,
+                "top": 819,
+                "left": 957,
+                "zIndex": 2,
+                "syncKey": null,
+                "regionOptions": [
+                    {
+                        "regionId": 16154,
+                        "option": "loop",
+                        "value": "0"
+                    },
+                    {
+                        "regionId": 16154,
+                        "option": "transitionDirection",
+                        "value": null
+                    },
+                    {
+                        "regionId": 16154,
+                        "option": "transitionDuration",
+                        "value": null
+                    },
+                    {
+                        "regionId": 16154,
+                        "option": "transitionType",
+                        "value": null
+                    }
+                ],
+                "permissions": [],
+                "duration": 10,
+                "isDrawer": 0,
+                "actions": [],
+                "tempId": null,
+                "regionPlaylist": {
+                    "playlistId": 16302,
+                    "ownerId": 82,
+                    "name": "",
+                    "regionId": 16154,
+                    "isDynamic": 0,
+                    "filterMediaName": null,
+                    "filterMediaNameLogicalOperator": "OR",
+                    "filterMediaTags": null,
+                    "filterExactTags": 0,
+                    "filterMediaTagsLogicalOperator": "OR",
+                    "maxNumberOfItems": 0,
+                    "createdDt": "2025-12-07 08:05:00",
+                    "modifiedDt": "2025-12-07 08:05:00",
+                    "duration": 0,
+                    "requiresDurationUpdate": 0,
+                    "enableStat": null,
+                    "tags": [],
+                    "widgets": [],
+                    "permissions": [],
+                    "tempId": null,
+                    "owner": "mandeep_basnet",
+                    "groupsWithPermissions": null,
+                    "folderId": 1,
+                    "permissionsFolderId": 1
+                }
+            }
+        ],
+        "tags": [],
+        "drawers": [
+            {
+                "regionId": 16155,
+                "layoutId": 4930,
+                "ownerId": 82,
+                "type": "drawer",
+                "name": "Untitled 2025-11-07 15:23:11-1 - drawer",
+                "width": 1920,
+                "height": 1080,
+                "top": 0,
+                "left": 0,
+                "zIndex": 0,
+                "syncKey": null,
+                "regionOptions": [],
+                "permissions": [],
+                "duration": 0,
+                "isDrawer": 1,
+                "actions": [],
+                "tempId": null,
+                "regionPlaylist": {
+                    "playlistId": 16303,
+                    "ownerId": 82,
+                    "name": "Untitled 2025-11-07 15:23:11-1 - drawer",
+                    "regionId": 16155,
+                    "isDynamic": 0,
+                    "filterMediaName": null,
+                    "filterMediaNameLogicalOperator": "OR",
+                    "filterMediaTags": null,
+                    "filterExactTags": 0,
+                    "filterMediaTagsLogicalOperator": "OR",
+                    "maxNumberOfItems": 0,
+                    "createdDt": "2025-12-07 08:05:00",
+                    "modifiedDt": "2025-12-07 08:05:00",
+                    "duration": 0,
+                    "requiresDurationUpdate": 0,
+                    "enableStat": null,
+                    "tags": [],
+                    "widgets": [],
+                    "permissions": [],
+                    "tempId": null,
+                    "owner": "mandeep_basnet",
+                    "groupsWithPermissions": null,
+                    "folderId": 1,
+                    "permissionsFolderId": 1
+                }
+            }
+        ],
+        "actions": [],
+        "permissions": [],
+        "campaigns": [],
+        "owner": "mandeep_basnet",
+        "groupsWithPermissions": null,
+        "folderId": 1,
+        "permissionsFolderId": 1
+    }
+}
+

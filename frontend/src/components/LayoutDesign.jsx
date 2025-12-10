@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 "use client";
 
 import { useEffect, useState, useRef } from "react";
@@ -21,7 +22,6 @@ export default function LayoutDesign() {
   const [scale, setScale] = useState(1);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [bgImageUrl, setBgImageUrl] = useState(null);
-
 
   // Preview Modal State
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -281,10 +281,11 @@ export default function LayoutDesign() {
       const data = await response.json();
       const fetchedLayout = data.layout;
 
-      console.log(`[LayoutDesign] Fetched Layout: ID=${fetchedLayout.layoutId}, Status=${fetchedLayout.publishedStatusId}`);
+      console.log(
+        `[LayoutDesign] Fetched Layout: ID=${fetchedLayout.layoutId}, Status=${fetchedLayout.publishedStatusId}`
+      );
 
       setLayout(fetchedLayout);
-
     } catch (err) {
       console.error("Error fetching layout:", err);
       setError(err.message);
@@ -867,8 +868,6 @@ export default function LayoutDesign() {
       const _ = await response.json();
       setPublishSuccess(true);
 
-
-
       // Show success message and redirect
       alert("Layout published successfully! Redirecting to dashboard...");
       navigate("/dashboard", { replace: true });
@@ -916,7 +915,8 @@ export default function LayoutDesign() {
 
       // Extract new Draft Layout ID
       // The controller returns the result of POST /layout/copy, which is the new layout object
-      const newLayoutId = data.layoutId || data.id || (data.layout && data.layout.layoutId);
+      const newLayoutId =
+        data.layoutId || data.id || (data.layout && data.layout.layoutId);
 
       if (newLayoutId) {
         console.log(`[Checkout] Redirecting to new draft: ${newLayoutId}`);
@@ -943,7 +943,6 @@ export default function LayoutDesign() {
       setCheckingOut(false);
     }
   };
-
 
   const handleTextDoubleClick = (widget, currentText, elementId = null) => {
     // Enable direct text editing for all widgets
@@ -1006,10 +1005,12 @@ export default function LayoutDesign() {
       console.log(
         `[Text Save] Updating widget ${widget.widgetId} with new text elements`
       );
-      
-      console.log(`[Text Save] CURRENT LAYOUT CONTEXT: ID=${layoutId}, Status=${layout?.publishedStatusId}`);
+
+      console.log(
+        `[Text Save] CURRENT LAYOUT CONTEXT: ID=${layoutId}, Status=${layout?.publishedStatusId}`
+      );
       console.log(`[Text Save] Target Widget ID: ${widget.widgetId}`);
-      
+
       console.log(
         `[Text Save] Elements data:`,
         JSON.stringify(elementsData).substring(0, 300) + "..."
@@ -2818,7 +2819,11 @@ export default function LayoutDesign() {
                                                     onDoubleClick={(e) => {
                                                       e.stopPropagation();
                                                       // Enable editing for this text element
-                                                      handleTextDoubleClick(widget, textEl.text, textEl.elementId);
+                                                      handleTextDoubleClick(
+                                                        widget,
+                                                        textEl.text,
+                                                        textEl.elementId
+                                                      );
                                                     }}
                                                     title="Double click to edit text"
                                                   >
@@ -2924,19 +2929,32 @@ export default function LayoutDesign() {
           <div className="bg-white rounded-xl p-6 max-w-md w-full shadow-2xl border border-gray-200 animate-in fade-in zoom-in duration-200">
             <div className="text-center mb-6">
               <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-blue-100 mb-4">
-                <svg className="h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                <svg
+                  className="h-8 w-8 text-blue-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Checkout Required</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">
+                Checkout Required
+              </h3>
               <p className="text-gray-500 text-sm">
-                This layout is currently <strong>published</strong> (Read-Only).<br/>
+                This layout is currently <strong>published</strong> (Read-Only).
+                <br />
                 To make changes, you need to checkout a draft version.
               </p>
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate("/dashboard")}
                 className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 font-medium rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Go Back
@@ -2948,11 +2966,26 @@ export default function LayoutDesign() {
               >
                 {checkingOut ? (
                   <>
-                     <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                     </svg>
-                     <span>Checkout...</span>
+                    <svg
+                      className="animate-spin h-4 w-4 text-white"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    <span>Checkout...</span>
                   </>
                 ) : (
                   "Checkout & Edit"
