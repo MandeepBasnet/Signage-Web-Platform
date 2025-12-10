@@ -74,6 +74,7 @@ export default function LayoutDesign() {
   const [replaceMediaModalState, setReplaceMediaModalState] = useState({
     isOpen: false,
     widgetId: null,
+    elementId: null, // Track if editing a Global widget element
     currentMediaId: null,
   });
   const [replacingWidget, setReplacingWidget] = useState(null);
@@ -180,6 +181,40 @@ export default function LayoutDesign() {
       }
 
       return textElements;
+    } catch (e) {
+      console.error("Failed to parse elements JSON:", e);
+      return [];
+    }
+  };
+
+  // Helper to extract image elements from Canvas/Global widgets
+  const extractImageElements = (widget) => {
+    const elementsOption = getOptionValue(widget, "elements");
+    if (!elementsOption) return [];
+
+    try {
+      const elementsData = JSON.parse(elementsOption);
+      const imageElements = [];
+
+      const extractRecursive = (data, path = []) => {
+        if (Array.isArray(data)) {
+          data.forEach((item, idx) => extractRecursive(item, [...path, idx]));
+        } else if (typeof data === 'object' && data !== null) {
+          // Check if this is an image element
+          if (data.elementType === "global_library_image" && data.mediaId) {
+            imageElements.push({
+              elementId: data.elementId || data.id,
+              mediaId: data.mediaId,
+              name: data.elementName || `Image ${data.mediaId}`,
+            });
+          }
+          // Continue deep search
+          if (data.elements) extractRecursive(data.elements, path);
+        }
+      };
+
+      extractRecursive(elementsData);
+      return imageElements;
     } catch (e) {
       console.error("Failed to parse elements JSON:", e);
       return [];
@@ -676,23 +711,79 @@ export default function LayoutDesign() {
   };
 
   const handleReplaceMedia = async (newMediaId) => {
-    const { widgetId } = replaceMediaModalState;
+    const { widgetId, elementId } = replaceMediaModalState;
     if (!widgetId || !newMediaId) return;
 
     try {
       setReplacingWidget(widgetId);
-      console.log(`Replacing media for widget ${widgetId} with media ${newMediaId}`);
+      console.log(`Replacing media for widget ${widgetId} ${elementId ? `(Element: ${elementId})` : ''} with media ${newMediaId}`);
 
-      // Call backend to update widget with new mediaId
+      let payload = {};
+
+      // SCENARIO 1: Global/Canvas Widget Element (The fix for your bug)
+      if (elementId) {
+        // 1. Find the widget in the current layout state
+        let targetWidget = null;
+        layout.regions.forEach(r => {
+          r.regionPlaylist?.widgets?.forEach(w => {
+            if (String(w.widgetId) === String(widgetId)) targetWidget = w;
+          });
+        });
+
+        if (!targetWidget) throw new Error("Widget not found in local state");
+
+        // 2. Parse the existing elements JSON
+        const elementsOption = getOptionValue(targetWidget, "elements");
+        let elementsData = [];
+        try {
+          elementsData = JSON.parse(elementsOption || "[]");
+        } catch (e) {
+          throw new Error("Failed to parse widget elements structure");
+        }
+
+        // 3. Find the specific element and update its mediaId
+        let updated = false;
+        const updateRecursive = (data) => {
+          if (Array.isArray(data)) {
+            data.forEach(item => updateRecursive(item));
+          } else if (typeof data === 'object' && data !== null) {
+             // Check if this is our target element
+             if (data.id === elementId || data.elementId === elementId) {
+                // Update the mediaId
+                data.mediaId = parseInt(newMediaId); // Xibo expects int usually
+                updated = true;
+             }
+             // Continue deep search
+             if (data.elements) updateRecursive(data.elements);
+          }
+        };
+
+        updateRecursive(elementsData);
+
+        if (!updated) throw new Error("Could not find the specific element to update");
+
+        // 4. Prepare payload with BOTH elements AND mediaIds
+        // CRITICAL: Global widgets need both to persist correctly
+        payload = { 
+          elements: JSON.stringify(elementsData),
+          mediaIds: [newMediaId]  // Also update top-level mediaIds array
+        };
+        console.log("Preparing Elements Update Payload with mediaIds array");
+
+      } else {
+        // SCENARIO 2: Standard Image/Video Widget (Existing logic)
+        payload = { mediaIds: [newMediaId] };
+        console.log("Preparing Standard Media Payload");
+      }
+
+      // Call backend
       const response = await fetch(`${API_BASE_URL}/widgets/${widgetId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({
-          mediaIds: [newMediaId],
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
@@ -706,14 +797,14 @@ export default function LayoutDesign() {
       setReplaceMediaModalState({
         isOpen: false,
         widgetId: null,
+        elementId: null,
         currentMediaId: null,
       });
 
       // Refresh layout to show new media
       await fetchLayoutDetails();
-
-      // Show success notification
       alert("Media replaced successfully!");
+
     } catch (err) {
       console.error("Error replacing media:", err);
       alert(`Failed to replace media: ${err.message}`);
@@ -2328,6 +2419,7 @@ export default function LayoutDesign() {
                                             setReplaceMediaModalState({
                                               isOpen: true,
                                               widgetId: widget.widgetId,
+                                              elementId: widget.elementId || null, // Pass elementId if it's a Global element
                                               currentMediaId: currentMediaId,
                                             });
                                           }}

@@ -344,7 +344,20 @@ export const updateWidget = async (req, res) => {
   try {
     const { token } = getUserContext(req);
 
+    console.log(`[updateWidget] Updating widget ${widgetId}`);
+    
+    // Log the type of update being performed for debugging
+    if (widgetData.mediaIds) {
+      console.log(`[updateWidget] Type: Standard Media Swap -> IDs: ${widgetData.mediaIds}`);
+    } else if (widgetData.elements) {
+      console.log(`[updateWidget] Type: Canvas Elements Update -> Length: ${widgetData.elements.length} chars`);
+      console.log(`[updateWidget] Elements preview: ${widgetData.elements.substring(0, 200)}...`);
+    } else {
+      console.log(`[updateWidget] Type: Generic Property Update`, Object.keys(widgetData));
+    }
+
     // Xibo API expects PUT /playlist/widget/{widgetId}
+    // xiboRequest (via utils/xiboClient.js) handles the form-urlencoded conversion automatically
     const result = await xiboRequest(
       `/playlist/widget/${widgetId}`,
       "PUT",
@@ -352,8 +365,10 @@ export const updateWidget = async (req, res) => {
       token
     );
 
+    console.log(`[updateWidget] ✓ Successfully updated widget ${widgetId}`);
     res.json(result);
   } catch (err) {
+    console.error(`[updateWidget] ✗ Error updating widget ${widgetId}:`, err.message);
     handleControllerError(res, err, "Failed to update widget");
   }
 };
