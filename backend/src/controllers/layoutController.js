@@ -339,22 +339,24 @@ export const getLayoutPreview = async (req, res) => {
 };
 export const updateWidget = async (req, res) => {
   const { widgetId } = req.params;
-  const widgetData = req.body;
+  // Create a shallow copy so we can modify it
+  let widgetData = { ...req.body };
 
   try {
     const { token } = getUserContext(req);
 
     console.log(`[updateWidget] Updating widget ${widgetId}`);
-    
-    // Log the type of update being performed for debugging
-    if (widgetData.mediaIds) {
-      console.log(`[updateWidget] Type: Standard Media Swap -> IDs: ${widgetData.mediaIds}`);
-    } else if (widgetData.elements) {
-      console.log(`[updateWidget] Type: Canvas Elements Update -> Length: ${widgetData.elements.length} chars`);
-      console.log(`[updateWidget] Elements preview: ${widgetData.elements.substring(0, 200)}...`);
-    } else {
-      console.log(`[updateWidget] Type: Generic Property Update`, Object.keys(widgetData));
+
+    // --- FIX START: CONFLICT RESOLUTION ---
+    // If we are updating 'elements' (Canvas/Global), Xibo will ignore it if 'mediaIds' is also present.
+    // We must strictly remove 'mediaIds' when 'elements' is defined.
+    if (widgetData.elements) {
+      console.log(`[updateWidget] Detected 'elements' update. Removing 'mediaIds' to ensure Xibo processes the canvas update.`);
+      delete widgetData.mediaIds;
     }
+    // --- FIX END ---
+
+    console.log(`[updateWidget] Final Payload Keys:`, Object.keys(widgetData));
 
     // Xibo API expects PUT /playlist/widget/{widgetId}
     // xiboRequest (via utils/xiboClient.js) handles the form-urlencoded conversion automatically

@@ -716,12 +716,23 @@ export default function LayoutDesign() {
 
     try {
       setReplacingWidget(widgetId);
+      
+      // DEBUG: Log the state values
+      console.log(`[DEBUG] Replace Media State:`, {
+        widgetId,
+        elementId,
+        hasElementId: !!elementId,
+        newMediaId
+      });
+      
       console.log(`Replacing media for widget ${widgetId} ${elementId ? `(Element: ${elementId})` : ''} with media ${newMediaId}`);
 
       let payload = {};
 
       // SCENARIO 1: Global/Canvas Widget Element (The fix for your bug)
       if (elementId) {
+        console.log(`[DEBUG] Taking Global Widget path (elementId present)`);
+        
         // 1. Find the widget in the current layout state
         let targetWidget = null;
         layout.regions.forEach(r => {
@@ -731,6 +742,8 @@ export default function LayoutDesign() {
         });
 
         if (!targetWidget) throw new Error("Widget not found in local state");
+        
+        console.log(`[DEBUG] Found widget:`, targetWidget.type, targetWidget.moduleName);
 
         // 2. Parse the existing elements JSON
         const elementsOption = getOptionValue(targetWidget, "elements");
@@ -740,6 +753,8 @@ export default function LayoutDesign() {
         } catch (e) {
           throw new Error("Failed to parse widget elements structure");
         }
+        
+        console.log(`[DEBUG] Parsed elements, searching for elementId:`, elementId);
 
         // 3. Find the specific element and update its mediaId
         let updated = false;
@@ -749,6 +764,7 @@ export default function LayoutDesign() {
           } else if (typeof data === 'object' && data !== null) {
              // Check if this is our target element
              if (data.id === elementId || data.elementId === elementId) {
+                console.log(`[DEBUG] Found matching element! Old mediaId: ${data.mediaId}, New: ${newMediaId}`);
                 // Update the mediaId
                 data.mediaId = parseInt(newMediaId); // Xibo expects int usually
                 updated = true;
@@ -760,15 +776,16 @@ export default function LayoutDesign() {
 
         updateRecursive(elementsData);
 
-        if (!updated) throw new Error("Could not find the specific element to update");
+        if (!updated) {
+          console.error(`[DEBUG] Could not find element with id:`, elementId);
+          throw new Error("Could not find the specific element to update");
+        }
 
-        // 4. Prepare payload with BOTH elements AND mediaIds
-        // CRITICAL: Global widgets need both to persist correctly
-        payload = { 
-          elements: JSON.stringify(elementsData),
-          mediaIds: [newMediaId]  // Also update top-level mediaIds array
-        };
-        console.log("Preparing Elements Update Payload with mediaIds array");
+        // 4. STRICTLY send ONLY elements (not mediaIds)
+        // Xibo prioritizes mediaIds over elements, so we must exclude it
+        payload = { elements: JSON.stringify(elementsData) };
+        console.log("Preparing Elements Update Payload (elements only)");
+        console.log(`[DEBUG] Payload preview:`, payload.elements.substring(0, 200));
 
       } else {
         // SCENARIO 2: Standard Image/Video Widget (Existing logic)

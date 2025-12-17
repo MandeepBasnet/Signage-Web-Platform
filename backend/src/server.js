@@ -59,6 +59,11 @@ app.post("/test-body", (req, res) => {
   });
 });
 
+// ✅ Health Check Route (Fixes "Cannot GET /" error)
+app.get("/", (req, res) => {
+  res.send("✅ Signage Backend is running successfully!");
+});
+
 app.use("/api/auth", authRoutes);
 app.use("/api/layouts", layoutRoutes);
 app.use("/api/playlists", playlistRoutes);

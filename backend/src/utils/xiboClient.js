@@ -309,17 +309,14 @@ export async function xiboRequest(
 
     if (isPutRequest && !isJsonPut) {
       // Xibo requires application/x-www-form-urlencoded for PUT requests (default behavior)
-      // SPECIAL HANDLING: If 'elements' is present and is a string, send it as RAW BODY
-      // This mimics the "lying header" behavior seen in reference logs (Header: x-www-form-urlencoded, Body: raw JSON string)
-      if (data && typeof data.elements === 'string') {
-          console.log(`[xiboRequest] Detected 'elements' string. Sending as RAW BODY with x-www-form-urlencoded header.`);
-          requestConfig.data = data.elements;
-      } else {
-          // Use qs to stringify the data for standard form encoding
-          const serializedData = qs.stringify(data);
-          console.log(`[xiboRequest] Serialized data preview:`, serializedData.substring(0, 500) + (serializedData.length > 500 ? "..." : ""));
-          requestConfig.data = serializedData;
-      }
+      
+      // FIX: Removed specific check for 'elements' string. 
+      // We ALWAYS want to use qs.stringify to ensure all keys (mediaIds AND elements) 
+      // are properly encoded as form fields.
+      
+      const serializedData = qs.stringify(data);
+      console.log(`[xiboRequest] Serialized data preview (Length: ${serializedData.length}):`, serializedData.substring(0, 500) + (serializedData.length > 500 ? "..." : ""));
+      requestConfig.data = serializedData;
       
       requestConfig.headers["Content-Type"] =
         "application/x-www-form-urlencoded";
