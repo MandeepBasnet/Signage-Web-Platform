@@ -1,6 +1,8 @@
 import axios from "axios";
 import FormData from "form-data";
 import qs from "qs";
+import { wrapper } from "axios-cookiejar-support";
+import { CookieJar } from "tough-cookie";
 let token = null;
 
 // Get application access token (for API operations)
@@ -75,6 +77,77 @@ export async function getAccessToken() {
   }
 }
 
+// Helper to verify password via Web UI (Proxy Auth)
+async function verifyXiboPassword(username, password) {
+  try {
+    const jar = new CookieJar();
+    const client = wrapper(axios.create({ jar }));
+    
+    // Base URL from API URL (remove /api)
+    // Example: https://portal.signage-lab.com/api -> https://portal.signage-lab.com
+    const baseUrl = process.env.XIBO_API_URL.replace(/\/api\/?$/, "");
+    const loginUrl = `${baseUrl}/login`;
+
+    console.log(`[verifyXiboPassword] Checking password against ${loginUrl}...`);
+
+    // 1. Get Login Page for Token
+    const getRes = await client.get(loginUrl);
+    
+    // Robust Regex to find csrfToken value
+    // Matches: name="csrfToken" ... value="XYZ" OR value="XYZ" ... name="csrfToken"
+    // Handles newlines and different attribute ordering
+    const tokenMatch = getRes.data.match(/name=["']csrfToken["'][^>]*value=["']([^"']+)["']/) || 
+                       getRes.data.match(/value=["']([^"']+)["'][^>]*name=["']csrfToken["']/);
+
+    if (!tokenMatch) {
+      console.error("[verifyXiboPassword] ❌ CSRF Token not found in login page HTML");
+      // Fail open or closed? Closed for security.
+      return false; 
+    }
+
+    const csrfToken = tokenMatch[1];
+    
+    // 2. Submit Login
+    const postRes = await client.post(loginUrl, 
+      new URLSearchParams({
+        csrfToken: csrfToken,
+        username: username,
+        password: password
+      }), 
+      {
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400
+      }
+    );
+
+    // 3. Check Result
+    // 302 Redirect is the expected success case
+    if (postRes.status === 302) {
+      const location = postRes.headers.location;
+      // If redirecting back to login, it failed (e.g. /login)
+      if (location && location.includes("login")) {
+         console.log(`[verifyXiboPassword] ❌ Redirected back to login (Auth Failed)`);
+         return false;
+      }
+      console.log(`[verifyXiboPassword] ✅ Redirected to ${location} (Auth Success)`);
+      return true;
+    }
+
+    // If we got 200 OK, it usually means the page re-rendered with validation errors
+    if (postRes.status === 200) {
+        console.log(`[verifyXiboPassword] ❌ Received 200 OK (Login Form Re-rendered - Auth Failed)`);
+        return false;
+    }
+
+    return false;
+
+  } catch (err) {
+    console.error(`[verifyXiboPassword] Error: ${err.message}`);
+    return false;
+  }
+}
+
+
 // Authenticate user with Xibo credentials
 // Since Xibo doesn't support password grant, we use a workaround:
 // 1. Get app token with client credentials
@@ -142,17 +215,30 @@ export async function authenticateUser(username, password) {
     }
 
     // Note: Xibo API doesn't provide a direct way to verify password via API
-    // We'll need to use the application token for all operations
-    // The password verification would need to be done through Xibo's web interface
-    // or we accept the user exists and proceed (less secure but necessary for API-only access)
+    // We utilize a proxy authentication method by verifying credentials 
+    // against the Xibo Web Interface directly.
 
-    // For now, we'll verify the user exists and return success
-    // In production, you might want to implement additional verification
+    // 4. Verify password via Web Proxy
+    const isPasswordValid = await verifyXiboPassword(username, password);
+    
+    if (!isPasswordValid) {
+       console.warn(`[authenticateUser] ❌ Password verification failed for user "${username}"`);
+       return {
+            success: false,
+            message: "Invalid credentials",
+            details: {
+                error: "Password verification failed"
+            }
+       };
+    }
+    
+    console.log(`[authenticateUser] ✅ Password verified for "${username}"!`);
+
     return {
       success: true,
       access_token: appToken, // Use app token since we can't get user-specific token
       user: user,
-      note: "Using application token - user-specific operations may be limited",
+      note: "Authenticated via Web Proxy verification + API User Existence Check",
     };
   } catch (error) {
     console.error("Xibo authentication error:", {

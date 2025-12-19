@@ -19,13 +19,15 @@
   "type": "module",
   "dependencies": {
     "axios": "^1.6.7",
+    "axios-cookiejar-support": "^6.0.5",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^5.1.0",
     "form-data": "^4.0.4",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "tough-cookie": "^6.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
