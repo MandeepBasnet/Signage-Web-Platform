@@ -95,7 +95,7 @@ export default function Login() {
         <div className="flex-[0_0_42%] max-w-full md:max-w-[42%] flex items-center justify-center bg-white px-8 py-12 md:px-16 md:py-[72px] order-2 md:order-1">
           <div className="w-full max-w-[360px]">
             <img
-              src="/logo.png"
+              src="/ModusLogo.png"
               alt="SigmaDS Logo"
               className="h-10 md:h-12 mb-9 md:mb-12 object-contain"
             />
@@ -204,7 +204,7 @@ export default function Login() {
             {/* Logo */}
             <img
               className="logo-img w-32 md:w-40 h-auto"
-              src="/logo.png"
+              src="/ModusLogo.png"
               alt="SigmaDS Logo"
             />
 
