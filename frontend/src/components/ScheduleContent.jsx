@@ -6,10 +6,46 @@ import { getAuthHeaders } from "../utils/auth.js";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
+// datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
+const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");
+
+// Epoch (seconds) or string → "YYYY-MM-DDTHH:mm" for a datetime-local input.
+const toLocalInput = (value) => {
+  if (!value) return "";
+  const ms = typeof value === "number" ? value * 1000 : Date.parse(value);
+  if (Number.isNaN(ms)) return "";
+  const d = new Date(ms);
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(
+    d.getHours()
+  )}:${p(d.getMinutes())}`;
+};
+
+const pickArray = (data) =>
+  Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+
 export default function ScheduleContent() {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Add/edit modal state
+  const [showAdd, setShowAdd] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(null); // null = create mode
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+
+  const [playlists, setPlaylists] = useState([]);
+  const [layouts, setLayouts] = useState([]);
+  const [displayGroups, setDisplayGroups] = useState([]);
+
+  const [contentType, setContentType] = useState("playlist"); // 'playlist' | 'layout'
+  const [contentId, setContentId] = useState("");
+  const [selectedGroupIds, setSelectedGroupIds] = useState([]);
+  const [isAlways, setIsAlways] = useState(true);
+  const [fromDt, setFromDt] = useState("");
+  const [toDt, setToDt] = useState("");
+  const [isPriority, setIsPriority] = useState(false);
 
   useEffect(() => {
     fetchSchedule();
@@ -20,26 +56,19 @@ export default function ScheduleContent() {
       setLoading(true);
       setError(null);
 
-      // Fetch schedule for the next 30 days by default
-      // Note: Xibo API requires fromDt and toDt for schedule
       const now = new Date();
       const nextMonth = new Date();
       nextMonth.setDate(now.getDate() + 30);
 
-      const fromDt = now.toISOString().split('T')[0] + ' 00:00:00';
-      const toDt = nextMonth.toISOString().split('T')[0] + ' 23:59:59';
+      const from = now.toISOString().split("T")[0] + " 00:00:00";
+      const to = nextMonth.toISOString().split("T")[0] + " 23:59:59";
 
-      const response = await fetch(`${API_BASE_URL}/schedule?fromDt=${fromDt}&toDt=${toDt}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/schedule?fromDt=${from}&toDt=${to}`,
+        { method: "GET", headers: { ...getAuthHeaders() } }
+      );
 
       if (!response.ok) {
-        // If 404, it might mean the route doesn't exist yet, which is expected as we haven't created it.
-        // But we will create it.
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
           errorData?.message || `Failed to fetch schedule: ${response.status}`
@@ -54,6 +83,165 @@ export default function ScheduleContent() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const openAddModal = async (event = null) => {
+    setFormError(null);
+    setShowAdd(true);
+
+    if (event) {
+      // Edit mode: prefill targeting / timing / priority from the event.
+      setEditingEvent(event);
+      const groupIds = (event.displayGroups || [])
+        .map((dg) => dg.displayGroupId || dg.id)
+        .filter(Boolean);
+      setSelectedGroupIds(groupIds);
+      const always = event.dayPartId === 1;
+      setIsAlways(always);
+      setFromDt(always ? "" : toLocalInput(event.fromDt));
+      setToDt(always ? "" : toLocalInput(event.toDt));
+      setIsPriority(!!event.isPriority);
+    } else {
+      setEditingEvent(null);
+    }
+
+    // Load the pickers (best-effort; each independent)
+    try {
+      const [plRes, loRes, dgRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/playlists`, { headers: { ...getAuthHeaders() } }),
+        fetch(`${API_BASE_URL}/layouts`, { headers: { ...getAuthHeaders() } }),
+        fetch(`${API_BASE_URL}/schedule/display-groups`, {
+          headers: { ...getAuthHeaders() },
+        }),
+      ]);
+      setPlaylists(pickArray(await plRes.json().catch(() => ({}))));
+      setLayouts(pickArray(await loRes.json().catch(() => ({}))));
+      setDisplayGroups(pickArray(await dgRes.json().catch(() => ({}))));
+    } catch (err) {
+      console.error("Error loading schedule pickers:", err);
+      setFormError("Failed to load playlists / layouts / display groups.");
+    }
+  };
+
+  const closeAddModal = () => {
+    setShowAdd(false);
+    setEditingEvent(null);
+    setContentId("");
+    setSelectedGroupIds([]);
+    setIsAlways(true);
+    setFromDt("");
+    setToDt("");
+    setIsPriority(false);
+    setFormError(null);
+  };
+
+  const toggleGroup = (id) => {
+    setSelectedGroupIds((prev) =>
+      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
+    );
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setFormError(null);
+
+    if (!editingEvent && !contentId) {
+      setFormError(`Please select a ${contentType}.`);
+      return;
+    }
+    if (selectedGroupIds.length === 0) {
+      setFormError("Please select at least one display group.");
+      return;
+    }
+    if (!isAlways && (!fromDt || !toDt)) {
+      setFormError("Please set both a start and end time, or choose 'Always'.");
+      return;
+    }
+
+    const common = {
+      displayGroupIds: selectedGroupIds,
+      isAlways,
+      isPriority,
+      fromDt: isAlways ? undefined : toXiboDate(fromDt),
+      toDt: isAlways ? undefined : toXiboDate(toDt),
+    };
+
+    let url = `${API_BASE_URL}/schedule`;
+    let method = "POST";
+    let body;
+
+    if (editingEvent) {
+      // Edit: preserve the event's existing content (campaignId + eventTypeId).
+      url = `${API_BASE_URL}/schedule/${editingEvent.eventId}`;
+      method = "PUT";
+      body = {
+        ...common,
+        eventTypeId: editingEvent.eventTypeId || 1,
+        campaignId: editingEvent.campaignId,
+        displayOrder: editingEvent.displayOrder ?? 0,
+      };
+    } else {
+      // Create: resolve content (playlist auto-wraps server-side).
+      let campaignId;
+      if (contentType === "layout") {
+        const layout = layouts.find(
+          (l) => String(l.layoutId || l.id) === String(contentId)
+        );
+        campaignId = layout?.campaignId;
+      }
+      body = { ...common, contentType, contentId, campaignId };
+    }
+
+    try {
+      setSubmitting(true);
+      const response = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          errorData?.message ||
+            `Failed to ${editingEvent ? "update" : "create"} event: ${response.status}`
+        );
+      }
+
+      closeAddModal();
+      fetchSchedule();
+    } catch (err) {
+      console.error("Error saving schedule event:", err);
+      setFormError(err.message || "Failed to save schedule event");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (eventId) => {
+    if (!eventId) return;
+    if (!window.confirm("Delete this scheduled event?")) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/schedule/${eventId}`, {
+        method: "DELETE",
+        headers: { ...getAuthHeaders() },
+      });
+      if (!response.ok && response.status !== 204) {
+        throw new Error(`Failed to delete event: ${response.status}`);
+      }
+      setEvents((prev) => prev.filter((ev) => ev.eventId !== eventId));
+    } catch (err) {
+      console.error("Error deleting schedule event:", err);
+      alert(err.message || "Failed to delete event");
+    }
+  };
+
+  const formatEpoch = (value) => {
+    if (!value) return "—";
+    const ms = typeof value === "number" ? value * 1000 : Date.parse(value);
+    if (Number.isNaN(ms)) return String(value);
+    return new Date(ms).toLocaleString();
   };
 
   if (loading) {
@@ -81,51 +269,271 @@ export default function ScheduleContent() {
               Manage your content schedule
             </p>
           </div>
-          <button
-            onClick={fetchSchedule}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={openAddModal}
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Add Event
+            </button>
+            <button
+              onClick={fetchSchedule}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {error ? (
-             <div className="text-center py-12 text-red-600">
-                <p>{error}</p>
-                <p className="text-sm text-gray-500 mt-2">Make sure the backend route /api/schedule is implemented.</p>
-             </div>
+          <div className="text-center py-12 text-red-600">
+            <p>{error}</p>
+          </div>
         ) : events.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">No scheduled events found</p>
             <p className="text-gray-400 text-sm mt-2">
-              Add events to your schedule to display content.
+              Use “Add Event” to schedule a playlist or layout onto a display.
             </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-                <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50">
-                        <th className="px-4 py-3 text-sm font-medium text-gray-700">Event</th>
-                        <th className="px-4 py-3 text-sm font-medium text-gray-700">Start</th>
-                        <th className="px-4 py-3 text-sm font-medium text-gray-700">End</th>
-                        <th className="px-4 py-3 text-sm font-medium text-gray-700">Display/Group</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {events.map((event) => (
-                        <tr key={event.eventId} className="border-b border-gray-100 hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm text-gray-900">{event.campaign || "Unknown Event"}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{new Date(event.fromDt * 1000).toLocaleString()}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{new Date(event.toDt * 1000).toLocaleString()}</td>
-                            <td className="px-4 py-3 text-sm text-gray-600">{event.displayGroups?.map(dg => dg.displayGroup).join(', ') || "None"}</td>
-                        </tr>
-                    ))}
-                </tbody>
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700">Event</th>
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700">Start</th>
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700">End</th>
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700">Display/Group</th>
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {events.map((event) => (
+                  <tr
+                    key={event.eventId}
+                    className="border-b border-gray-100 hover:bg-gray-50"
+                  >
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {event.campaign || event.name || "Untitled Event"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {event.dayPartId === 1 ? "Always" : formatEpoch(event.fromDt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {event.dayPartId === 1 ? "—" : formatEpoch(event.toDt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {event.displayGroups?.map((dg) => dg.displayGroup).join(", ") ||
+                        "None"}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-right whitespace-nowrap">
+                      <button
+                        onClick={() => openAddModal(event)}
+                        className="text-blue-600 hover:text-blue-800 mr-3"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(event.eventId)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {showAdd && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingEvent ? "Edit Schedule Event" : "Add Schedule Event"}
+              </h3>
+              <button
+                onClick={closeAddModal}
+                className="text-gray-500 hover:text-gray-700"
+                disabled={submitting}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form className="px-6 py-4 space-y-4" onSubmit={handleSubmit}>
+              {/* Content */}
+              {editingEvent ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content
+                  </label>
+                  <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                    {editingEvent.campaign || editingEvent.name || "Current content"}
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      To change the content, delete this event and create a new one.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content
+                  </label>
+                  <div className="flex gap-2 mb-2">
+                    {["playlist", "layout"].map((t) => (
+                      <button
+                        type="button"
+                        key={t}
+                        onClick={() => {
+                          setContentType(t);
+                          setContentId("");
+                        }}
+                        className={`px-3 py-1.5 text-sm rounded-md border capitalize ${
+                          contentType === t
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-gray-700 border-gray-300"
+                        }`}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    value={contentId}
+                    onChange={(e) => setContentId(e.target.value)}
+                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                  >
+                    <option value="">Select a {contentType}…</option>
+                    {(contentType === "playlist" ? playlists : layouts).map((item) => {
+                      const id =
+                        contentType === "playlist"
+                          ? item.playlistId || item.id
+                          : item.layoutId || item.id;
+                      const label =
+                        contentType === "playlist"
+                          ? item.name || `Playlist ${id}`
+                          : item.layout || item.name || `Layout ${id}`;
+                      return (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Display groups */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Display Group(s)
+                </label>
+                <div className="max-h-40 overflow-y-auto rounded-md border border-gray-300 p-2 space-y-1">
+                  {displayGroups.length === 0 ? (
+                    <p className="text-sm text-gray-400">No display groups found.</p>
+                  ) : (
+                    displayGroups.map((dg) => {
+                      const id = dg.displayGroupId || dg.id;
+                      return (
+                        <label
+                          key={id}
+                          className="flex items-center gap-2 text-sm text-gray-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedGroupIds.includes(id)}
+                            onChange={() => toggleGroup(id)}
+                          />
+                          {dg.displayGroup || `Group ${id}`}
+                          {dg.isDisplaySpecific === 1 && (
+                            <span className="text-xs text-gray-400">(display)</span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* When */}
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={isAlways}
+                    onChange={(e) => setIsAlways(e.target.checked)}
+                  />
+                  Always (run continuously)
+                </label>
+                {!isAlways && (
+                  <div className="grid grid-cols-2 gap-3 mt-2">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">From</label>
+                      <input
+                        type="datetime-local"
+                        value={fromDt}
+                        onChange={(e) => setFromDt(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">To</label>
+                      <input
+                        type="datetime-local"
+                        value={toDt}
+                        onChange={(e) => setToDt(e.target.value)}
+                        className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={isPriority}
+                  onChange={(e) => setIsPriority(e.target.checked)}
+                />
+                High priority
+              </label>
+
+              {formError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {formError}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={closeAddModal}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-70"
+                  disabled={submitting}
+                >
+                  {submitting
+                    ? "Saving…"
+                    : editingEvent
+                    ? "Save Changes"
+                    : "Schedule"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
