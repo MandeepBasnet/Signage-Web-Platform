@@ -140,8 +140,10 @@ async function fetchUserScopedCollection({
   idKeys,
   orderColumn = "modifiedDt",
   orderDirection = "desc",
-  pageSize = 100,
-  maxPages = 50,
+  // Larger page size = far fewer serial round trips to the remote Xibo CMS.
+  pageSize = 500,
+  // Lower cap so a misbehaving owner filter can't trigger dozens of serial calls.
+  maxPages = 10,
   queryParams = {},
 }) {
   const { token, userId, username } = getUserContext(req);
@@ -149,8 +151,10 @@ async function fetchUserScopedCollection({
   const collected = [];
   let start = 0;
   let totalAvailable;
+  let lastPage = 0;
 
   for (let page = 0; page < maxPages; page += 1) {
+    lastPage = page;
     const params = new URLSearchParams({
       start: String(start),
       length: String(pageSize),
@@ -189,6 +193,19 @@ async function fetchUserScopedCollection({
     if (total !== undefined && collected.length >= total) {
       break;
     }
+  }
+
+  // Warn if we stopped because of the page cap rather than exhausting results,
+  // so a truncated list isn't mistaken for the full set.
+  if (
+    lastPage === maxPages - 1 &&
+    totalAvailable !== undefined &&
+    collected.length < totalAvailable
+  ) {
+    console.warn(
+      `[fetchUserScopedCollection] Hit maxPages (${maxPages}) for ${endpoint}: ` +
+        `collected ${collected.length} of ${totalAvailable} reported items. List may be truncated.`
+    );
   }
 
   const deduped = dedupeById(collected, idKeys);
