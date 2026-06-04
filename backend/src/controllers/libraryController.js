@@ -322,34 +322,81 @@ export const downloadMedia = async (req, res) => {
   }
 };
 
+// In-memory LRU cache for thumbnails so repeated loads / re-renders don't
+// re-stream the same image from the remote Xibo CMS on every request.
+// Thumbnails are small (e.g. 300x200), so a few hundred entries is cheap.
+const THUMBNAIL_CACHE = new Map(); // key -> { buffer, contentType, expiresAt }
+const THUMBNAIL_CACHE_MAX = 500;
+const THUMBNAIL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour, matches Cache-Control
+
+const getCachedThumbnail = (key) => {
+  const entry = THUMBNAIL_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    THUMBNAIL_CACHE.delete(key);
+    return null;
+  }
+  // Mark as most-recently-used
+  THUMBNAIL_CACHE.delete(key);
+  THUMBNAIL_CACHE.set(key, entry);
+  return entry;
+};
+
+const setCachedThumbnail = (key, buffer, contentType) => {
+  THUMBNAIL_CACHE.set(key, {
+    buffer,
+    contentType,
+    expiresAt: Date.now() + THUMBNAIL_CACHE_TTL_MS,
+  });
+  // Evict oldest entries beyond the cap (Map preserves insertion order)
+  while (THUMBNAIL_CACHE.size > THUMBNAIL_CACHE_MAX) {
+    const oldestKey = THUMBNAIL_CACHE.keys().next().value;
+    THUMBNAIL_CACHE.delete(oldestKey);
+  }
+};
+
 // Get media thumbnail/preview from Xibo
 export const getMediaThumbnail = async (req, res) => {
   try {
     const { mediaId } = req.params;
     const { width, height, preview } = req.query;
-    const token = await getAccessToken();
 
     if (!mediaId) {
       return res.status(400).json({ message: "Media ID is required" });
     }
+
+    const previewVal = preview || "1";
+    const cacheKey = `${mediaId}:${width || ""}:${height || ""}:${previewVal}`;
+
+    // Serve from cache when available
+    const cached = getCachedThumbnail(cacheKey);
+    if (cached) {
+      res.setHeader("Content-Type", cached.contentType);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("X-Thumbnail-Cache", "HIT");
+      return res.end(cached.buffer);
+    }
+
+    const token = await getAccessToken();
 
     // Build query string for Xibo
     const queryParams = new URLSearchParams();
     if (width) queryParams.append("width", width);
     if (height) queryParams.append("height", height);
     // Default preview to 1 if not specified, as requested by user
-    queryParams.append("preview", preview || "1");
+    queryParams.append("preview", previewVal);
 
     const xiboApiUrl = process.env.XIBO_API_URL;
     const thumbnailUrl = `${xiboApiUrl}/library/thumbnail/${mediaId}?${queryParams.toString()}`;
 
     console.log(`Fetching thumbnail from Xibo: ${thumbnailUrl}`);
 
+    // Buffer the response (arraybuffer) so we can cache the bytes.
     const response = await axios.get(thumbnailUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      responseType: "stream",
+      responseType: "arraybuffer",
       validateStatus: (status) => status < 500, // Handle 404s gracefully
     });
 
@@ -364,15 +411,18 @@ export const getMediaThumbnail = async (req, res) => {
     if (!contentType || contentType.includes("text/html")) {
         contentType = "image/jpeg";
     }
-    
+
+    const buffer = Buffer.from(response.data);
+    setCachedThumbnail(cacheKey, buffer, contentType);
+
     res.setHeader("Content-Type", contentType);
     res.setHeader(
       "Cache-Control",
       "public, max-age=3600" // Cache thumbnails for 1 hour
     );
+    res.setHeader("X-Thumbnail-Cache", "MISS");
 
-    // Pipe the response to the client
-    response.data.pipe(res);
+    res.end(buffer);
   } catch (err) {
     console.error("Error fetching media thumbnail:", err.message);
     // Don't crash on thumbnail errors, just return 404

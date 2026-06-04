@@ -135,10 +135,14 @@ export default function MediaContent() {
       }
 
       const data = await response.json();
-      setMedia(data?.data || []);
+      const mediaItems = data?.data || [];
+      setMedia(mediaItems);
+
+      // Reset to first page and recompute total pages whenever the list reloads
+      setCurrentPage(1);
+      setTotalPages(Math.max(1, Math.ceil(mediaItems.length / ITEMS_PER_PAGE)));
 
       // Pre-fetch media URLs for images/videos/audio
-      const mediaItems = data?.data || [];
       const urlMap = new Map();
 
       for (const item of mediaItems) {
@@ -603,7 +607,12 @@ export default function MediaContent() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {media.map((item) => {
+                {media
+                  .slice(
+                    (currentPage - 1) * ITEMS_PER_PAGE,
+                    currentPage * ITEMS_PER_PAGE
+                  )
+                  .map((item) => {
                   const mediaId = getMediaId(item);
                   const mediaUrl = getMediaUrl(item);
                   const mediaType = item.mediaType || item.type || "";
@@ -631,6 +640,8 @@ export default function MediaContent() {
                                 <img
                                   src={mediaUrl}
                                   alt={item.name}
+                                  loading="lazy"
+                                  decoding="async"
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
                                     e.target.style.display = "none";
@@ -641,6 +652,7 @@ export default function MediaContent() {
                               {isVideoType && (
                                 <video
                                   src={mediaUrl}
+                                  preload="none"
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
                                     e.target.style.display = "none";
@@ -731,6 +743,37 @@ export default function MediaContent() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {media.length > ITEMS_PER_PAGE && (
+          <div className="flex items-center justify-between mt-4">
+            <p className="text-sm text-gray-500">
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+              {Math.min(currentPage * ITEMS_PER_PAGE, media.length)} of{" "}
+              {media.length}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="text-sm text-gray-600">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

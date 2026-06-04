@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import compression from "compression";
 import multer from "multer";  // ✅ Added for FormData parsing
 import authRoutes from "./routes/authRoutes.js";
 import layoutRoutes from "./routes/layoutRoutes.js";
@@ -16,19 +17,26 @@ dotenv.config();
 
 const app = express();
 
-// Debug middleware BEFORE body parsing
-app.use((req, res, next) => {
-  if (req.method === "POST" || req.method === "PUT") {
-    console.log("\n=== INCOMING REQUEST ===");
-    console.log(`${req.method} ${req.path}`);
-    console.log("Content-Type:", req.headers["content-type"]);
-    console.log("All headers:", JSON.stringify(req.headers, null, 2));
-  }
-  next();
-});
+const isDev = process.env.NODE_ENV !== "production";
+
+// Debug middleware BEFORE body parsing (dev only — avoids per-request logging in prod)
+if (isDev) {
+  app.use((req, res, next) => {
+    if (req.method === "POST" || req.method === "PUT") {
+      console.log("\n=== INCOMING REQUEST ===");
+      console.log(`${req.method} ${req.path}`);
+      console.log("Content-Type:", req.headers["content-type"]);
+      console.log("All headers:", JSON.stringify(req.headers, null, 2));
+    }
+    next();
+  });
+}
 
 // Middleware - order matters!
 app.use(cors());
+
+// Gzip-compress responses (large library/dataset JSON payloads)
+app.use(compression());
 
 // ✅ Multer middleware for multipart/form-data (FormData API)
 // This handles form data without file uploads
@@ -39,16 +47,18 @@ app.use(upload.none()); // Parse form fields only (no files)
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Debug middleware AFTER body parsing
-app.use((req, res, next) => {
-  if (req.method === "POST" || req.method === "PUT") {
-    console.log("Body after parsing:", req.body);
-    console.log("Body type:", typeof req.body);
-    console.log("Body is object:", typeof req.body === "object");
-    console.log("===================\n");
-  }
-  next();
-});
+// Debug middleware AFTER body parsing (dev only)
+if (isDev) {
+  app.use((req, res, next) => {
+    if (req.method === "POST" || req.method === "PUT") {
+      console.log("Body after parsing:", req.body);
+      console.log("Body type:", typeof req.body);
+      console.log("Body is object:", typeof req.body === "object");
+      console.log("===================\n");
+    }
+    next();
+  });
+}
 
 // Test endpoint to verify body parsing
 app.post("/test-body", (req, res) => {
