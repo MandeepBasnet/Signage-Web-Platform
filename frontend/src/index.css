@@ -111,3 +111,12 @@ button:focus-visible {
 .widget-preview iframe {
   overflow: hidden;
 }
+
+/* Keep horizontal scrolling but hide the scrollbar chrome */
+.scrollbar-hide {
+  -ms-overflow-style: none; /* IE/Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/WebKit */
+}

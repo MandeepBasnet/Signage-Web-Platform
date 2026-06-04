@@ -5,17 +5,25 @@ import axios from "axios";
 export const getDisplays = async (req, res) => {
   try {
     const { start, length } = req.query;
-    const userId = req.user.id; 
 
-    // 1. Fetch User Details to get Groups
+    // req.user.id may be a numeric Xibo userId OR (when the login user lookup
+    // failed) the login identifier (email/username). Resolve a CANONICAL numeric
+    // userId so the ownership comparison below actually works.
+    const rawId = req.user.id;
+    const idIsNumeric = rawId !== undefined && rawId !== null && !isNaN(Number(rawId));
+
+    // 1. Fetch User Details to get the canonical userId + Groups.
+    // Query by userId when we have a numeric one, otherwise by userName.
     let userGroups = [];
     let user = null;
+    let canonicalUserId = idIsNumeric ? Number(rawId) : null;
     try {
-      const userDetails = await xiboRequest(
-        `/user?userId=${userId}&embed=groups`,
-        "GET"
-      );
-      
+      const userQuery = idIsNumeric
+        ? `/user?userId=${rawId}&embed=groups`
+        : `/user?userName=${encodeURIComponent(req.user.username || rawId)}&embed=groups`;
+
+      const userDetails = await xiboRequest(userQuery, "GET");
+
       if (Array.isArray(userDetails)) {
         user = userDetails[0];
       } else if (userDetails.data) {
@@ -25,6 +33,10 @@ export const getDisplays = async (req, res) => {
       }
 
       if (user) {
+        // Trust the userId Xibo returns over whatever was in the JWT.
+        if (user.userId !== undefined && user.userId !== null) {
+          canonicalUserId = Number(user.userId);
+        }
         if (user.groups) {
           userGroups = user.groups.map(g => g.group);
         }
@@ -55,9 +67,17 @@ export const getDisplays = async (req, res) => {
         displays = response.data;
     }
 
-    // 3. Filter Displays
+    // 3. Filter Displays — keep only those the logged-in user owns OR that are
+    // permission-shared with one of their groups ("only my displays" scope).
     const filteredDisplays = displays.filter(display => {
-      if (display.ownerId == userId) return true;
+      // Compare as numbers so a valid owner match doesn't fail on type
+      // (canonicalUserId is numeric; display.ownerId is numeric in Xibo).
+      if (
+        canonicalUserId !== null &&
+        Number(display.ownerId) === canonicalUserId
+      ) {
+        return true;
+      }
       if (display.groupsWithPermissions) {
         const permittedGroups = typeof display.groupsWithPermissions === 'string' 
           ? display.groupsWithPermissions.split(',').map(s => s.trim())
@@ -176,11 +196,8 @@ export const deleteDisplay = async (req, res) => {
         const { displayId } = req.params;
         const { token } = getUserContext(req);
 
-        await xiboRequest({
-            method: 'DELETE',
-            endpoint: `/display/${displayId}`,
-            token
-        });
+        // xiboRequest signature is (endpoint, method, data, userToken)
+        await xiboRequest(`/display/${displayId}`, "DELETE", null, token);
 
         res.status(204).send();
     } catch (err) {
