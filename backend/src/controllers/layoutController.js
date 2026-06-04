@@ -1,11 +1,62 @@
 import axios from "axios";
 import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
 import {
+  getWebClient,
+  getWebBaseUrl,
+  invalidateWebSession,
+  WebSessionNotConfiguredError,
+} from "../utils/xiboWebSession.js";
+import {
   fetchUserScopedCollection,
   getUserContext,
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
+
+// In-memory LRU cache for layout thumbnails so we rarely re-hit the Xibo web UI.
+// Same approach as the media thumbnail cache in libraryController.
+const LAYOUT_THUMB_CACHE = new Map(); // layoutId -> { buffer, contentType, expiresAt }
+const LAYOUT_THUMB_CACHE_MAX = 500;
+const LAYOUT_THUMB_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+const getCachedLayoutThumb = (key) => {
+  const entry = LAYOUT_THUMB_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    LAYOUT_THUMB_CACHE.delete(key);
+    return null;
+  }
+  // Mark most-recently-used
+  LAYOUT_THUMB_CACHE.delete(key);
+  LAYOUT_THUMB_CACHE.set(key, entry);
+  return entry;
+};
+
+const setCachedLayoutThumb = (key, buffer, contentType) => {
+  LAYOUT_THUMB_CACHE.set(key, {
+    buffer,
+    contentType,
+    expiresAt: Date.now() + LAYOUT_THUMB_CACHE_TTL_MS,
+  });
+  while (LAYOUT_THUMB_CACHE.size > LAYOUT_THUMB_CACHE_MAX) {
+    const oldest = LAYOUT_THUMB_CACHE.keys().next().value;
+    LAYOUT_THUMB_CACHE.delete(oldest);
+  }
+};
+
+// A web response that is actually the login page / a redirect to /login means the
+// shared session has expired and we should re-login and retry.
+const looksLikeLoginRedirect = (response) => {
+  if (!response) return false;
+  const status = response.status;
+  const location = response.headers?.location || "";
+  if (status === 401 || status === 403) return true;
+  if (status >= 300 && status < 400 && location.includes("login")) return true;
+  const contentType = response.headers?.["content-type"] || "";
+  // A successful thumbnail is an image; HTML back means we got the login page.
+  if (status === 200 && contentType.includes("text/html")) return true;
+  return false;
+};
 
 const LAYOUT_EMBED_FIELDS =
   "regions,playlists,widgets,widget_validity,tags,permissions,actions";
@@ -242,40 +293,73 @@ export const getLayoutDetails = async (req, res) => {
 export const getLayoutThumbnail = async (req, res) => {
   try {
     const { layoutId } = req.params;
-    let { token } = getUserContext(req);
-
-    if (!token) {
-        token = await getAccessToken();
-    }
 
     if (!layoutId) {
       throw new HttpError(400, "Layout ID is required");
     }
 
-    const xiboApiUrl = process.env.XIBO_API_URL;
-    // Use the API URL directly, similar to libraryController
-    const url = `${xiboApiUrl}/layout/thumbnail/${layoutId}`;
+    // Serve from cache when available
+    const cached = getCachedLayoutThumb(layoutId);
+    if (cached) {
+      res.setHeader("Content-Type", cached.contentType);
+      res.setHeader("Cache-Control", "public, max-age=300");
+      res.setHeader("X-Layout-Thumb-Cache", "HIT");
+      return res.end(cached.buffer);
+    }
+
+    // Layout thumbnails are a WEB-UI resource (no /api), served with a cookie
+    // session — the OAuth API has no layout/thumbnail endpoint.
+    const url = `${getWebBaseUrl()}/layout/thumbnail/${layoutId}`;
+
+    // Fetch via the shared web session; on a dead session, re-login once and retry.
+    const fetchOnce = async () => {
+      const client = await getWebClient();
+      return client.get(url, {
+        responseType: "arraybuffer",
+        // Follow redirects (Xibo may redirect to the image file); don't throw on
+        // non-2xx so we can detect a dead session (we end up on the login HTML page).
+        validateStatus: (status) => status < 500,
+      });
+    };
 
     console.log(`[getLayoutThumbnail] Fetching from: ${url}`);
+    let response = await fetchOnce();
 
-    const response = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "*/*", 
-      },
-      responseType: "arraybuffer",
-    });
+    if (looksLikeLoginRedirect(response)) {
+      console.warn(
+        `[getLayoutThumbnail] Web session looks expired; re-logging in and retrying ${layoutId}...`
+      );
+      invalidateWebSession();
+      response = await fetchOnce();
+    }
 
-    const contentType = response.headers["content-type"] || "image/png";
+    if (response.status === 404) {
+      return res.status(404).send("Thumbnail not found");
+    }
+    if (response.status >= 400 || looksLikeLoginRedirect(response)) {
+      // Couldn't get a real image — let the frontend show its placeholder.
+      return res.status(404).send("Thumbnail not available");
+    }
+
+    let contentType = response.headers["content-type"] || "image/png";
+    if (contentType.includes("text/html")) contentType = "image/png";
+
+    const buffer = Buffer.from(response.data, "binary");
+    setCachedLayoutThumb(layoutId, buffer, contentType);
+
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=300");
-    res.send(Buffer.from(response.data, "binary"));
+    res.setHeader("X-Layout-Thumb-Cache", "MISS");
+    res.end(buffer);
   } catch (err) {
-    console.error("Error fetching layout thumbnail:", err.message);
-    if (err.response && err.response.status === 404) {
-        return res.status(404).send("Thumbnail not found");
+    // Web session not configured, or an unexpected failure → graceful 404 so the
+    // UI shows its placeholder instead of surfacing a 500.
+    if (err instanceof WebSessionNotConfiguredError) {
+      console.warn(`[getLayoutThumbnail] ${err.message}`);
+      return res.status(404).send("Thumbnail unavailable (web session not configured)");
     }
-    handleControllerError(res, err, "Failed to fetch layout thumbnail");
+    console.error("Error fetching layout thumbnail:", err.message);
+    return res.status(404).send("Thumbnail not available");
   }
 };
 
