@@ -5,7 +5,7 @@ const menuItems = [
     section: "DESIGN",
     items: [
         { id: "display", label: "Display", icon: "📺" },
-        // { id: "layout", label: "Layouts", icon: "🎨" },
+        { id: "layout", label: "Layouts", icon: "🎨" },
     ],
   },
   {

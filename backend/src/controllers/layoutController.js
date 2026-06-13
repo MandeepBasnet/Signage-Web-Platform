@@ -12,6 +12,7 @@ import {
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
+import { parseXlf } from "./layoutPreviewProxy.js";
 
 // In-memory LRU cache for layout thumbnails so we rarely re-hit the Xibo web UI.
 // Same approach as the media thumbnail cache in libraryController.
@@ -290,6 +291,29 @@ export const getLayoutDetails = async (req, res) => {
   }
 };
 
+// Fallback thumbnail: when Xibo has no layout snapshot, use the first region's
+// first media's (small) library thumbnail via the shared web session.
+const fetchFirstMediaThumb = async (layoutId) => {
+  const base = getWebBaseUrl();
+  const client = await getWebClient();
+  const xlfRes = await client.get(`${base}/layout/xlf/${layoutId}`, {
+    responseType: "text",
+    validateStatus: (s) => s < 500,
+  });
+  if (xlfRes.status >= 400) return null;
+  const { regions } = parseXlf(String(xlfRes.data || ""));
+  const region = (regions || []).find((r) => r.fileId);
+  if (!region) return null;
+  const thumbRes = await client.get(
+    `${base}/library/thumbnail/${region.fileId}`,
+    { responseType: "arraybuffer", validateStatus: (s) => s < 500 }
+  );
+  if (thumbRes.status >= 400) return null;
+  const ct = thumbRes.headers["content-type"] || "image/png";
+  if (ct.includes("text/html")) return null; // login/error page, not an image
+  return { buffer: Buffer.from(thumbRes.data, "binary"), contentType: ct };
+};
+
 export const getLayoutThumbnail = async (req, res) => {
   try {
     const { layoutId } = req.params;
@@ -333,11 +357,18 @@ export const getLayoutThumbnail = async (req, res) => {
       response = await fetchOnce();
     }
 
-    if (response.status === 404) {
-      return res.status(404).send("Thumbnail not found");
-    }
     if (response.status >= 400 || looksLikeLoginRedirect(response)) {
-      // Couldn't get a real image — let the frontend show its placeholder.
+      // Xibo has no generated snapshot for this layout (common for drafts and
+      // many layouts). Fall back to the layout's first media thumbnail so the
+      // list still shows a representative image instead of a placeholder.
+      const fb = await fetchFirstMediaThumb(layoutId).catch(() => null);
+      if (fb) {
+        setCachedLayoutThumb(layoutId, fb.buffer, fb.contentType);
+        res.setHeader("Content-Type", fb.contentType);
+        res.setHeader("Cache-Control", "public, max-age=300");
+        res.setHeader("X-Layout-Thumb-Cache", "FALLBACK");
+        return res.end(fb.buffer);
+      }
       return res.status(404).send("Thumbnail not available");
     }
 

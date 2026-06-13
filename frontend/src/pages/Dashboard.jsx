@@ -7,6 +7,7 @@ import Topbar from "../components/Topbar";
 import PlaylistContent from "../components/PlaylistContent";
 import MediaContent from "../components/MediaContent";
 import DisplayContent from "../components/DisplayContent";
+import LayoutContent from "../components/LayoutContent";
 import DatasetContent from "../components/DatasetContent";
 import ScheduleContent from "../components/ScheduleContent";
 import { clearAuth } from "../utils/auth.js";
@@ -26,8 +27,8 @@ export default function Dashboard() {
         return <PlaylistContent />;
       case "library":
         return <MediaContent />;
-      // case "layout":
-      //   return <LayoutContent />;
+      case "layout":
+        return <LayoutContent />;
       case "dataset":
         return <DatasetContent />;
       case "display":

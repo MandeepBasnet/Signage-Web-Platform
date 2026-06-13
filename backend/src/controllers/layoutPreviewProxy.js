@@ -246,7 +246,7 @@ const attr = (s, name) => {
 };
 
 // Parse layout dimensions + each region's geometry and first media (file id).
-const parseXlf = (xlf) => {
+export const parseXlf = (xlf) => {
   const lm = xlf.match(/<layout\b[^>]*>/i);
   const W = lm ? Number(attr(lm[0], "width")) : 0;
   const H = lm ? Number(attr(lm[0], "height")) : 0;
