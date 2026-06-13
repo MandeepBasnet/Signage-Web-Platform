@@ -8,6 +8,49 @@ import { clearAuth, saveAuth } from "../utils/auth.js";
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
+// Modus clients shown on the login page. Drop logo files at
+// /public/clients/<slug>.png and they replace the text wordmark automatically.
+const CLIENTS = [
+  { name: "Arcaffe", slug: "arcaffe" },
+  { name: "Agadir", slug: "agadir" },
+  { name: "Armani", slug: "armani" },
+  { name: "Boss", slug: "boss" },
+  { name: "Boutique Central", slug: "boutique-central" },
+  { name: "Japanika", slug: "japanika" },
+  { name: "Lululemon", slug: "lululemon" },
+  { name: "Michael Kors", slug: "michael-kors" },
+  { name: "Polo Ralph Lauren", slug: "polo-ralph-lauren" },
+  { name: "Puma", slug: "puma" },
+  { name: "Pasta Basta", slug: "pasta-basta" },
+  { name: "Sweetime", slug: "sweetime" },
+  { name: "Tommy Hilfiger", slug: "tommy-hilfiger" },
+];
+
+// Renders a client logo image; falls back to a clean text wordmark if the
+// image file isn't present yet, so the login never shows broken-image icons.
+function ClientLogo({ name, slug }) {
+  const [errored, setErrored] = useState(false);
+  // Every logo lives in the same fixed box and is contained within it, so wide
+  // wordmarks and small marks all render at a consistent size. Desaturated by
+  // default (color on hover) so mixed brand colors read as one tidy strip.
+  return (
+    <div className="flex items-center justify-center h-10 md:h-12 w-full px-1">
+      {errored ? (
+        <span className="text-xs md:text-sm font-semibold text-gray-500 text-center leading-tight">
+          {name}
+        </span>
+      ) : (
+        <img
+          src={`/clients/${slug}.png`}
+          alt={name}
+          onError={() => setErrored(true)}
+          className="max-h-full max-w-full object-contain grayscale opacity-60 hover:grayscale-0 hover:opacity-100 transition-all duration-200"
+        />
+      )}
+    </div>
+  );
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
@@ -221,74 +264,12 @@ export default function Login() {
               Trusted by 1000+ customers globally
             </p>
 
-            {/* Partner Container */}
+            {/* Partner Container — Modus clients (uniform grid) */}
             <div className="partner-container w-full max-w-2xl mt-4">
-              {/* First Partner Row */}
-              <div className="partner-row flex items-center justify-center gap-4 md:gap-6 flex-wrap mb-4">
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/amazon.svg"
-                  alt="Amazon"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/deca.svg"
-                  alt="Deca"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/bosch.svg"
-                  alt="Bosch"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/uni.svg"
-                  alt="Uni"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/para.svg"
-                  alt="Para"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-              </div>
-
-              {/* Second Partner Row */}
-              <div className="partner-row flex items-center justify-center gap-4 md:gap-6 flex-wrap">
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/etisalat.svg"
-                  alt="Etisalat"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/uber.svg"
-                  alt="Uber"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/benz.svg"
-                  alt="Benz"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/tt.svg"
-                  alt="TT"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
-                <img
-                  src="https://d2qf6k8jfqd09k.cloudfront.net/login/ap.svg"
-                  alt="AP"
-                  className="h-8 md:h-10 w-auto opacity-70 hover:opacity-100 transition-opacity"
-                  style={{ transform: "scale(1)" }}
-                />
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-x-4 gap-y-5 items-center">
+                {CLIENTS.map((c) => (
+                  <ClientLogo key={c.slug} name={c.name} slug={c.slug} />
+                ))}
               </div>
             </div>
           </div>

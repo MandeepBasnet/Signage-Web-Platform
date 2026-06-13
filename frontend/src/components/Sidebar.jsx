@@ -24,8 +24,8 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
       {/* Logo */}
       <div className="p-5 md:p-5 sm:p-[15px] border-b border-[#2a3442] flex items-center justify-center">
         <img
-          src="/logo.png"
-          alt="Logo"
+          src="/ModusLogo.png"
+          alt="Modus"
           className="h-8 md:h-8 sm:h-6 object-contain"
         />
       </div>
