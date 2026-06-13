@@ -854,23 +854,27 @@ export default function LayoutDesign() {
 
   // Calculate appropriate canvas scale
   const calculateCanvasScale = () => {
-    if (!layout) return 0.1;
+    if (!layout?.width || !layout?.height) return 0.1;
 
-    const maxCanvasWidth = 800; // Maximum width for canvas container
-    const scaleX = maxCanvasWidth / layout.width;
-    const scaleY =
-      (maxCanvasWidth * (layout.height / layout.width)) / layout.height;
+    const { width: cw, height: ch } = containerSize;
+    // Before the container is measured, fall back to a width-based estimate.
+    if (!cw || !ch) return Math.min(800 / layout.width, 0.5);
 
-    // Cap at 50% to avoid overly large previews
-    return Math.min(scaleX, scaleY, 0.5);
+    // Fit the layout inside the available area in BOTH dimensions so the canvas
+    // matches the layout's true aspect (portrait fits height, landscape fits
+    // width) instead of overflowing. Never upscale past 100%.
+    const padding = 48;
+    const availW = Math.max(cw - padding, 50);
+    const availH = Math.max(ch - padding, 50);
+    return Math.min(availW / layout.width, availH / layout.height, 1);
   };
 
-  // Update canvas scale when layout changes
+  // Recompute when the layout OR the container size changes.
   useEffect(() => {
     if (layout) {
       setCanvasScale(calculateCanvasScale());
     }
-  }, [layout]);
+  }, [layout, containerSize]);
 
   // Render widget content directly (Client-Side Rendering)
   const renderWidgetContent = (widget, width, height) => {
