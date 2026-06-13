@@ -251,11 +251,24 @@ export const validateMediaName = async (req, res) => {
 
 export const getLibraryMedia = async (req, res) => {
   try {
-    const media = await fetchUserScopedCollection({
-      req,
-      endpoint: "/library",
-      idKeys: ["mediaId", "media_id", "id"],
-    });
+    const { folderId } = req.query;
+
+    // Folder-scoped view (per-user library / folder picker): show ALL media in
+    // the chosen folder (no owner filter). Without a folderId (or "all"), fall
+    // back to the user-scoped collection.
+    const media =
+      folderId && folderId !== "all"
+        ? await fetchLibraryCollection({
+            req,
+            endpoint: "/library",
+            idKeys: ["mediaId", "media_id", "id"],
+            queryParams: { folderId },
+          })
+        : await fetchUserScopedCollection({
+            req,
+            endpoint: "/library",
+            idKeys: ["mediaId", "media_id", "id"],
+          });
 
     res.json({ data: media, total: media.length });
   } catch (err) {
@@ -433,7 +446,28 @@ export const getMediaThumbnail = async (req, res) => {
 export const getLibraryFolders = async (req, res) => {
   try {
     const folders = await xiboRequest("/folders", "GET");
-    res.json({ folders });
+
+    // Resolve the logged-in user's home folder so the UI can default the
+    // library view to it (per-user library, no admin setup required).
+    let homeFolderId = null;
+    try {
+      const rawId = req.user?.id;
+      const q =
+        rawId != null && !isNaN(Number(rawId))
+          ? `/user?userId=${rawId}`
+          : `/user?userName=${encodeURIComponent(req.user?.username || "")}`;
+      const u = await xiboRequest(q, "GET");
+      const user = Array.isArray(u)
+        ? u[0]
+        : Array.isArray(u?.data)
+        ? u.data[0]
+        : u?.data || u;
+      if (user?.homeFolderId != null) homeFolderId = user.homeFolderId;
+    } catch (e) {
+      // leave homeFolderId null; UI falls back to "All folders"
+    }
+
+    res.json({ folders, homeFolderId });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch folders");
   }

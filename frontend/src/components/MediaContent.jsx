@@ -45,6 +45,8 @@ export default function MediaContent() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
+  // Selected library folder (per-user library). null = not resolved yet.
+  const [libraryFolder, setLibraryFolder] = useState(null);
   const ITEMS_PER_PAGE = 8;
 
   // Preview state
@@ -102,8 +104,10 @@ export default function MediaContent() {
     });
   };
 
+  // On mount: load the folder list, which also resolves the user's home folder
+  // and sets the default library view (see fetchFolders).
   useEffect(() => {
-    fetchMedia();
+    fetchFolders();
 
     // Cleanup: revoke object URLs when component unmounts
     return () => {
@@ -113,14 +117,25 @@ export default function MediaContent() {
         }
       });
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const fetchMedia = async () => {
+  // Fetch media whenever the selected folder is resolved/changed.
+  useEffect(() => {
+    if (libraryFolder !== null) fetchMedia(libraryFolder);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libraryFolder]);
+
+  const fetchMedia = async (folderId = libraryFolder) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`${API_BASE_URL}/library`, {
+      const qs =
+        folderId && folderId !== "all"
+          ? `?folderId=${encodeURIComponent(folderId)}`
+          : "";
+      const response = await fetch(`${API_BASE_URL}/library${qs}`, {
         method: "GET",
         headers: {
           "Content-Type": "application/json",
@@ -228,9 +243,18 @@ export default function MediaContent() {
       if (!uploadFolder && flat.length > 0) {
         setUploadFolder(flat[0].id);
       }
+      // Default the library view to the user's home folder; treat root ("1") as
+      // "All folders". Only set if not already chosen (don't override the user).
+      const home =
+        data?.homeFolderId != null ? String(data.homeFolderId) : null;
+      setLibraryFolder((prev) =>
+        prev ?? (home && home !== "1" ? home : "all")
+      );
     } catch (err) {
       console.error("Error fetching folders:", err);
       setUploadError(err.message || "Failed to fetch folders");
+      // Don't block the library if folders fail — show everything.
+      setLibraryFolder((prev) => prev ?? "all");
     } finally {
       setFoldersLoading(false);
     }
@@ -561,7 +585,23 @@ export default function MediaContent() {
                 : `${media.length} ${media.length === 1 ? "file" : "files"} found`}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <select
+              value={libraryFolder ?? "all"}
+              onChange={(e) => {
+                setLibraryFolder(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-2 py-2 text-sm bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
+              title="Filter library by folder"
+            >
+              <option value="all">All folders</option>
+              {folderOptions.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.path || f.label}
+                </option>
+              ))}
+            </select>
             <div className="relative">
               <input
                 type="text"
