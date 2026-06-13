@@ -44,6 +44,7 @@ export default function MediaContent() {
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
   const ITEMS_PER_PAGE = 8;
 
   // Preview state
@@ -531,19 +532,61 @@ export default function MediaContent() {
     );
   }
 
+  // Client-side search over the already-loaded list (filter by media name).
+  const q = search.trim().toLowerCase();
+  const filteredMedia = q
+    ? media.filter((m) =>
+        String(m.name || m.fileName || m.mediaName || "")
+          .toLowerCase()
+          .includes(q)
+      )
+    : media;
+  const filteredTotalPages = Math.max(
+    1,
+    Math.ceil(filteredMedia.length / ITEMS_PER_PAGE)
+  );
+  const pageClamped = Math.min(currentPage, filteredTotalPages);
+
   return (
     <section className="flex flex-col gap-5 relative p-4">
       <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">
               Media Library
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              {media.length} {media.length === 1 ? "file" : "files"} found
+              {q
+                ? `${filteredMedia.length} of ${media.length} files`
+                : `${media.length} ${media.length === 1 ? "file" : "files"} found`}
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="relative">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Search media…"
+                className="w-56 pl-3 pr-8 py-2 text-sm bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setCurrentPage(1);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 p-0 m-0 bg-transparent border-0 rounded-full text-gray-400 hover:text-gray-600 text-xs leading-none"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               onClick={openUploadModal}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
@@ -559,11 +602,15 @@ export default function MediaContent() {
           </div>
         </div>
 
-        {media.length === 0 ? (
+        {filteredMedia.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No media files found</p>
+            <p className="text-gray-500 text-lg">
+              {q ? "No media matches your search" : "No media files found"}
+            </p>
             <p className="text-gray-400 text-sm mt-2">
-              Your media files will appear here once they are uploaded.
+              {q
+                ? "Try a different name or clear the search."
+                : "Your media files will appear here once they are uploaded."}
             </p>
           </div>
         ) : (
@@ -607,10 +654,10 @@ export default function MediaContent() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {media
+                {filteredMedia
                   .slice(
-                    (currentPage - 1) * ITEMS_PER_PAGE,
-                    currentPage * ITEMS_PER_PAGE
+                    (pageClamped - 1) * ITEMS_PER_PAGE,
+                    pageClamped * ITEMS_PER_PAGE
                   )
                   .map((item) => {
                   const mediaId = getMediaId(item);
@@ -746,29 +793,29 @@ export default function MediaContent() {
           </div>
         )}
 
-        {media.length > ITEMS_PER_PAGE && (
+        {filteredMedia.length > ITEMS_PER_PAGE && (
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-gray-500">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
-              {Math.min(currentPage * ITEMS_PER_PAGE, media.length)} of{" "}
-              {media.length}
+              Showing {(pageClamped - 1) * ITEMS_PER_PAGE + 1}–
+              {Math.min(pageClamped * ITEMS_PER_PAGE, filteredMedia.length)} of{" "}
+              {filteredMedia.length}
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
+                disabled={pageClamped <= 1}
                 className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
               <span className="text-sm text-gray-600">
-                Page {currentPage} of {totalPages}
+                Page {pageClamped} of {filteredTotalPages}
               </span>
               <button
                 onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  setCurrentPage((p) => Math.min(filteredTotalPages, p + 1))
                 }
-                disabled={currentPage >= totalPages}
+                disabled={pageClamped >= filteredTotalPages}
                 className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
