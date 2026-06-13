@@ -12,6 +12,7 @@ const API_BASE_URL =
 
 export default function PlaylistContent() {
   const [playlists, setPlaylists] = useState([]);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedPlaylist, setSelectedPlaylist] = useState(null);
@@ -1006,6 +1007,14 @@ export default function PlaylistContent() {
     );
   }
 
+  // Client-side search over the loaded playlists (filter by name).
+  const q = search.trim().toLowerCase();
+  const filteredPlaylists = q
+    ? playlists.filter((p) =>
+        String(p.name || p.playlistName || "").toLowerCase().includes(q)
+      )
+    : playlists;
+
   return (
     <section className="flex flex-col gap-5 relative p-4">
       {/* Loading Overlay */}
@@ -1018,15 +1027,35 @@ export default function PlaylistContent() {
         </div>
       )}
       <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">Playlists</h2>
             <p className="text-sm text-gray-500 mt-1">
-              {playlists.length}
-              {playlists.length === 1 ? " playlist" : " playlists"} found
+              {q
+                ? `${filteredPlaylists.length} of ${playlists.length} playlists`
+                : `${playlists.length}${playlists.length === 1 ? " playlist" : " playlists"} found`}
             </p>
           </div>
           <div className="flex items-center gap-3">
+            <div className="relative">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search playlists…"
+                className="w-56 pl-3 pr-8 py-2 text-sm bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 p-0 m-0 bg-transparent border-0 rounded-full text-gray-400 hover:text-gray-600 text-xs leading-none"
+                  title="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
             <button
               onClick={fetchPlaylists}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
@@ -1042,16 +1071,20 @@ export default function PlaylistContent() {
           </div>
         </div>
 
-        {playlists.length === 0 ? (
+        {filteredPlaylists.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No playlists found</p>
+            <p className="text-gray-500 text-lg">
+              {q ? "No playlists match your search" : "No playlists found"}
+            </p>
             <p className="text-gray-400 text-sm mt-2">
-              Your playlists will appear here once they are created.
+              {q
+                ? "Try a different name or clear the search."
+                : "Your playlists will appear here once they are created."}
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {playlists.map((playlist) => {
+            {filteredPlaylists.map((playlist) => {
               const playlistId =
                 playlist.playlistId || playlist.playlist_id || playlist.id;
               const isDeleteHovered = deleteHoveredPlaylistId === playlistId;
