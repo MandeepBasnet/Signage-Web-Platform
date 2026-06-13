@@ -161,6 +161,7 @@ export default function DisplayContent() {
     navigate(`/layout/designer/${layoutId}`);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handleAutoCheckout = async (publishedLayoutId) => {
     try {
       setCheckingOut(true);

@@ -43,6 +43,7 @@ export default function AddMediaPlaylistButton({
         }, 0);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
   const [currentTab, setCurrentTab] = useState("owned");
 
@@ -88,17 +89,6 @@ export default function AddMediaPlaylistButton({
       type.includes("ogg") ||
       type.includes("mov") ||
       type.includes("avi")
-    );
-  };
-
-  const isAudio = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("audio") ||
-      type.includes("mp3") ||
-      type.includes("wav") ||
-      type.includes("ogg") ||
-      type.includes("m4a")
     );
   };
 

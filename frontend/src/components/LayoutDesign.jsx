@@ -238,6 +238,7 @@ export default function LayoutDesign() {
   // Initial data fetch
   useEffect(() => {
     fetchLayoutDetails();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutId]);
 
   // Dynamic Scaling
@@ -294,6 +295,7 @@ export default function LayoutDesign() {
 
     playlistIds.forEach((id) => fetchPlaylistMedia(id));
     datasetIds.forEach((id) => fetchDatasetData(id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
 
   // Resize Observer for Container
@@ -2153,7 +2155,7 @@ export default function LayoutDesign() {
                                   });
                                 });
                               }
-                            } catch (e) {}
+                            } catch (e) { /* ignore */ }
 
                             const allElements = [
                               ...textElements.map((el) => ({
@@ -2426,7 +2428,7 @@ export default function LayoutDesign() {
                                                       },
                                                     );
                                                   });
-                                                } catch (e) {}
+                                                } catch (e) { /* ignore */ }
                                               }
 
                                               const cleanText =
@@ -2468,7 +2470,7 @@ export default function LayoutDesign() {
                                                       },
                                                     );
                                                   });
-                                                } catch (e) {}
+                                                } catch (e) { /* ignore */ }
                                               }
                                               return (
                                                 text?.replace(/<[^>]*>/g, "") ||
@@ -2508,7 +2510,7 @@ export default function LayoutDesign() {
                                                       },
                                                     );
                                                   });
-                                                } catch (e) {}
+                                                } catch (e) { /* ignore */ }
                                               }
 
                                               const cleanText =
