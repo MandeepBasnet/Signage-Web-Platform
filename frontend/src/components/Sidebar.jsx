@@ -6,6 +6,7 @@ const menuItems = [
     items: [
         { id: "display", label: "Display", icon: "📺" },
         { id: "layout", label: "Layouts", icon: "🎨" },
+        { id: "schedule", label: "Schedule", icon: "📅" },
     ],
   },
   {

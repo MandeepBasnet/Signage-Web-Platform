@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
+import DatePicker from "./DatePicker.jsx";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
@@ -47,21 +48,26 @@ export default function ScheduleContent() {
   const [toDt, setToDt] = useState("");
   const [isPriority, setIsPriority] = useState(false);
 
+  // Date range for the events list (defaults: today → +30 days).
+  const [rangeFrom, setRangeFrom] = useState(
+    () => new Date().toISOString().split("T")[0]
+  );
+  const [rangeTo, setRangeTo] = useState(
+    () => new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
+  );
+
   useEffect(() => {
     fetchSchedule();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangeFrom, rangeTo]);
 
   const fetchSchedule = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const now = new Date();
-      const nextMonth = new Date();
-      nextMonth.setDate(now.getDate() + 30);
-
-      const from = now.toISOString().split("T")[0] + " 00:00:00";
-      const to = nextMonth.toISOString().split("T")[0] + " 23:59:59";
+      const from = `${rangeFrom} 00:00:00`;
+      const to = `${rangeTo} 23:59:59`;
 
       const response = await fetch(
         `${API_BASE_URL}/schedule?fromDt=${from}&toDt=${to}`,
@@ -88,15 +94,21 @@ export default function ScheduleContent() {
   const openAddModal = async (event = null) => {
     setFormError(null);
     setShowAdd(true);
+    // Start the content picker fresh ("" = pick for create / keep-current for edit).
+    setContentType("playlist");
+    setContentId("");
 
-    if (event) {
+    // Edit mode only when given a real schedule event (guards against a stray
+    // click-event object being passed in as the argument).
+    if (event && event.eventId) {
       // Edit mode: prefill targeting / timing / priority from the event.
       setEditingEvent(event);
       const groupIds = (event.displayGroups || [])
         .map((dg) => dg.displayGroupId || dg.id)
         .filter(Boolean);
       setSelectedGroupIds(groupIds);
-      const always = event.dayPartId === 1;
+      // Use the event's own isAlways flag — daypart ids vary per instance.
+      const always = !!event.isAlways;
       setIsAlways(always);
       setFromDt(always ? "" : toLocalInput(event.fromDt));
       setToDt(always ? "" : toLocalInput(event.toDt));
@@ -171,15 +183,27 @@ export default function ScheduleContent() {
     let body;
 
     if (editingEvent) {
-      // Edit: preserve the event's existing content (campaignId + eventTypeId).
       url = `${API_BASE_URL}/schedule/${editingEvent.eventId}`;
       method = "PUT";
       body = {
         ...common,
         eventTypeId: editingEvent.eventTypeId || 1,
-        campaignId: editingEvent.campaignId,
         displayOrder: editingEvent.displayOrder ?? 0,
       };
+      if (contentId) {
+        // Replace the scheduled content (playlist auto-wraps server-side).
+        body.contentType = contentType;
+        body.contentId = contentId;
+        if (contentType === "layout") {
+          const layout = layouts.find(
+            (l) => String(l.layoutId || l.id) === String(contentId)
+          );
+          body.campaignId = layout?.campaignId; // backend resolves if omitted
+        }
+      } else {
+        // Keep the event's existing content.
+        body.campaignId = editingEvent.campaignId;
+      }
     } else {
       // Create: resolve content (playlist auto-wraps server-side).
       let campaignId;
@@ -269,9 +293,15 @@ export default function ScheduleContent() {
               Manage your content schedule
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 text-sm text-gray-600">
+              <span className="text-xs text-gray-500">From</span>
+              <DatePicker value={rangeFrom} max={rangeTo} onChange={setRangeFrom} />
+              <span className="text-xs text-gray-500 ml-1">To</span>
+              <DatePicker value={rangeTo} min={rangeFrom} onChange={setRangeTo} />
+            </div>
             <button
-              onClick={openAddModal}
+              onClick={() => openAddModal()}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
             >
               Add Event
@@ -367,66 +397,62 @@ export default function ScheduleContent() {
 
             <form className="px-6 py-4 space-y-4" onSubmit={handleSubmit}>
               {/* Content */}
-              {editingEvent ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content
-                  </label>
-                  <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
-                    {editingEvent.campaign || editingEvent.name || "Current content"}
-                    <span className="block text-xs text-gray-400 mt-0.5">
-                      To change the content, delete this event and create a new one.
-                    </span>
-                  </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Content
+                </label>
+                <div className="flex gap-2 mb-2">
+                  {["playlist", "layout"].map((t) => (
+                    <button
+                      type="button"
+                      key={t}
+                      onClick={() => {
+                        setContentType(t);
+                        setContentId("");
+                      }}
+                      className={`px-3 py-1.5 text-sm rounded-md border capitalize ${
+                        contentType === t
+                          ? "bg-blue-600 text-white border-blue-600"
+                          : "bg-white text-gray-700 border-gray-300"
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
                 </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content
-                  </label>
-                  <div className="flex gap-2 mb-2">
-                    {["playlist", "layout"].map((t) => (
-                      <button
-                        type="button"
-                        key={t}
-                        onClick={() => {
-                          setContentType(t);
-                          setContentId("");
-                        }}
-                        className={`px-3 py-1.5 text-sm rounded-md border capitalize ${
-                          contentType === t
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-gray-700 border-gray-300"
-                        }`}
-                      >
-                        {t}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    value={contentId}
-                    onChange={(e) => setContentId(e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-                  >
-                    <option value="">Select a {contentType}…</option>
-                    {(contentType === "playlist" ? playlists : layouts).map((item) => {
-                      const id =
-                        contentType === "playlist"
-                          ? item.playlistId || item.id
-                          : item.layoutId || item.id;
-                      const label =
-                        contentType === "playlist"
-                          ? item.name || `Playlist ${id}`
-                          : item.layout || item.name || `Layout ${id}`;
-                      return (
-                        <option key={id} value={id}>
-                          {label}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </div>
-              )}
+                <select
+                  value={contentId}
+                  onChange={(e) => setContentId(e.target.value)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                >
+                  <option value="">
+                    {editingEvent
+                      ? `Keep current (${editingEvent.campaign || editingEvent.name || "current content"})`
+                      : `Select a ${contentType}…`}
+                  </option>
+                  {(contentType === "playlist" ? playlists : layouts).map((item) => {
+                    const id =
+                      contentType === "playlist"
+                        ? item.playlistId || item.id
+                        : item.layoutId || item.id;
+                    const label =
+                      contentType === "playlist"
+                        ? item.name || `Playlist ${id}`
+                        : item.layout || item.name || `Layout ${id}`;
+                    return (
+                      <option key={id} value={id}>
+                        {label}
+                      </option>
+                    );
+                  })}
+                </select>
+                {editingEvent && (
+                  <p className="text-xs text-gray-400 mt-1">
+                    Pick a {contentType} to replace the scheduled content, or leave
+                    as “Keep current”.
+                  </p>
+                )}
+              </div>
 
               {/* Display groups */}
               <div>

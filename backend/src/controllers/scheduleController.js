@@ -22,22 +22,52 @@ const normalizeOne = (response) => {
   return response;
 };
 
+// Resolve the system "Always" and "Custom" daypart ids. These are NOT fixed
+// across Xibo instances (e.g. Always=2, Custom=1 here), and Xibo's schedule
+// EDIT rejects an unknown dayPartId (404), so we must look them up. Cached
+// after the first call (dayparts rarely change).
+let _dayPartIds = null;
+const resolveDayPartIds = async (token) => {
+  if (_dayPartIds) return _dayPartIds;
+  const r = await xiboRequest("/daypart?start=0&length=200", "GET", null, token);
+  const arr = Array.isArray(r) ? r : r?.data || [];
+  const alwaysId = arr.find((d) => Number(d.isAlways) === 1)?.dayPartId;
+  const customId = arr.find((d) => Number(d.isCustom) === 1)?.dayPartId;
+  if (alwaysId == null || customId == null) {
+    throw new HttpError(
+      502,
+      "Could not resolve the Always/Custom dayparts from Xibo."
+    );
+  }
+  _dayPartIds = { alwaysId, customId };
+  return _dayPartIds;
+};
+
 export const getSchedule = async (req, res) => {
   try {
     const { fromDt, toDt } = req.query;
 
-    const schedules = await fetchUserScopedCollection({
-      req,
-      endpoint: "/schedule",
-      idKeys: ["eventId", "id"],
-      queryParams: {
-        fromDt: fromDt, // Required by Xibo
-        toDt: toDt, // Required by Xibo
-        embed: "displayGroups,campaign", // Embed related info
-      },
-    });
+    // Fetch the events in the window directly. We do NOT run these through the
+    // generic owner filter: schedule events store their owner as `userId` (no
+    // `ownerId`), so that filter would drop every event. A schedule view should
+    // show the events affecting the displays in the window regardless of owner.
+    let { token } = getUserContext(req);
+    if (!token) token = await getAccessToken();
 
-    res.json({ data: schedules, total: schedules.length });
+    const params = new URLSearchParams();
+    if (fromDt) params.append("fromDt", fromDt); // required by Xibo
+    if (toDt) params.append("toDt", toDt); // required by Xibo
+    params.append("embed", "displayGroups,campaign");
+
+    const response = await xiboRequest(
+      `/schedule?${params.toString()}`,
+      "GET",
+      null,
+      token
+    );
+    const events = Array.isArray(response) ? response : response?.data || [];
+
+    res.json({ data: events, total: events.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch schedule");
   }
@@ -150,11 +180,13 @@ export const createScheduleEvent = async (req, res) => {
       throw new HttpError(400, "An end date/time is required unless 'Always' is set.");
     }
 
+    const { alwaysId, customId } = await resolveDayPartIds(token);
+
     const form = new FormData();
     form.append("eventTypeId", "1"); // Layout
     form.append("campaignId", String(campaignId));
     groupIds.forEach((id) => form.append("displayGroupIds[]", String(id)));
-    form.append("dayPartId", always ? "1" : "0");
+    form.append("dayPartId", String(always ? alwaysId : customId));
     form.append("fromDt", from);
     if (!always) form.append("toDt", toDt);
     form.append("displayOrder", "0");
@@ -190,7 +222,9 @@ export const updateScheduleEvent = async (req, res) => {
 
     const {
       eventTypeId,
-      campaignId,
+      campaignId: campaignIdFromBody,
+      contentType, // optional: 'playlist' | 'layout' — when changing content
+      contentId, // optional: playlistId / layoutId of the new content
       displayGroupIds,
       fromDt,
       toDt,
@@ -205,6 +239,16 @@ export const updateScheduleEvent = async (req, res) => {
     if (groupIds.length === 0) {
       throw new HttpError(400, "At least one display group is required.");
     }
+
+    // Resolve the campaignId. If new content was chosen, derive it (playlists
+    // are wrapped into a full-screen layout, same as create); otherwise keep
+    // the campaignId the client passed through from the existing event.
+    let campaignId = campaignIdFromBody;
+    if (contentType === "playlist" && contentId) {
+      campaignId = await wrapPlaylistAsFullscreen(contentId, token);
+    } else if (contentType === "layout" && contentId && !campaignId) {
+      campaignId = await resolveLayoutCampaignId(contentId, token);
+    }
     if (!campaignId) {
       throw new HttpError(400, "campaignId is required to edit this event.");
     }
@@ -214,11 +258,13 @@ export const updateScheduleEvent = async (req, res) => {
       throw new HttpError(400, "An end date/time is required unless 'Always' is set.");
     }
 
+    const { alwaysId, customId } = await resolveDayPartIds(token);
+
     const payload = {
       eventTypeId: String(eventTypeId || 1),
       campaignId: String(campaignId),
       displayGroupIds: groupIds.map(String),
-      dayPartId: always ? "1" : "0",
+      dayPartId: String(always ? alwaysId : customId),
       fromDt: fromDt || formatXiboDate(),
       displayOrder: String(displayOrder ?? 0),
       isPriority: isPriority ? "1" : "0",
