@@ -202,8 +202,141 @@ const processHtml = (html, proxify, webBase, prefix) => {
   );
   out = rewriteRendererConfig(out, prefix);
   out = rewriteHtml(out, proxify);
-  out = injectShim(out, shimScript(webBase, prefix));
+  out = injectShim(out, shimScript(webBase, prefix) + freezeScript());
   return out;
+};
+
+// Per-region freeze — injected into every proxied document. Suppresses video
+// autoplay so each region holds on its first frame until *that region* is
+// played. A region iframe's URL contains its regionId (/resource/{id}/…); a
+// video plays only when its region is flagged in the entry page's
+// __xlrPlayingRegions map (read from the same-origin parent window). The entry
+// page itself has no regionId, so its own media (none) is never frozen.
+const freezeScript = () => `<script>(function(){
+  if(window.__xlrFreezeInstalled)return;window.__xlrFreezeInstalled=true;
+  if(!window.__xlrPlayingRegions)window.__xlrPlayingRegions={};
+  // A video's region: from the iframe URL (/resource/{id}/, HTML widgets) or the
+  // ancestor region container id (R-{id}-N, native video rendered inline).
+  function ridFor(v){
+    var m=location.pathname.match(/\\/resource\\/(\\d+)\\//);if(m)return m[1];
+    var el=v;while(el){if(el.id){var mm=el.id.match(/R-(\\d+)-/);if(mm)return mm[1];}el=el.parentElement;}
+    return null;
+  }
+  function set(){try{return (window.parent&&window.parent.__xlrPlayingRegions)||window.__xlrPlayingRegions;}catch(e){return window.__xlrPlayingRegions;}}
+  function frozen(v){var r=ridFor(v);if(!r)return false;var s=set();return !(s&&s[r]);}
+  var op=HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play=function(){if(frozen(this)){try{this.pause();}catch(e){}return Promise.resolve();}return op.apply(this,arguments);};
+  // Also catch attribute-driven autoplay (not just explicit .play() calls).
+  document.addEventListener("play",function(e){var v=e.target;if(v&&v.tagName==="VIDEO"&&frozen(v)){try{v.pause();}catch(_){}}},true);
+})();</script>`;
+
+// --- No-autoplay: static poster + play button ------------------------------
+//
+// We do NOT auto-start playback (Xibo's preview calls playSchedules() right
+// after init()). Instead we defer that call, and cover the canvas with a
+// faithful static poster — each region's first media shown as its first-frame
+// image at the correct position — plus a play button. Clicking removes the
+// poster and triggers playback, just like the CMS editor's play control. This
+// is deterministic (built from the XLF), so it doesn't fight the renderer's
+// loading-spinner / fade-in transitions, and it works for video AND images.
+
+const attr = (s, name) => {
+  const m = s.match(new RegExp(`\\b${name}="([^"]*)"`, "i"));
+  return m ? m[1] : null;
+};
+
+// Parse layout dimensions + each region's geometry and first media (file id).
+const parseXlf = (xlf) => {
+  const lm = xlf.match(/<layout\b[^>]*>/i);
+  const W = lm ? Number(attr(lm[0], "width")) : 0;
+  const H = lm ? Number(attr(lm[0], "height")) : 0;
+  const regions = [];
+  const re = /<region\b([^>]*)>([\s\S]*?)<\/region>/gi;
+  let m;
+  while ((m = re.exec(xlf))) {
+    const head = m[1];
+    const media = m[2].match(/<media\b[^>]*>/i);
+    regions.push({
+      id: attr(head, "id"),
+      x: Number(attr(head, "left")) || 0,
+      y: Number(attr(head, "top")) || 0,
+      w: Number(attr(head, "width")) || 0,
+      h: Number(attr(head, "height")) || 0,
+      fileId: media ? attr(media[0], "fileId") : null,
+      type: media ? attr(media[0], "type") : null,
+    });
+  }
+  return { W, H, regions };
+};
+
+const PLAY_SVG =
+  '<svg viewBox="0 0 24 24" width="34" height="34" fill="#fff"><path d="M8 5v14l11-7z"/></svg>';
+const PAUSE_SVG =
+  '<svg viewBox="0 0 24 24" width="30" height="30" fill="#fff"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>';
+
+// Build a per-region control overlay: each region gets a poster (its first
+// frame) and a play/pause toggle centered in it, positioned over that region.
+// Clicking a region's button flips that region in __xlrPlayingRegions and
+// plays/pauses only that region's iframe video(s) — independent per region.
+const buildRegionControls = (xlf, prefix) => {
+  let regionsHtml = "";
+  try {
+    const { W, H, regions } = parseXlf(xlf);
+    if (W > 0 && H > 0) {
+      for (const r of regions) {
+        if (!r.id || r.w <= 0 || r.h <= 0) continue;
+        const poster =
+          r.fileId && ["video", "image"].includes(String(r.type))
+            ? `<img class="xlr-poster" src="${prefix}/library/download/${r.fileId}?preview=1" loading="eager">`
+            : "";
+        regionsHtml +=
+          `<div class="xlr-rgn" data-rid="${r.id}" data-playing="0" style="` +
+          `left:${(r.x / W) * 100}%;top:${(r.y / H) * 100}%;` +
+          `width:${(r.w / W) * 100}%;height:${(r.h / H) * 100}%">` +
+          `${poster}<div class="xlr-btn">${PLAY_SVG}</div></div>`;
+      }
+    }
+  } catch (e) {
+    // no controls if XLF can't be parsed
+  }
+
+  return `${regionsHtml}
+<style>
+.xlr-rgn{position:fixed;z-index:2147483647;cursor:pointer;overflow:hidden}
+.xlr-rgn .xlr-poster{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.xlr-btn{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:74px;height:74px;border-radius:50%;background:rgba(20,20,20,.55);display:flex;align-items:center;justify-content:center;transition:background .15s ease,transform .15s ease;pointer-events:none}
+.xlr-rgn:hover .xlr-btn{background:rgba(20,20,20,.82);transform:translate(-50%,-50%) scale(1.06)}
+</style>
+<script>(function(){
+  var W=window;W.__xlrPlayingRegions=W.__xlrPlayingRegions||{};
+  var PLAY=${JSON.stringify(PLAY_SVG)},PAUSE=${JSON.stringify(PAUSE_SVG)};
+  // Walk this window and all nested frames; a video belongs to a region via the
+  // frame URL (/resource/{id}/) or its ancestor container id (R-{id}-N).
+  function eachWin(win,cb){try{cb(win);}catch(e){}try{for(var i=0;i<win.frames.length;i++)eachWin(win.frames[i],cb);}catch(e){}}
+  function vidRid(w,v){var m=String(w.location.pathname).match(/\\/resource\\/(\\d+)\\//);if(m)return m[1];
+    var el=v;while(el){if(el.id){var mm=el.id.match(/R-(\\d+)-/);if(mm)return mm[1];}el=el.parentElement;}return null;}
+  function videos(rid,play){eachWin(W,function(w){try{
+    var d=w.document.querySelectorAll('video');
+    for(var i=0;i<d.length;i++){if(vidRid(w,d[i])!==rid)continue;
+      if(play){var p=d[i].play();if(p&&p.catch)p.catch(function(){});}else{d[i].pause();}}
+  }catch(e){}});}
+  function toggle(rgn){
+    var rid=rgn.getAttribute('data-rid'),on=rgn.getAttribute('data-playing')==='1';
+    var img=rgn.querySelector('.xlr-poster'),btn=rgn.querySelector('.xlr-btn');
+    if(!on){W.__xlrPlayingRegions[rid]=true;if(img)img.style.display='none';videos(rid,true);
+      rgn.setAttribute('data-playing','1');if(btn)btn.innerHTML=PAUSE;}
+    else{W.__xlrPlayingRegions[rid]=false;videos(rid,false);if(img)img.style.display='';
+      rgn.setAttribute('data-playing','0');if(btn)btn.innerHTML=PLAY;}
+  }
+  function wire(){var a=document.querySelectorAll('.xlr-rgn');
+    for(var i=0;i<a.length;i++){(function(rgn){rgn.addEventListener('click',function(){toggle(rgn);});})(a[i]);}}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',wire);else wire();
+})();</script>`;
+};
+
+const injectBeforeBody = (html, blob) => {
+  if (/<\/body>/i.test(html)) return html.replace(/<\/body>/i, `${blob}</body>`);
+  return html + blob;
 };
 
 // Drop any in-document Content-Security-Policy: it would block our injected
@@ -271,7 +404,24 @@ export const getLayoutLivePreview = async (req, res) => {
         .send("Layout preview is unavailable (could not load the Xibo preview).");
     }
 
-    const rewritten = processHtml(html, proxify, webBase, prefix);
+    // Fetch the XLF to build per-region controls (first-frame poster + a
+    // play/pause toggle centered in each region).
+    let controls = "";
+    try {
+      const client = await getWebClient();
+      const xlfRes = await client.get(`${webBase}/layout/xlf/${layoutId}`, {
+        responseType: "text",
+        validateStatus: (s) => s < 500,
+      });
+      controls = buildRegionControls(String(xlfRes.data || ""), prefix);
+    } catch (e) {
+      // no controls if the XLF can't be fetched
+    }
+
+    const rewritten = injectBeforeBody(
+      processHtml(html, proxify, webBase, prefix),
+      controls
+    );
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "no-store");
