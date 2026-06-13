@@ -23,6 +23,9 @@ export default function LayoutDesign() {
   const [scale, setScale] = useState(1);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [bgImageUrl, setBgImageUrl] = useState(null);
+  // Faithful live preview (iframe proxy of Xibo's own renderer) vs. our
+  // structure reconstruction. Defaults on; toggle falls back if unavailable.
+  const [useLivePreview, setUseLivePreview] = useState(true);
 
   // Preview Modal State
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
@@ -153,7 +156,7 @@ export default function LayoutDesign() {
               ) {
                 // Extract text value from properties
                 const textProp = element.properties?.find(
-                  (p) => p.id === "text"
+                  (p) => p.id === "text",
                 );
                 if (textProp && textProp.value) {
                   textElements.push({
@@ -199,7 +202,7 @@ export default function LayoutDesign() {
       const extractRecursive = (data, path = []) => {
         if (Array.isArray(data)) {
           data.forEach((item, idx) => extractRecursive(item, [...path, idx]));
-        } else if (typeof data === 'object' && data !== null) {
+        } else if (typeof data === "object" && data !== null) {
           // Check if this is an image element
           if (data.elementType === "global_library_image" && data.mediaId) {
             imageElements.push({
@@ -284,7 +287,7 @@ export default function LayoutDesign() {
     });
 
     console.log(
-      `Found ${playlistIds.size} playlists and ${datasetIds.size} datasets to fetch`
+      `Found ${playlistIds.size} playlists and ${datasetIds.size} datasets to fetch`,
     );
 
     playlistIds.forEach((id) => fetchPlaylistMedia(id));
@@ -323,21 +326,26 @@ export default function LayoutDesign() {
       }
 
       const data = await response.json();
-      
+
       // AUTO-REDIRECT TO DRAFT IF EXISTS
       // If we opened a published layout but a draft exists, redirect to the draft to avoid "Not a Draft" errors
-      if (data.existingDraftId && String(data.existingDraftId) !== String(layoutId)) {
-          console.log(`[LayoutDesign] Found existing draft ${data.existingDraftId}. Redirecting...`);
-          // Optional: Show a toast/notice
-          // alert("Redirecting to the editable draft version of this layout..."); 
-          navigate(`/layout/designer/${data.existingDraftId}`, { replace: true });
-          return; // Stop processing this read-only layout
+      if (
+        data.existingDraftId &&
+        String(data.existingDraftId) !== String(layoutId)
+      ) {
+        console.log(
+          `[LayoutDesign] Found existing draft ${data.existingDraftId}. Redirecting...`,
+        );
+        // Optional: Show a toast/notice
+        // alert("Redirecting to the editable draft version of this layout...");
+        navigate(`/layout/designer/${data.existingDraftId}`, { replace: true });
+        return; // Stop processing this read-only layout
       }
 
       const fetchedLayout = data.layout;
 
       console.log(
-        `[LayoutDesign] Fetched Layout: ID=${fetchedLayout.layoutId}, Status=${fetchedLayout.publishedStatusId}`
+        `[LayoutDesign] Fetched Layout: ID=${fetchedLayout.layoutId}, Status=${fetchedLayout.publishedStatusId}`,
       );
 
       setLayout(fetchedLayout);
@@ -355,7 +363,7 @@ export default function LayoutDesign() {
         `${API_BASE_URL}/library/${mediaId}/download`,
         {
           headers: getAuthHeaders(),
-        }
+        },
       );
       if (response.ok) {
         const blob = await response.blob();
@@ -387,13 +395,13 @@ export default function LayoutDesign() {
         new Map(prev).set(String(playlistId), {
           playlist: data.playlist,
           media: data.media || [],
-        })
+        }),
       );
 
       console.log(
         `Fetched ${
           data.media?.length || 0
-        } media items for playlist ${playlistId}`
+        } media items for playlist ${playlistId}`,
       );
     } catch (err) {
       console.error(`Failed to fetch playlist ${playlistId}:`, err);
@@ -432,13 +440,13 @@ export default function LayoutDesign() {
         new Map(prev).set(String(dataSetId), {
           columns: colData.data || [],
           rows: rowData.data || [],
-        })
+        }),
       );
 
       console.log(
         `Fetched dataset ${dataSetId}: ${colData.data?.length || 0} columns, ${
           rowData.data?.length || 0
-        } rows`
+        } rows`,
       );
     } catch (err) {
       console.error(`Failed to fetch dataset ${dataSetId}:`, err);
@@ -476,8 +484,8 @@ export default function LayoutDesign() {
           `Playlist widget has no playlist ID.\n\nDebug Info:\nModule: ${
             widget.moduleName
           }\nType: ${widget.type}\nOptions: ${JSON.stringify(
-            widget.widgetOptions
-          )}`
+            widget.widgetOptions,
+          )}`,
         );
         return;
       }
@@ -494,7 +502,7 @@ export default function LayoutDesign() {
       const mediaList = plData.media
         .map(
           (m, idx) =>
-            `${idx + 1}. ${m.name || "Unnamed"} (${m.mediaType || "unknown"})`
+            `${idx + 1}. ${m.name || "Unnamed"} (${m.mediaType || "unknown"})`,
         )
         .join("\n");
 
@@ -503,7 +511,7 @@ export default function LayoutDesign() {
           widget.name || plData.playlist.name
         }\nID: ${plId}\n\nMedia Items (${plData.media.length}):\n${
           mediaList || "No media items"
-        }\n\nNote: Thumbnails visible in sidebar`
+        }\n\nNote: Thumbnails visible in sidebar`,
       );
     }
     // Handle dataset widgets
@@ -515,8 +523,8 @@ export default function LayoutDesign() {
           `Dataset widget has no dataset ID.\n\nDebug Info:\nModule: ${
             widget.moduleName
           }\nType: ${widget.type}\nOptions: ${JSON.stringify(
-            widget.widgetOptions
-          )}`
+            widget.widgetOptions,
+          )}`,
         );
         return;
       }
@@ -536,7 +544,7 @@ export default function LayoutDesign() {
           const rowData = dsData.columns
             .map(
               (col) =>
-                row[col.heading] || row[`col_${col.dataSetColumnId}`] || "-"
+                row[col.heading] || row[`col_${col.dataSetColumnId}`] || "-",
             )
             .join(" | ");
           return `Row ${idx + 1}: ${rowData}`;
@@ -548,7 +556,7 @@ export default function LayoutDesign() {
           dsData.columns.length
         }): ${columnList}\n\nRows: ${
           dsData.rows.length
-        }\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? "\n..." : ""}`
+        }\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? "\n..." : ""}`,
       );
     }
     // Handle other widgets
@@ -578,7 +586,7 @@ export default function LayoutDesign() {
   const handleDeletePlaylistMedia = async (playlistId, widgetId, mediaName) => {
     if (
       !confirm(
-        `Are you sure you want to remove "${mediaName}" from the playlist?`
+        `Are you sure you want to remove "${mediaName}" from the playlist?`,
       )
     ) {
       return;
@@ -593,7 +601,7 @@ export default function LayoutDesign() {
           headers: {
             ...getAuthHeaders(),
           },
-        }
+        },
       );
 
       if (response.status === 403) {
@@ -657,7 +665,7 @@ export default function LayoutDesign() {
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: new URLSearchParams(formData),
-        }
+        },
       );
 
       if (!response.ok) throw new Error("Failed to add row");
@@ -688,7 +696,7 @@ export default function LayoutDesign() {
         {
           method: "DELETE",
           headers: getAuthHeaders(),
-        }
+        },
       );
 
       if (!response.ok) throw new Error("Failed to delete row");
@@ -700,7 +708,7 @@ export default function LayoutDesign() {
       await fetchLayoutDetails();
 
       console.log(
-        `Successfully deleted row ${rowId} from dataset ${datasetId}`
+        `Successfully deleted row ${rowId} from dataset ${datasetId}`,
       );
     } catch (err) {
       console.error("Error deleting row:", err);
@@ -716,34 +724,40 @@ export default function LayoutDesign() {
 
     try {
       setReplacingWidget(widgetId);
-      
+
       // DEBUG: Log the state values
       console.log(`[DEBUG] Replace Media State:`, {
         widgetId,
         elementId,
         hasElementId: !!elementId,
-        newMediaId
+        newMediaId,
       });
-      
-      console.log(`Replacing media for widget ${widgetId} ${elementId ? `(Element: ${elementId})` : ''} with media ${newMediaId}`);
+
+      console.log(
+        `Replacing media for widget ${widgetId} ${elementId ? `(Element: ${elementId})` : ""} with media ${newMediaId}`,
+      );
 
       let payload = {};
 
       // SCENARIO 1: Global/Canvas Widget Element (The fix for your bug)
       if (elementId) {
         console.log(`[DEBUG] Taking Global Widget path (elementId present)`);
-        
+
         // 1. Find the widget in the current layout state
         let targetWidget = null;
-        layout.regions.forEach(r => {
-          r.regionPlaylist?.widgets?.forEach(w => {
+        layout.regions.forEach((r) => {
+          r.regionPlaylist?.widgets?.forEach((w) => {
             if (String(w.widgetId) === String(widgetId)) targetWidget = w;
           });
         });
 
         if (!targetWidget) throw new Error("Widget not found in local state");
-        
-        console.log(`[DEBUG] Found widget:`, targetWidget.type, targetWidget.moduleName);
+
+        console.log(
+          `[DEBUG] Found widget:`,
+          targetWidget.type,
+          targetWidget.moduleName,
+        );
 
         // 2. Parse the existing elements JSON
         const elementsOption = getOptionValue(targetWidget, "elements");
@@ -753,24 +767,29 @@ export default function LayoutDesign() {
         } catch (e) {
           throw new Error("Failed to parse widget elements structure");
         }
-        
-        console.log(`[DEBUG] Parsed elements, searching for elementId:`, elementId);
+
+        console.log(
+          `[DEBUG] Parsed elements, searching for elementId:`,
+          elementId,
+        );
 
         // 3. Find the specific element and update its mediaId
         let updated = false;
         const updateRecursive = (data) => {
           if (Array.isArray(data)) {
-            data.forEach(item => updateRecursive(item));
-          } else if (typeof data === 'object' && data !== null) {
-             // Check if this is our target element
-             if (data.id === elementId || data.elementId === elementId) {
-                console.log(`[DEBUG] Found matching element! Old mediaId: ${data.mediaId}, New: ${newMediaId}`);
-                // Update the mediaId
-                data.mediaId = parseInt(newMediaId); // Xibo expects int usually
-                updated = true;
-             }
-             // Continue deep search
-             if (data.elements) updateRecursive(data.elements);
+            data.forEach((item) => updateRecursive(item));
+          } else if (typeof data === "object" && data !== null) {
+            // Check if this is our target element
+            if (data.id === elementId || data.elementId === elementId) {
+              console.log(
+                `[DEBUG] Found matching element! Old mediaId: ${data.mediaId}, New: ${newMediaId}`,
+              );
+              // Update the mediaId
+              data.mediaId = parseInt(newMediaId); // Xibo expects int usually
+              updated = true;
+            }
+            // Continue deep search
+            if (data.elements) updateRecursive(data.elements);
           }
         };
 
@@ -785,8 +804,10 @@ export default function LayoutDesign() {
         // Xibo prioritizes mediaIds over elements, so we must exclude it
         payload = { elements: JSON.stringify(elementsData) };
         console.log("Preparing Elements Update Payload (elements only)");
-        console.log(`[DEBUG] Payload preview:`, payload.elements.substring(0, 200));
-
+        console.log(
+          `[DEBUG] Payload preview:`,
+          payload.elements.substring(0, 200),
+        );
       } else {
         // SCENARIO 2: Standard Image/Video Widget (Existing logic)
         payload = { mediaIds: [newMediaId] };
@@ -821,7 +842,6 @@ export default function LayoutDesign() {
       // Refresh layout to show new media
       await fetchLayoutDetails();
       alert("Media replaced successfully!");
-
     } catch (err) {
       console.error("Error replacing media:", err);
       alert(`Failed to replace media: ${err.message}`);
@@ -1002,7 +1022,7 @@ export default function LayoutDesign() {
   const handlePublishLayout = async () => {
     if (
       !confirm(
-        "Are you sure you want to publish this layout? This will make it live."
+        "Are you sure you want to publish this layout? This will make it live.",
       )
     ) {
       return;
@@ -1015,9 +1035,14 @@ export default function LayoutDesign() {
 
       // Use Parent ID for publishing if it exists (Draft), otherwise use current ID
       // Xibo requires the Parent ID to publish a draft
-      const publishId = (layout && layout.parentId && layout.parentId !== 0) ? layout.parentId : layoutId;
-      
-      console.log(`[Publish] Publishing Layout. Current ID: ${layoutId}, Parent ID: ${layout?.parentId}, Target Publish ID: ${publishId}`);
+      const publishId =
+        layout && layout.parentId && layout.parentId !== 0
+          ? layout.parentId
+          : layoutId;
+
+      console.log(
+        `[Publish] Publishing Layout. Current ID: ${layoutId}, Parent ID: ${layout?.parentId}, Target Publish ID: ${publishId}`,
+      );
 
       const response = await fetch(
         `${API_BASE_URL}/layouts/publish/${publishId}`,
@@ -1030,7 +1055,7 @@ export default function LayoutDesign() {
           body: JSON.stringify({
             publishNow: 1,
           }),
-        }
+        },
       );
 
       if (response.status === 403) {
@@ -1083,7 +1108,7 @@ export default function LayoutDesign() {
             "Content-Type": "application/json",
             ...getAuthHeaders(),
           },
-        }
+        },
       );
 
       if (!response.ok) {
@@ -1136,7 +1161,7 @@ export default function LayoutDesign() {
     try {
       console.log(
         "[handleTextSave] Widget details:",
-        JSON.stringify(widget, null, 2)
+        JSON.stringify(widget, null, 2),
       );
       setSavingText(true);
 
@@ -1167,7 +1192,7 @@ export default function LayoutDesign() {
 
               if (isTargetElement) {
                 const textProp = element.properties?.find(
-                  (p) => p.id === "text"
+                  (p) => p.id === "text",
                 );
                 if (textProp) {
                   textProp.value = editingTextValue;
@@ -1184,26 +1209,29 @@ export default function LayoutDesign() {
       }
 
       console.log(
-        `[Text Save] Updating widget ${widget.widgetId} with new text elements`
+        `[Text Save] Updating widget ${widget.widgetId} with new text elements`,
       );
 
       console.log(
-        `[Text Save] CURRENT LAYOUT CONTEXT: ID=${layoutId}, Status=${layout?.publishedStatusId}`
+        `[Text Save] CURRENT LAYOUT CONTEXT: ID=${layoutId}, Status=${layout?.publishedStatusId}`,
       );
       console.log(`[Text Save] Target Widget ID: ${widget.widgetId}`);
 
       console.log(
         `[Text Save] Elements data:`,
-        JSON.stringify(elementsData).substring(0, 300) + "..."
+        JSON.stringify(elementsData).substring(0, 300) + "...",
       );
 
       // BLOCK EDITING IF NOT DRAFT
       // Status 1 = Published, 2 = Draft. Xibo requires Draft to edit.
       // If we are here and status is NOT 2, it means the Auto-Redirect failed or User is in a weird state.
-      if (layout?.publishedStatusId && String(layout.publishedStatusId) !== '2') {
-           const msg = `This layout is NOT in Draft mode (Status: ${layout.publishedStatusId}). You cannot edit it directly. Please reload to redirect to the Draft version if it exists.`;
-           alert(msg);
-           throw new Error(msg);
+      if (
+        layout?.publishedStatusId &&
+        String(layout.publishedStatusId) !== "2"
+      ) {
+        const msg = `This layout is NOT in Draft mode (Status: ${layout.publishedStatusId}). You cannot edit it directly. Please reload to redirect to the Draft version if it exists.`;
+        alert(msg);
+        throw new Error(msg);
       }
 
       // ✅ SOLUTION: Use URLSearchParams for application/x-www-form-urlencoded
@@ -1212,29 +1240,30 @@ export default function LayoutDesign() {
 
       // SANITIZATION: Filter out purely undefined properties, but ALLOW nulls (as per reference logs)
       // Use deep clone to avoid mutating original state
-      let parsedElements = typeof elementsData === 'string' 
-        ? JSON.parse(elementsData) 
-        : JSON.parse(JSON.stringify(elementsData));
+      let parsedElements =
+        typeof elementsData === "string"
+          ? JSON.parse(elementsData)
+          : JSON.parse(JSON.stringify(elementsData));
 
       // Helper to clean properties recursively
       const cleanElementData = (data) => {
         if (Array.isArray(data)) {
           return data.map(cleanElementData);
-        } else if (typeof data === 'object' && data !== null) {
+        } else if (typeof data === "object" && data !== null) {
           const newData = { ...data };
-          
+
           // If this is a widget options/properties object, filter only undefined items or truly invalid ones
           // Reference logs show "value": null is VALID.
           if (Array.isArray(newData.properties)) {
-            newData.properties = newData.properties.filter(prop => 
-              prop && 
-              typeof prop.id !== 'undefined' && prop.id !== null
+            newData.properties = newData.properties.filter(
+              (prop) =>
+                prop && typeof prop.id !== "undefined" && prop.id !== null,
               // ALLOW value: null or empty string
             );
           }
-           // Check for 'elements' array inside (nested structure)
+          // Check for 'elements' array inside (nested structure)
           if (Array.isArray(newData.elements)) {
-             newData.elements = newData.elements.map(cleanElementData);
+            newData.elements = newData.elements.map(cleanElementData);
           }
           return newData;
         }
@@ -1242,19 +1271,19 @@ export default function LayoutDesign() {
       };
 
       parsedElements = cleanElementData(parsedElements);
-      
+
       // Ensure elements is a string, not an object/array, when sending to Xibo
-       const elementsStr = JSON.stringify(parsedElements);
-      
+      const elementsStr = JSON.stringify(parsedElements);
+
       console.log(`[Text Save] Final elements JSON for Xibo:`, elementsStr);
-      
+
       // We append it to params as usual, but backend will extract it to send as raw body if needed
       params.append("elements", elementsStr);
 
       console.log(
-        `[Text Save] URLSearchParams prepared with elements (${elementsStr.length} chars)`
+        `[Text Save] URLSearchParams prepared with elements (${elementsStr.length} chars)`,
       );
-      
+
       const response = await fetch(
         `${API_BASE_URL}/playlists/widgets/${widget.widgetId}/elements`,
         {
@@ -1266,11 +1295,11 @@ export default function LayoutDesign() {
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: params,
-        }
+        },
       );
 
       console.log(
-        `[Text Save] Response status: ${response.status} ${response.statusText}`
+        `[Text Save] Response status: ${response.status} ${response.statusText}`,
       );
 
       if (!response.ok) {
@@ -1278,13 +1307,13 @@ export default function LayoutDesign() {
         console.error(`[Text Save] ✗ API Error:`, errorData);
         throw new Error(
           errorData.message ||
-            `API returned ${response.status}: ${response.statusText}`
+            `API returned ${response.status}: ${response.statusText}`,
         );
       }
 
       const result = await response.json();
       console.log(
-        `[Text Save] ✓ Successfully updated widget ${widget.widgetId}`
+        `[Text Save] ✓ Successfully updated widget ${widget.widgetId}`,
       );
       console.log(`[Text Save] Response:`, result);
 
@@ -1322,7 +1351,7 @@ export default function LayoutDesign() {
     return Object.entries(counts)
       .map(
         ([type, count]) =>
-          `${count} ${type.charAt(0).toUpperCase() + type.slice(1)}`
+          `${count} ${type.charAt(0).toUpperCase() + type.slice(1)}`,
       )
       .join(", ");
   };
@@ -1426,15 +1455,15 @@ export default function LayoutDesign() {
       (r) =>
         r.type === "canvas" ||
         r.regionPlaylist?.widgets?.some(
-          (w) => w.type === "canvas" || w.type === "global"
-        )
+          (w) => w.type === "canvas" || w.type === "global",
+        ),
     );
 
     if (!canvasRegion) return null;
 
     // The widget type is 'global' in the dump, but could be 'canvas' in other contexts. Check both.
     const canvasWidget = canvasRegion.regionPlaylist.widgets.find(
-      (w) => w.type === "canvas" || w.type === "global"
+      (w) => w.type === "canvas" || w.type === "global",
     );
     if (!canvasWidget) return null;
 
@@ -1548,7 +1577,7 @@ export default function LayoutDesign() {
             {renderWidgetContent(
               firstWidget,
               scaledDimensions.width,
-              scaledDimensions.height
+              scaledDimensions.height,
             )}
 
             {/* Badge for multiple widgets */}
@@ -1739,8 +1768,8 @@ export default function LayoutDesign() {
                 checkoutSuccess
                   ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
                   : checkingOut
-                  ? "bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed"
-                  : "bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30"
+                    ? "bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed"
+                    : "bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/30"
               }`}
             >
               {checkingOut ? (
@@ -1815,8 +1844,8 @@ export default function LayoutDesign() {
               publishSuccess
                 ? "bg-green-500/20 text-green-400 border border-green-500/30"
                 : publishing
-                ? "bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed"
-                : "bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30"
+                  ? "bg-gray-700 text-gray-400 border border-gray-600 cursor-not-allowed"
+                  : "bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20 hover:border-green-500/30"
             }`}
           >
             {publishing ? (
@@ -1915,62 +1944,91 @@ export default function LayoutDesign() {
                 width: `${layout.width * canvasScale}px`,
                 height: `${layout.height * canvasScale}px`,
                 background: layout.backgroundColor || "#000",
-                backgroundImage: bgImageUrl ? `url(${bgImageUrl})` : undefined,
+                backgroundImage:
+                  !useLivePreview && bgImageUrl
+                    ? `url(${bgImageUrl})`
+                    : undefined,
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }}
             >
-              {/* Layout live preview container */}
-              <div className="layout-live-preview relative w-full h-full">
-                {/* Global elements layer (canvas region) */}
-                {renderGlobalElements()}
+              {useLivePreview ? (
+                /* Faithful preview: Xibo's own renderer at native resolution,
+                   scaled down to the canvas. Reverse-proxied via the backend so
+                   all sub-resources (media/JS/CSS) load through the web session. */
+                <iframe
+                  key={`live-${layoutId}`}
+                  title="Layout preview"
+                  src={`${API_BASE_URL}/layouts/${layoutId}/live-preview?token=${getStoredToken()}`}
+                  style={{
+                    width: `${layout.width}px`,
+                    height: `${layout.height}px`,
+                    border: "none",
+                    transform: `scale(${canvasScale})`,
+                    transformOrigin: "top left",
+                  }}
+                  sandbox="allow-scripts allow-same-origin"
+                />
+              ) : (
+                /* Structure view: our reconstruction (region/widget overlays). */
+                <div className="layout-live-preview relative w-full h-full">
+                  {/* Global elements layer (canvas region) */}
+                  {renderGlobalElements()}
 
-                {/* Regular regions container */}
-                <div className="regions-container relative w-full h-full">
-                  {layout.regions
-                    ?.filter(
-                      (region) =>
-                        !region.regionPlaylist?.widgets?.some(
-                          (w) => w.type === "canvas"
-                        )
-                    )
-                    .map((region) => {
-                      const firstWidget = region.regionPlaylist?.widgets?.[0];
+                  {/* Regular regions container */}
+                  <div className="regions-container relative w-full h-full">
+                    {layout.regions
+                      ?.filter(
+                        (region) =>
+                          !region.regionPlaylist?.widgets?.some(
+                            (w) => w.type === "canvas",
+                          ),
+                      )
+                      .map((region) => {
+                        const firstWidget = region.regionPlaylist?.widgets?.[0];
 
-                      // Determine region type and render accordingly
-                      if (!firstWidget) return null;
+                        // Determine region type and render accordingly
+                        if (!firstWidget) return null;
 
-                      // Dataset, embedded content, or specific widget types use iframes
-                      // Check both moduleName and type to be safe
-                      const moduleName = (
-                        firstWidget.moduleName || ""
-                      ).toLowerCase();
-                      const type = (firstWidget.type || "").toLowerCase();
+                        // Dataset, embedded content, or specific widget types use iframes
+                        // Check both moduleName and type to be safe
+                        const moduleName = (
+                          firstWidget.moduleName || ""
+                        ).toLowerCase();
+                        const type = (firstWidget.type || "").toLowerCase();
 
-                      if (
-                        moduleName === "dataset" ||
-                        moduleName === "embedded" ||
-                        moduleName === "ticker" ||
-                        type === "dataset" ||
-                        type === "embedded" ||
-                        type === "ticker"
-                      ) {
-                        return renderWidgetRegion(region);
-                      }
+                        if (
+                          moduleName === "dataset" ||
+                          moduleName === "embedded" ||
+                          moduleName === "ticker" ||
+                          type === "dataset" ||
+                          type === "embedded" ||
+                          type === "ticker"
+                        ) {
+                          return renderWidgetRegion(region);
+                        }
 
-                      // Playlist regions (images, videos, etc.) use preview HTML
-                      return renderPlaylistRegion(region);
-                    })}
+                        // Playlist regions (images, videos, etc.) use preview HTML
+                        return renderPlaylistRegion(region);
+                      })}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Canvas info display */}
-            <div className="mt-4 text-center text-sm text-gray-500 font-mono">
+            <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500 font-mono">
               <p>
                 Scale: {(canvasScale * 100).toFixed(0)}% • {layout.width} ×{" "}
                 {layout.height}px
               </p>
+              <button
+                onClick={() => setUseLivePreview((v) => !v)}
+                className="px-3 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                title="Switch between Xibo's faithful preview and the editable structure view"
+              >
+                {useLivePreview ? "Show structure view" : "Show live preview"}
+              </button>
             </div>
           </div>
         </main>
@@ -2016,12 +2074,12 @@ export default function LayoutDesign() {
                             const textElements = extractTextElements(widget);
                             const elementsOption = getOptionValue(
                               widget,
-                              "elements"
+                              "elements",
                             );
                             let mediaElements = [];
                             try {
                               const elementsData = JSON.parse(
-                                elementsOption || "[]"
+                                elementsOption || "[]",
                               );
                               if (Array.isArray(elementsData)) {
                                 elementsData.forEach((page) => {
@@ -2099,7 +2157,7 @@ export default function LayoutDesign() {
                                   handleTextDoubleClick(
                                     widget,
                                     widget.text,
-                                    widget.elementId
+                                    widget.elementId,
                                   );
                                 } else if (
                                   widget.isElement &&
@@ -2171,8 +2229,8 @@ export default function LayoutDesign() {
                                         moduleName === "text"
                                           ? "bg-yellow-500/10 text-yellow-400"
                                           : moduleName === "dataset"
-                                          ? "bg-purple-500/10 text-purple-400"
-                                          : "bg-blue-500/10 text-blue-400"
+                                            ? "bg-purple-500/10 text-purple-400"
+                                            : "bg-blue-500/10 text-blue-400"
                                       }`}
                                     >
                                       {moduleName}
@@ -2224,7 +2282,7 @@ export default function LayoutDesign() {
                                             value={editingTextValue}
                                             onChange={(e) =>
                                               setEditingTextValue(
-                                                e.target.value
+                                                e.target.value,
                                               )
                                             }
                                             className="w-full bg-gray-900 text-gray-200 text-xs p-2 rounded border border-gray-700 focus:border-blue-500 focus:outline-none resize-y min-h-[80px]"
@@ -2296,8 +2354,8 @@ export default function LayoutDesign() {
                                                   const elements = JSON.parse(
                                                     getOptionValue(
                                                       widget,
-                                                      "elements"
-                                                    ) || "[]"
+                                                      "elements",
+                                                    ) || "[]",
                                                   );
                                                   elements.forEach((page) => {
                                                     page.elements?.forEach(
@@ -2309,10 +2367,10 @@ export default function LayoutDesign() {
                                                           text =
                                                             el.properties?.find(
                                                               (p) =>
-                                                                p.id === "text"
+                                                                p.id === "text",
                                                             )?.value;
                                                         }
-                                                      }
+                                                      },
                                                     );
                                                   });
                                                 } catch (e) {}
@@ -2324,7 +2382,7 @@ export default function LayoutDesign() {
                                               handleTextDoubleClick(
                                                 widget,
                                                 cleanText,
-                                                widget.elementId
+                                                widget.elementId,
                                               );
                                             }}
                                           >
@@ -2338,8 +2396,8 @@ export default function LayoutDesign() {
                                                   const elements = JSON.parse(
                                                     getOptionValue(
                                                       widget,
-                                                      "elements"
-                                                    ) || "[]"
+                                                      "elements",
+                                                    ) || "[]",
                                                   );
                                                   elements.forEach((page) => {
                                                     page.elements?.forEach(
@@ -2351,10 +2409,10 @@ export default function LayoutDesign() {
                                                           text =
                                                             el.properties?.find(
                                                               (p) =>
-                                                                p.id === "text"
+                                                                p.id === "text",
                                                             )?.value;
                                                         }
-                                                      }
+                                                      },
                                                     );
                                                   });
                                                 } catch (e) {}
@@ -2378,8 +2436,8 @@ export default function LayoutDesign() {
                                                   const elements = JSON.parse(
                                                     getOptionValue(
                                                       widget,
-                                                      "elements"
-                                                    ) || "[]"
+                                                      "elements",
+                                                    ) || "[]",
                                                   );
                                                   elements.forEach((page) => {
                                                     page.elements?.forEach(
@@ -2391,10 +2449,10 @@ export default function LayoutDesign() {
                                                           text =
                                                             el.properties?.find(
                                                               (p) =>
-                                                                p.id === "text"
+                                                                p.id === "text",
                                                             )?.value;
                                                         }
-                                                      }
+                                                      },
                                                     );
                                                   });
                                                 } catch (e) {}
@@ -2406,7 +2464,7 @@ export default function LayoutDesign() {
                                               handleTextDoubleClick(
                                                 widget,
                                                 cleanText,
-                                                widget.elementId
+                                                widget.elementId,
                                               );
                                             }}
                                           >
@@ -2415,8 +2473,9 @@ export default function LayoutDesign() {
                                         </div>
                                       )
                                     ) : (moduleName === "image" ||
-                                      moduleName === "video" ||
-                                      moduleName === "global_library_image") &&
+                                        moduleName === "video" ||
+                                        moduleName ===
+                                          "global_library_image") &&
                                       (widget.mediaIds?.length > 0 ||
                                         widget.mediaId) ? (
                                       <div className="flex flex-col gap-1">
@@ -2436,13 +2495,13 @@ export default function LayoutDesign() {
                                             setReplaceMediaModalState({
                                               isOpen: true,
                                               widgetId: widget.widgetId,
-                                              elementId: widget.elementId || null, // Pass elementId if it's a Global element
+                                              elementId:
+                                                widget.elementId || null, // Pass elementId if it's a Global element
                                               currentMediaId: currentMediaId,
                                             });
                                           }}
                                           disabled={
-                                            replacingWidget ===
-                                            widget.widgetId
+                                            replacingWidget === widget.widgetId
                                           }
                                         >
                                           {replacingWidget ===
@@ -2494,10 +2553,10 @@ export default function LayoutDesign() {
                                       (() => {
                                         const plId = getPlaylistId(widget);
                                         const plData = playlistData.get(
-                                          String(plId)
+                                          String(plId),
                                         );
                                         const isLoading = loadingWidgetData.has(
-                                          `playlist-${plId}`
+                                          `playlist-${plId}`,
                                         );
 
                                         if (isLoading)
@@ -2616,7 +2675,7 @@ export default function LayoutDesign() {
                                                         onClick={(e) => {
                                                           e.stopPropagation();
                                                           handleMediaPreview(
-                                                            media
+                                                            media,
                                                           );
                                                         }}
                                                         title={`Click to preview: ${media.name}`}
@@ -2662,7 +2721,7 @@ export default function LayoutDesign() {
                                                         onClick={(e) => {
                                                           e.stopPropagation();
                                                           handleMediaPreview(
-                                                            media
+                                                            media,
                                                           );
                                                         }}
                                                         title={`Click to preview: ${media.name}`}
@@ -2676,7 +2735,7 @@ export default function LayoutDesign() {
                                                         <div className="text-[9px] text-gray-500 flex justify-between">
                                                           <span>
                                                             {formatFileSize(
-                                                              media.fileSize
+                                                              media.fileSize,
                                                             )}
                                                           </span>
                                                           <span>
@@ -2696,7 +2755,7 @@ export default function LayoutDesign() {
                                                           handleDeletePlaylistMedia(
                                                             plId,
                                                             widgetId,
-                                                            media.name
+                                                            media.name,
                                                           );
                                                         }}
                                                         disabled={
@@ -2758,7 +2817,7 @@ export default function LayoutDesign() {
                                                       </button>
                                                     </div>
                                                   );
-                                                }
+                                                },
                                               )}
                                             </div>
                                           </div>
@@ -2768,10 +2827,10 @@ export default function LayoutDesign() {
                                       (() => {
                                         const dsId = getDatasetId(widget);
                                         const dsData = datasetData.get(
-                                          String(dsId)
+                                          String(dsId),
                                         );
                                         const isLoading = loadingWidgetData.has(
-                                          `dataset-${dsId}`
+                                          `dataset-${dsId}`,
                                         );
 
                                         if (isLoading)
@@ -2836,7 +2895,7 @@ export default function LayoutDesign() {
                                                         >
                                                           {col.heading}
                                                         </th>
-                                                      )
+                                                      ),
                                                     )}
                                                     <th className="px-1.5 py-1 text-right font-semibold text-gray-300 border-b border-gray-700 bg-gray-800 w-8"></th>
                                                   </tr>
@@ -2872,7 +2931,7 @@ export default function LayoutDesign() {
                                                                 {cellValue}
                                                               </td>
                                                             );
-                                                          }
+                                                          },
                                                         )}
                                                         <td className="px-1.5 py-1.5 text-right">
                                                           <button
@@ -2880,7 +2939,7 @@ export default function LayoutDesign() {
                                                               e.stopPropagation();
                                                               handleDeleteRow(
                                                                 dsId,
-                                                                row.id
+                                                                row.id,
                                                               );
                                                             }}
                                                             disabled={
@@ -2938,7 +2997,7 @@ export default function LayoutDesign() {
                                                           </button>
                                                         </td>
                                                       </tr>
-                                                    )
+                                                    ),
                                                   )}
                                                 </tbody>
                                               </table>
@@ -2958,7 +3017,7 @@ export default function LayoutDesign() {
                                           extractTextElements(widget);
                                         const elementsOption = getOptionValue(
                                           widget,
-                                          "elements"
+                                          "elements",
                                         );
                                         let mediaElements = [];
 
@@ -2979,10 +3038,10 @@ export default function LayoutDesign() {
                                                       if (
                                                         element.mediaId ||
                                                         element.id?.includes(
-                                                          "image"
+                                                          "image",
                                                         ) ||
                                                         element.id?.includes(
-                                                          "video"
+                                                          "video",
                                                         )
                                                       ) {
                                                         mediaElements.push({
@@ -2995,7 +3054,7 @@ export default function LayoutDesign() {
                                                             element.id ||
                                                             "Media Element",
                                                           type: element.id?.includes(
-                                                            "video"
+                                                            "video",
                                                           )
                                                             ? "video"
                                                             : "image",
@@ -3009,7 +3068,7 @@ export default function LayoutDesign() {
                                                           },
                                                         });
                                                       }
-                                                    }
+                                                    },
                                                   );
                                                 }
                                               });
@@ -3017,7 +3076,7 @@ export default function LayoutDesign() {
                                           } catch (e) {
                                             console.error(
                                               "Failed to parse elements for media:",
-                                              e
+                                              e,
                                             );
                                           }
                                         }
@@ -3111,7 +3170,7 @@ export default function LayoutDesign() {
                                                       </div>
                                                     </div>
                                                   </div>
-                                                )
+                                                ),
                                               )}
 
                                               {/* Text Elements */}
@@ -3126,7 +3185,7 @@ export default function LayoutDesign() {
                                                       handleTextDoubleClick(
                                                         widget,
                                                         textEl.text,
-                                                        textEl.elementId
+                                                        textEl.elementId,
                                                       );
                                                     }}
                                                     title="Double click to edit text"
@@ -3166,7 +3225,7 @@ export default function LayoutDesign() {
                                                       </div>
                                                     </div>
                                                   </div>
-                                                )
+                                                ),
                                               )}
                                             </div>
                                           </div>

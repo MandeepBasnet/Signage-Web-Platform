@@ -12,6 +12,7 @@ import displayRoutes from "./routes/displayRoutes.js";
 import scheduleRoutes from "./routes/scheduleRoutes.js";
 import regionRoutes from "./routes/regionRoutes.js";
 import widgetRoutes from "./routes/widgetRoutes.js";
+import xiboProxyRoutes from "./routes/xiboProxyRoutes.js";
 
 dotenv.config();
 
@@ -83,6 +84,7 @@ app.use("/api/displays", displayRoutes);
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/regions", regionRoutes);
 app.use("/api/widgets", widgetRoutes);
+app.use("/api/xibo-web", xiboProxyRoutes);
 
 
 
