@@ -84,6 +84,8 @@ export default function LayoutDesign() {
 
   // Canvas Rendering State
   const [canvasScale, setCanvasScale] = useState(0.1); // Scale factor for canvas preview
+  // When true, the canvas auto-fits the viewport; manual zoom turns it off.
+  const [autoFit, setAutoFit] = useState(true);
   const [selectedRegionId, setSelectedRegionId] = useState(null); // Currently selected region
 
   // Refs
@@ -869,12 +871,31 @@ export default function LayoutDesign() {
     return Math.min(availW / layout.width, availH / layout.height, 1);
   };
 
-  // Recompute when the layout OR the container size changes.
+  // Auto-fit the canvas to the viewport (unless the user has manually zoomed).
   useEffect(() => {
-    if (layout) {
+    if (layout && autoFit) {
       setCanvasScale(calculateCanvasScale());
     }
-  }, [layout, containerSize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layout, containerSize, autoFit]);
+
+  // A newly loaded layout should re-enable auto-fit.
+  useEffect(() => {
+    setAutoFit(true);
+  }, [layout?.layoutId]);
+
+  const ZOOM_MIN = 0.05;
+  const ZOOM_MAX = 4;
+  const zoomBy = (factor) => {
+    setAutoFit(false);
+    setCanvasScale((s) =>
+      Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s * factor))
+    );
+  };
+  const zoomFit = () => {
+    setAutoFit(true);
+    setCanvasScale(calculateCanvasScale());
+  };
 
   // Render widget content directly (Client-Side Rendering)
   const renderWidgetContent = (widget, width, height) => {
@@ -1920,7 +1941,7 @@ export default function LayoutDesign() {
       <div className="flex-1 flex overflow-hidden">
         {/* Left Panel: Visual Layout Canvas */}
         <main
-          className="flex-1 bg-gray-950 relative overflow-hidden flex items-center justify-center p-8"
+          className="flex-1 bg-gray-950 relative overflow-auto"
           ref={containerRef}
         >
           {/* Grid Background Pattern */}
@@ -1932,15 +1953,18 @@ export default function LayoutDesign() {
             }}
           />
 
-          {/* Canvas Wrapper for Centering and Scaling */}
-          <div
-            className="relative"
-            style={{
-              background: "rgb(243, 248, 255)",
-              padding: "20px",
-              boxShadow: "0 0 50px rgba(0,0,0,0.5)",
-            }}
-          >
+          {/* Centering, scrollable area: centers the canvas when it fits, and
+              scrolls (vertical + horizontal) when zoomed beyond the viewport. */}
+          <div className="min-w-full min-h-full flex items-center justify-center p-8">
+            {/* Canvas Wrapper for Centering and Scaling */}
+            <div
+              className="relative"
+              style={{
+                background: "rgb(243, 248, 255)",
+                padding: "20px",
+                boxShadow: "0 0 50px rgba(0,0,0,0.5)",
+              }}
+            >
             {/* Main layout container with scaled dimensions */}
             <div
               className="layout-player relative mx-auto bg-black shadow-2xl overflow-hidden"
@@ -2021,9 +2045,33 @@ export default function LayoutDesign() {
             </div>
 
             {/* Canvas info display */}
-            <div className="mt-4 flex items-center justify-center gap-4 text-sm text-gray-500 font-mono">
+            <div className="mt-4 flex items-center justify-center gap-3 text-sm text-gray-500 font-mono flex-wrap">
+              {/* Zoom controls */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => zoomBy(0.8)}
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  title="Zoom out"
+                >
+                  −
+                </button>
+                <button
+                  onClick={() => zoomBy(1.25)}
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  title="Zoom in"
+                >
+                  +
+                </button>
+                <button
+                  onClick={zoomFit}
+                  className="px-2 h-7 flex items-center justify-center rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                  title="Fit to screen"
+                >
+                  Fit
+                </button>
+              </div>
               <p>
-                Scale: {(canvasScale * 100).toFixed(0)}% • {layout.width} ×{" "}
+                {(canvasScale * 100).toFixed(0)}% • {layout.width} ×{" "}
                 {layout.height}px
               </p>
               <button
@@ -2033,6 +2081,7 @@ export default function LayoutDesign() {
               >
                 {useLivePreview ? "Show structure view" : "Show live preview"}
               </button>
+            </div>
             </div>
           </div>
         </main>

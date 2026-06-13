@@ -255,15 +255,34 @@ export const parseXlf = (xlf) => {
   let m;
   while ((m = re.exec(xlf))) {
     const head = m[1];
-    const media = m[2].match(/<media\b[^>]*>/i);
+    const mediaTags = m[2].match(/<media\b[^>]*>/gi) || [];
+    let firstFileId = null;
+    let firstType = null;
+    let hasVideo = false;
+    let videoFileId = null;
+    for (const tag of mediaTags) {
+      const type = attr(tag, "type");
+      const fid = attr(tag, "fileId");
+      if (firstType === null) {
+        firstType = type;
+        firstFileId = fid;
+      }
+      if (String(type) === "video") {
+        hasVideo = true;
+        if (!videoFileId) videoFileId = fid;
+      }
+    }
     regions.push({
       id: attr(head, "id"),
       x: Number(attr(head, "left")) || 0,
       y: Number(attr(head, "top")) || 0,
       w: Number(attr(head, "width")) || 0,
       h: Number(attr(head, "height")) || 0,
-      fileId: media ? attr(media[0], "fileId") : null,
-      type: media ? attr(media[0], "type") : null,
+      fileId: firstFileId, // first media (used by the thumbnail fallback)
+      type: firstType,
+      hasVideo,
+      videoFileId: videoFileId || firstFileId,
+      mediaCount: mediaTags.length,
     });
   }
   return { W, H, regions };
@@ -285,10 +304,13 @@ const buildRegionControls = (xlf, prefix) => {
     if (W > 0 && H > 0) {
       for (const r of regions) {
         if (!r.id || r.w <= 0 || r.h <= 0) continue;
-        const poster =
-          r.fileId && ["video", "image"].includes(String(r.type))
-            ? `<img class="xlr-poster" src="${prefix}/library/download/${r.fileId}?preview=1" loading="eager">`
-            : "";
+        // Only video regions get a play/pause control — that's the only content
+        // that auto-plays and needs holding. Image/text/canvas regions render
+        // their content directly (no misleading play button).
+        if (!r.hasVideo) continue;
+        const poster = r.videoFileId
+          ? `<img class="xlr-poster" src="${prefix}/library/download/${r.videoFileId}?preview=1" loading="eager">`
+          : "";
         regionsHtml +=
           `<div class="xlr-rgn" data-rid="${r.id}" data-playing="0" style="` +
           `left:${(r.x / W) * 100}%;top:${(r.y / H) * 100}%;` +
