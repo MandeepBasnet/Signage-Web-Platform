@@ -72,6 +72,7 @@ export default function LayoutContent() {
   // Lazy-load thumbnails for the rows currently on screen.
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       for (const layout of pageRows) {
         const id = layout.layoutId;
@@ -79,6 +80,7 @@ export default function LayoutContent() {
         try {
           const res = await fetch(`${API_BASE_URL}/layouts/thumbnail/${id}`, {
             headers: { ...getAuthHeaders() },
+            signal: controller.signal,
           });
           if (!res.ok || cancelled) continue;
           const blob = await res.blob();
@@ -95,12 +97,13 @@ export default function LayoutContent() {
             return new Map(prev).set(id, url);
           });
         } catch {
-          /* leave placeholder */
+          /* aborted or failed — leave placeholder */
         }
       }
     })();
     return () => {
       cancelled = true;
+      controller.abort(); // cancel any in-flight thumbnail fetches
     };
   }, [pageRows]);
 
