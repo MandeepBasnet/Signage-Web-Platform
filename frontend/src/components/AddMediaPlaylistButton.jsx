@@ -6,6 +6,7 @@ import MediaPreviewModal from "./MediaPreviewModal";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo, getMediaIcon } from "../utils/mediaTypes.js";
+import { flattenFolders } from "../utils/folderUtils.js";
 
 /**
  * AddMediaPlaylistButton Component
@@ -172,34 +173,6 @@ export default function AddMediaPlaylistButton({
       }
 
       const data = await response.json();
-
-      // Helper to flatten folder tree structure
-      const flattenFolders = (nodes = [], parentPath = []) => {
-        const list = [];
-        nodes.forEach((node) => {
-          if (!node) return;
-          const folderId = node.folderId || node.id;
-          const label =
-            node.folderName ||
-            node.text ||
-            node.name ||
-            `Folder ${folderId || ""}`;
-          const currentPath = [...parentPath, label];
-
-          if (folderId) {
-            list.push({
-              id: String(folderId),
-              label,
-              path: currentPath.join(" / "),
-            });
-          }
-
-          if (Array.isArray(node.children) && node.children.length > 0) {
-            list.push(...flattenFolders(node.children, currentPath));
-          }
-        });
-        return list;
-      };
 
       const flat = flattenFolders(data?.folders || []);
       setFolderOptions(flat);
