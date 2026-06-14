@@ -10,11 +10,12 @@ import {
 } from "../controllers/layoutController.js";
 import { getLayoutLivePreview } from "../controllers/layoutPreviewProxy.js";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { revalidateList } from "../middleware/cacheControl.js";
 
 const router = express.Router();
 
 // All layout routes require authentication
-router.get("/", verifyToken, getLayouts);
+router.get("/", verifyToken, revalidateList, getLayouts);
 router.get("/thumbnail/:layoutId", verifyToken, getLayoutThumbnail);
 router.get("/:layoutId/preview", verifyToken, getLayoutPreview);
 router.get("/:layoutId/live-preview", verifyToken, getLayoutLivePreview);

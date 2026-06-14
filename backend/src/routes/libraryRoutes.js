@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { revalidateList } from "../middleware/cacheControl.js";
 import {
   getLibraryMedia,
   getAllLibraryMedia,
@@ -20,9 +21,9 @@ const upload = multer({
   },
 });
 
-router.get("/", verifyToken, getLibraryMedia);
-router.get("/folders", verifyToken, getLibraryFolders);
-router.get("/all", verifyToken, getAllLibraryMedia);
+router.get("/", verifyToken, revalidateList, getLibraryMedia);
+router.get("/folders", verifyToken, revalidateList, getLibraryFolders);
+router.get("/all", verifyToken, revalidateList, getAllLibraryMedia);
 router.post("/validate-name", verifyToken, validateMediaName);
 router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);

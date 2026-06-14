@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { revalidateList } from "../middleware/cacheControl.js";
 import {
   getPlaylists,
   getPlaylistDetails,
@@ -30,7 +31,7 @@ const upload = multer({
 
 // Playlist CRUD operations
 router.post("/", verifyToken, createPlaylist);
-router.get("/", verifyToken, getPlaylists);
+router.get("/", verifyToken, revalidateList, getPlaylists);
 router.get("/:playlistId", verifyToken, getPlaylistDetails);
 router.delete("/:playlistId", verifyToken, deletePlaylist);
 
