@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import SearchBar from "./SearchBar.jsx";
+import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 
 const PAGE_SIZE = 20;
 
@@ -16,18 +17,10 @@ export default function LayoutContent() {
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [thumbs, setThumbs] = useState(new Map());
-  const thumbsRef = useRef(thumbs);
-  thumbsRef.current = thumbs;
+  const { thumbs, loadThumbnails } = useLayoutThumbnails();
 
   useEffect(() => {
     fetchLayouts();
-    // Revoke any blob URLs we created on unmount.
-    return () => {
-      thumbsRef.current.forEach((url) => {
-        if (url && url.startsWith("blob:")) URL.revokeObjectURL(url);
-      });
-    };
   }, []);
 
   const fetchLayouts = async () => {
@@ -69,43 +62,16 @@ export default function LayoutContent() {
   // Reset to first page whenever the search changes.
   useEffect(() => setPage(0), [search]);
 
-  // Lazy-load thumbnails for the rows currently on screen.
+  // Lazy-load thumbnails for the rows currently on screen; cancel in-flight
+  // fetches when the visible rows change.
   useEffect(() => {
-    let cancelled = false;
     const controller = new AbortController();
-    (async () => {
-      for (const layout of pageRows) {
-        const id = layout.layoutId;
-        if (!id || thumbsRef.current.has(id)) continue;
-        try {
-          const res = await fetch(`${API_BASE_URL}/layouts/thumbnail/${id}`, {
-            headers: { ...getAuthHeaders() },
-            signal: controller.signal,
-          });
-          if (!res.ok || cancelled) continue;
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
-          if (cancelled) {
-            URL.revokeObjectURL(url);
-            return;
-          }
-          setThumbs((prev) => {
-            if (prev.has(id)) {
-              URL.revokeObjectURL(url);
-              return prev;
-            }
-            return new Map(prev).set(id, url);
-          });
-        } catch {
-          /* aborted or failed — leave placeholder */
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.abort(); // cancel any in-flight thumbnail fetches
-    };
-  }, [pageRows]);
+    loadThumbnails(
+      pageRows.map((l) => l.layoutId),
+      { signal: controller.signal }
+    );
+    return () => controller.abort();
+  }, [pageRows, loadThumbnails]);
 
   const formatDuration = (s) => {
     const n = Number(s) || 0;

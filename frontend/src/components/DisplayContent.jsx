@@ -5,13 +5,14 @@ import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
+import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 
 export default function DisplayContent() {
   const navigate = useNavigate();
   const [displays, setDisplays] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [layoutThumbs, setLayoutThumbs] = useState(new Map());
+  const { thumbs: layoutThumbs, loadThumbnails } = useLayoutThumbnails();
   const [expandedId, setExpandedId] = useState(null);
 
   // Checkout Layout State
@@ -20,16 +21,6 @@ export default function DisplayContent() {
   useEffect(() => {
     fetchDisplays();
   }, []);
-
-  useEffect(() => {
-    return () => {
-      layoutThumbs.forEach((url) => {
-        if (url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
-  }, [layoutThumbs]);
 
   const fetchDisplays = async () => {
     try {
@@ -65,42 +56,6 @@ export default function DisplayContent() {
     }
   };
 
-  const preloadThumbnails = async (layoutList) => {
-    for (const layout of layoutList) {
-      const layoutId = layout.layoutId || layout.layout_id || layout.id;
-      if (!layoutId) continue;
-      if (layoutThumbs.has(layoutId)) continue;
-
-      try {
-        const response = await fetch(
-          `${API_BASE_URL}/layouts/thumbnail/${layoutId}`,
-          {
-            headers: {
-              ...getAuthHeaders(),
-            },
-          }
-        );
-
-        if (!response.ok) continue;
-
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-
-        setLayoutThumbs((prev) => {
-          if (prev.has(layoutId)) {
-            URL.revokeObjectURL(blobUrl);
-            return prev;
-          }
-          const next = new Map(prev);
-          next.set(layoutId, blobUrl);
-          return next;
-        });
-      } catch (thumbErr) {
-        console.warn(`Failed to load layout thumbnail ${layoutId}:`, thumbErr);
-      }
-    }
-  };
-
   const getThumbnailUrl = (layoutId) => {
     if (!layoutId) return null;
     return layoutThumbs.get(layoutId);
@@ -117,7 +72,9 @@ export default function DisplayContent() {
     const layoutsToLoad = [display.layout, ...(display.scheduledLayouts || [])].filter(
       (l) => l !== null && l !== undefined
     );
-    preloadThumbnails(layoutsToLoad);
+    loadThumbnails(
+      layoutsToLoad.map((l) => l.layoutId || l.layout_id || l.id)
+    );
   };
 
   // Xibo colors the Status by media inventory state (1=up-to-date, 2=downloading,
