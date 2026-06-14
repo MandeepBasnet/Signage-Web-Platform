@@ -147,17 +147,24 @@ async function getOrCreateToken(req) {
   };
 }
 
-async function fetchUserScopedCollection({
+// Page through a Xibo DataTables-style collection, accumulating items across
+// pages (bounded by maxPages). Shared core behind fetchUserScopedCollection and
+// fetchLibraryCollection; the two differ only in whether results are owner-scoped.
+async function fetchCollection({
   req,
   endpoint,
   idKeys,
   orderColumn = "modifiedDt",
   orderDirection = "desc",
-  // Larger page size = far fewer serial round trips to the remote Xibo CMS.
-  pageSize = 500,
-  // Lower cap so a misbehaving owner filter can't trigger dozens of serial calls.
-  maxPages = 10,
+  pageSize,
+  maxPages,
   queryParams = {},
+  // When true, inject ownerId/userId filter params and filter the merged result
+  // to items the user owns. When false, return the deduped result as-is.
+  scopeToOwner = false,
+  // When set, warn (tagged with this label) if we stop on the page cap with the
+  // reported total unreached, so a truncated list isn't mistaken for the full set.
+  warnLabel,
 }) {
   const { token, userId, username } = getUserContext(req);
 
@@ -176,7 +183,7 @@ async function fetchUserScopedCollection({
       "order[0][dir]": orderDirection,
     });
 
-    if (userId !== undefined && userId !== null) {
+    if (scopeToOwner && userId !== undefined && userId !== null) {
       params.append("ownerId", String(userId));
       params.append("userId", String(userId));
     }
@@ -208,76 +215,47 @@ async function fetchUserScopedCollection({
     }
   }
 
-  // Warn if we stopped because of the page cap rather than exhausting results,
-  // so a truncated list isn't mistaken for the full set.
   if (
+    warnLabel &&
     lastPage === maxPages - 1 &&
     totalAvailable !== undefined &&
     collected.length < totalAvailable
   ) {
     console.warn(
-      `[fetchUserScopedCollection] Hit maxPages (${maxPages}) for ${endpoint}: ` +
+      `[${warnLabel}] Hit maxPages (${maxPages}) for ${endpoint}: ` +
         `collected ${collected.length} of ${totalAvailable} reported items. List may be truncated.`
     );
   }
 
   const deduped = dedupeById(collected, idKeys);
-  return filterOwnedByUser(deduped, userId, username);
+  return scopeToOwner ? filterOwnedByUser(deduped, userId, username) : deduped;
 }
 
+// Owner-scoped collection (layouts, playlists, displays): larger page size = far
+// fewer serial round trips; lower cap so a misbehaving owner filter can't trigger
+// dozens of serial calls.
+async function fetchUserScopedCollection({
+  pageSize = 500,
+  maxPages = 10,
+  ...options
+}) {
+  return fetchCollection({
+    ...options,
+    pageSize,
+    maxPages,
+    scopeToOwner: true,
+    warnLabel: "fetchUserScopedCollection",
+  });
+}
+
+// Library/folder collection: not owner-filtered (the caller scopes by folder),
+// so use a smaller page size and a higher page cap.
 async function fetchLibraryCollection({
-  req,
-  endpoint,
-  idKeys,
-  orderColumn = "modifiedDt",
-  orderDirection = "desc",
   pageSize = 100,
   maxPages = 50,
-  queryParams = {},
+  ...options
 }) {
-  const { token } = getUserContext(req);
-
-  const collected = [];
-  let start = 0;
-  let totalAvailable;
-
-  for (let page = 0; page < maxPages; page += 1) {
-    const params = new URLSearchParams({
-      start: String(start),
-      length: String(pageSize),
-      draw: String(page + 1),
-      "order[0][column]": orderColumn,
-      "order[0][dir]": orderDirection,
-    });
-
-    Object.entries(queryParams || {}).forEach(([key, value]) => {
-      if (value === undefined || value === null) {
-        return;
-      }
-      params.append(key, String(value));
-    });
-
-    const { items, total } = normalizeListResponse(
-      await xiboRequest(`${endpoint}?${params.toString()}`, "GET", null, token)
-    );
-
-    if (!items.length) {
-      break;
-    }
-
-    collected.push(...items);
-    start += pageSize;
-
-    if (totalAvailable === undefined && total !== undefined) {
-      totalAvailable = total;
-    }
-
-    if (total !== undefined && collected.length >= total) {
-      break;
-    }
-  }
-
-  return dedupeById(collected, idKeys);
+  return fetchCollection({ ...options, pageSize, maxPages, scopeToOwner: false });
 }
 
 function handleControllerError(res, err, fallbackMessage) {
