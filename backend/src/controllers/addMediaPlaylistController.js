@@ -220,45 +220,6 @@ export const getAvailableMediaForPlaylist = async (req, res) => {
 };
 
 /**
- * Remove media from playlist
- * Note: Xibo API doesn't have a direct "remove media" endpoint
- * Media must be removed by deleting the widget that contains it
- */
-export const removeMediaFromPlaylist = async (req, res) => {
-  try {
-    const { playlistId, widgetId } = req.params;
-    const { token } = getUserContext(req);
-
-    if (!playlistId) {
-      throw new HttpError(400, "Playlist ID is required");
-    }
-
-    if (!widgetId) {
-      throw new HttpError(400, "Widget ID is required to remove media");
-    }
-
-    console.log(`Removing widget ${widgetId} from playlist ${playlistId}`);
-
-    // Call DELETE /playlist/widget/{widgetId} to remove the media
-    const response = await xiboRequest(
-      `/playlist/widget/${widgetId}`,
-      "DELETE",
-      null,
-      token
-    );
-
-    console.log(
-      `Successfully removed widget ${widgetId} from playlist ${playlistId}`
-    );
-
-    res.status(204).send();
-  } catch (err) {
-    console.error("Error removing media from playlist:", err.message);
-    handleControllerError(res, err, "Failed to remove media from playlist");
-  }
-};
-
-/**
  * Update media duration in playlist
  * Updates the widget properties for specific media
  */

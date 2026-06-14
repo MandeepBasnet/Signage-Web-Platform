@@ -4,11 +4,20 @@ import qs from "qs";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
 let token = null;
+let tokenPromise = null; // shared in-flight auth request (prevents stampedes)
 
-// Get application access token (for API operations)
+// Get application access token (for API operations). Concurrent callers share a
+// single in-flight request, so we never fire multiple auth calls at once.
 export async function getAccessToken() {
   if (token) return token;
+  if (tokenPromise) return tokenPromise;
+  tokenPromise = fetchAccessToken().finally(() => {
+    tokenPromise = null;
+  });
+  return tokenPromise;
+}
 
+async function fetchAccessToken() {
   // Check if XIBO_API_URL is configured
   if (!process.env.XIBO_API_URL) {
     throw new Error(
