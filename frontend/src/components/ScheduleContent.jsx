@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import DatePicker from "./DatePicker.jsx";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 // datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
 const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");

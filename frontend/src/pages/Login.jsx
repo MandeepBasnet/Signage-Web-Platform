@@ -5,8 +5,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuth, saveAuth } from "../utils/auth.js";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 // Modus clients shown on the login page. Drop logo files at
 // /public/clients/<slug>.png and they replace the text wordmark automatically.

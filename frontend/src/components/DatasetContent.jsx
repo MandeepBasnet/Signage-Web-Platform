@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import AddRowModal from "./AddRowModal";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 export default function DatasetContent() {
   const [view, setView] = useState("list"); // 'list' or 'details'
@@ -22,9 +22,7 @@ export default function DatasetContent() {
     setLoading(true);
     try {
       const token = localStorage.getItem("auth_token");
-      const userStr = localStorage.getItem("user");
-      const user = userStr ? JSON.parse(userStr) : {};
-      
+
       const response = await fetch(`${API_BASE_URL}/datasets`, {
         headers: { Authorization: `Bearer ${token}` },
       });

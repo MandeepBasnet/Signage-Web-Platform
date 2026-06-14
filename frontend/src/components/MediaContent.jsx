@@ -4,8 +4,7 @@
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
   const trimmed = desiredName?.trim() ?? "";

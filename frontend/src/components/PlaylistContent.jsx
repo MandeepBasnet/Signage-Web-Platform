@@ -6,8 +6,7 @@ import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import MediaPreviewModal from "./MediaPreviewModal";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 export default function PlaylistContent() {
   const [playlists, setPlaylists] = useState([]);

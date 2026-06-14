@@ -4,8 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+import { API_BASE_URL } from "../config/api.js";
 
 const PAGE_SIZE = 20;
 
