@@ -13,6 +13,7 @@ import {
   formatFileSize,
 } from "../utils/mediaTypes.js";
 import { flattenFolders } from "../utils/folderUtils.js";
+import SearchBar from "./SearchBar.jsx";
 
 const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
   const trimmed = desiredName?.trim() ?? "";
@@ -532,31 +533,19 @@ export default function MediaContent() {
                 </option>
               ))}
             </select>
-            <div className="relative">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setCurrentPage(1);
-                }}
-                placeholder="Search media…"
-                className="w-56 pl-3 pr-8 py-2 text-sm bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setCurrentPage(1);
-                  }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-5 h-5 p-0 m-0 bg-transparent border-0 rounded-full text-gray-400 hover:text-gray-600 text-xs leading-none"
-                  title="Clear search"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            <SearchBar
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                setCurrentPage(1);
+              }}
+              placeholder="Search media…"
+              className="w-56 pl-3 pr-8 py-2 text-sm bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onClear={() => {
+                setSearch("");
+                setCurrentPage(1);
+              }}
+            />
             <button
               onClick={openUploadModal}
               className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"

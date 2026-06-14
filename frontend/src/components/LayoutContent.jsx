@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
+import SearchBar from "./SearchBar.jsx";
 
 const PAGE_SIZE = 20;
 
@@ -174,10 +175,9 @@ export default function LayoutContent() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            type="text"
+          <SearchBar
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={setSearch}
             placeholder="Search layouts…"
             className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
           />
