@@ -14,23 +14,8 @@ import {
 } from "../utils/mediaTypes.js";
 import { flattenFolders } from "../utils/folderUtils.js";
 import SearchBar from "./SearchBar.jsx";
-
-const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
-  const trimmed = desiredName?.trim() ?? "";
-  if (!trimmed) return trimmed;
-
-  const fallbackMatch = (fallbackName || "").match(/(\.[^./\\]+)$/);
-  const fallbackExtension = fallbackMatch ? fallbackMatch[0] : "";
-  const hasExtension = /\.[^./\\]+$/.test(trimmed);
-
-  if (hasExtension || !fallbackExtension) {
-    return trimmed;
-  }
-
-  return `${trimmed}${fallbackExtension}`;
-};
-
 import MediaPreviewModal from "./MediaPreviewModal";
+import UploadMediaModal from "./UploadMediaModal.jsx";
 
 export default function MediaContent() {
   const [media, setMedia] = useState([]);
@@ -38,16 +23,8 @@ export default function MediaContent() {
   const [error, setError] = useState(null);
   const [mediaUrls, setMediaUrls] = useState(new Map());
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [uploadFile, setUploadFile] = useState(null);
-  const [uploadName, setUploadName] = useState("");
-  const [uploadFolder, setUploadFolder] = useState("1");
-  const [uploadDuration, setUploadDuration] = useState(10);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState(null);
-  const [uploadProgress, setUploadProgress] = useState(null);
   const [folderOptions, setFolderOptions] = useState([]);
   const [foldersLoading, setFoldersLoading] = useState(false);
-  const [nameSuggestion, setNameSuggestion] = useState(null);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -219,9 +196,6 @@ export default function MediaContent() {
       const data = await response.json();
       const flat = flattenFolders(data?.folders || []);
       setFolderOptions(flat);
-      if (!uploadFolder && flat.length > 0) {
-        setUploadFolder(flat[0].id);
-      }
       // Default the library view to the user's home folder; treat root ("1") as
       // "All folders". Only set if not already chosen (don't override the user).
       const home =
@@ -231,7 +205,6 @@ export default function MediaContent() {
       );
     } catch (err) {
       console.error("Error fetching folders:", err);
-      setUploadError(err.message || "Failed to fetch folders");
       // Don't block the library if folders fail — show everything.
       setLibraryFolder((prev) => prev ?? "all");
     } finally {
@@ -240,196 +213,25 @@ export default function MediaContent() {
   };
 
   const openUploadModal = () => {
-    setUploadError(null);
-    setUploadProgress(null);
     setIsUploadOpen(true);
     if (!folderOptions.length) {
       fetchFolders();
     }
   };
 
-  const closeUploadModal = () => {
-    setIsUploadOpen(false);
-    setUploadFile(null);
-    setUploadName("");
-    setUploadDuration(10);
-    setUploadError(null);
-    setUploadProgress(null);
-    setNameSuggestion(null);
-  };
-
-  const handleFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setUploadFile(file);
-      if (!uploadName) {
-        setUploadName(file.name);
-      }
-      setUploadError(null);
-      setNameSuggestion(null);
-    }
-  };
-
-  const validateMediaNameAvailability = async (nameToValidate) => {
-    if (!nameToValidate) {
-      setUploadError("Media name is required.");
-      return false;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/library/validate-name`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ name: nameToValidate }),
+  // After a successful upload: surface any name-change notice and reload.
+  const handleUploaded = (nameInfo) => {
+    if (nameInfo?.wasChanged) {
+      setNameChangeNotice({
+        entity: "media",
+        originalName: nameInfo.originalName,
+        finalName: nameInfo.finalName,
+        changeReason:
+          nameInfo.changeReason ||
+          "The media name was adjusted to keep it unique.",
       });
-
-      if (response.status === 409) {
-        const errorData = await response.json().catch(() => ({}));
-        setUploadError(
-          errorData?.message ||
-            `A media named '${nameToValidate}' already exists. Please choose another name.`
-        );
-        // Store suggestion with full details for retry
-        setNameSuggestion({
-          originalName: errorData?.nameInfo?.originalName || nameToValidate,
-          suggestedName: errorData?.nameInfo?.suggestedName || nameToValidate,
-          wasChanged: errorData?.nameInfo?.wasChanged || false,
-          changeReason: errorData?.nameInfo?.changeReason || null,
-        });
-        return false;
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message ||
-            `Failed to validate media name: ${response.status}`
-        );
-      }
-
-      // Name is valid - clear any suggestions
-      setNameSuggestion(null);
-      return true;
-    } catch (err) {
-      console.error("Error validating media name:", err);
-      setUploadError(err.message || "Failed to validate media name");
-      setNameSuggestion(null);
-      return false;
     }
-  };
-
-  const handleUploadSubmit = async (event) => {
-    event.preventDefault();
-    if (!uploadFile) {
-      setUploadError("Please select a media file to upload.");
-      return;
-    }
-
-    try {
-      setUploading(true);
-      setUploadError(null);
-      const derivedName = ensureNameHasExtension(
-        uploadName?.trim() || uploadFile.name,
-        uploadFile.name
-      );
-
-      setUploadProgress("Checking media name...");
-      const nameIsValid = await validateMediaNameAvailability(derivedName);
-      if (!nameIsValid) {
-        setUploading(false);
-        setUploadProgress(null);
-        return;
-      }
-
-      setUploadProgress("Preparing upload...");
-
-      const formData = new FormData();
-      formData.append("media", uploadFile);
-      formData.append("folderId", uploadFolder || "1");
-      formData.append("duration", uploadDuration || 10);
-      if (derivedName) {
-        formData.append("name", derivedName);
-      }
-
-      console.log("Uploading file:", {
-        name: uploadFile.name,
-        type: uploadFile.type,
-        size: uploadFile.size,
-        folder: uploadFolder,
-        duration: uploadDuration,
-        targetName: derivedName,
-      });
-
-      setUploadProgress("Uploading to server...");
-
-      const response = await fetch(`${API_BASE_URL}/library/upload`, {
-        method: "POST",
-        headers: {
-          ...getAuthHeaders(),
-        },
-        body: formData,
-      });
-
-      const result = await response.json();
-      console.log("Upload response:", result);
-
-      // Handle duplicate name errors from server
-      if (response.status === 409) {
-        setUploadError(
-          result?.message ||
-            `A media with that name already exists. Please choose another name.`
-        );
-        // Store suggestion from server for user to retry with
-        if (result?.nameInfo) {
-          setNameSuggestion({
-            originalName: result.nameInfo.originalName,
-            suggestedName: result.nameInfo.suggestedName,
-            wasChanged: result.nameInfo.wasChanged,
-            changeReason: result.nameInfo.changeReason,
-          });
-        }
-        setUploading(false);
-        setUploadProgress(null);
-        return;
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          result?.message ||
-            result?.error ||
-            `Upload failed: ${response.status}`
-        );
-      }
-
-      setUploadProgress("Upload successful!");
-
-      // Show name change notice if name was adjusted
-      if (result.nameInfo?.wasChanged) {
-        setNameChangeNotice({
-          entity: "media",
-          originalName: result.nameInfo.originalName,
-          finalName: result.nameInfo.finalName,
-          changeReason:
-            result.nameInfo.changeReason ||
-            "The media name was adjusted to keep it unique.",
-        });
-      }
-
-      // Wait a moment to show success message
-      setTimeout(() => {
-        closeUploadModal();
-        reloadMedia();
-      }, 1000);
-    } catch (err) {
-      console.error("Error uploading media:", err);
-      setUploadError(err.message || "Failed to upload media");
-      setUploadProgress(null);
-    } finally {
-      setUploading(false);
-    }
+    reloadMedia();
   };
 
   const handleDeleteMedia = async (mediaId) => {
@@ -793,188 +595,13 @@ export default function MediaContent() {
       </div>
 
       {isUploadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Upload Media
-                </h3>
-                <p className="text-sm text-gray-500">
-                  Select a file and destination folder
-                </p>
-              </div>
-              <button
-                onClick={closeUploadModal}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close upload modal"
-                disabled={uploading}
-              >
-                ✕
-              </button>
-            </div>
-
-            <form className="px-6 py-4 space-y-4" onSubmit={handleUploadSubmit}>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Media File *
-                </label>
-                <input
-                  type="file"
-                  accept="image/*,video/*,audio/*,application/pdf"
-                  onChange={handleFileChange}
-                  className="block w-full text-sm text-gray-700"
-                  disabled={uploading}
-                  required
-                />
-                {uploadFile && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Selected: {uploadFile.name} (
-                    {formatFileSize(uploadFile.size)})
-                  </p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Display Name
-                </label>
-                <input
-                  type="text"
-                  value={uploadName}
-                  onChange={(e) => {
-                    setUploadName(e.target.value);
-                    setNameSuggestion(null);
-                    setUploadError(null);
-                  }}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  placeholder="Optional name"
-                  disabled={uploading}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Folder
-                </label>
-                <select
-                  value={uploadFolder}
-                  onChange={(e) => setUploadFolder(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  disabled={uploading}
-                >
-                  {folderOptions.length === 0 ? (
-                    <option value="1">
-                      {foldersLoading ? "Loading folders..." : "Root Folder"}
-                    </option>
-                  ) : (
-                    folderOptions.map((folder) => (
-                      <option key={folder.id} value={folder.id}>
-                        {folder.path}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <button
-                  type="button"
-                  className="mt-2 text-xs text-blue-600 hover:underline disabled:opacity-50"
-                  onClick={fetchFolders}
-                  disabled={foldersLoading || uploading}
-                >
-                  {foldersLoading ? "Refreshing folders..." : "Refresh folders"}
-                </button>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Duration (seconds)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={uploadDuration}
-                  onChange={(e) => setUploadDuration(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  disabled={uploading}
-                />
-              </div>
-
-              {uploadProgress && (
-                <div className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700">
-                  {uploadProgress}
-                </div>
-              )}
-
-              {uploadError && (
-                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {uploadError}
-                </div>
-              )}
-
-              {nameSuggestion?.suggestedName && (
-                <div className="rounded-md border border-yellow-200 bg-yellow-50 px-3 py-3 text-sm text-yellow-800 space-y-2">
-                  <div>
-                    <p className="mb-2">
-                      <span className="font-semibold">Conflict Detected:</span>{" "}
-                      A media with the name{" "}
-                      <span className="font-mono">
-                        "{nameSuggestion.originalName}"
-                      </span>{" "}
-                      already exists.
-                    </p>
-                    <p>
-                      Suggested alternative:{" "}
-                      <span className="font-semibold font-mono">
-                        {nameSuggestion.suggestedName}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setUploadName(nameSuggestion.suggestedName);
-                        setNameSuggestion(null);
-                        setUploadError(null);
-                      }}
-                      className="rounded-md bg-yellow-600 px-3 py-1 text-xs font-medium text-white hover:bg-yellow-700 transition-colors"
-                    >
-                      Use suggested name
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setNameSuggestion(null);
-                        setUploadError(null);
-                      }}
-                      className="rounded-md bg-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-400 transition-colors"
-                    >
-                      Try different name
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={closeUploadModal}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50"
-                  disabled={uploading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors disabled:opacity-70"
-                  disabled={uploading || !uploadFile}
-                >
-                  {uploading ? "Uploading..." : "Upload"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <UploadMediaModal
+          onClose={() => setIsUploadOpen(false)}
+          folderOptions={folderOptions}
+          foldersLoading={foldersLoading}
+          onRefreshFolders={fetchFolders}
+          onUploaded={handleUploaded}
+        />
       )}
 
       {nameChangeNotice && (
