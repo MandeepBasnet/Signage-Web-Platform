@@ -10,6 +10,7 @@ import AddRowModal from "./AddRowModal";
 import MediaPickerModal from "./MediaPickerModal";
 import CheckoutPrompt from "./CheckoutPrompt.jsx";
 import LoadingOverlay from "./LoadingOverlay.jsx";
+import CanvasControls from "./CanvasControls.jsx";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -1905,43 +1906,16 @@ export default function LayoutDesign() {
             </div>
 
             {/* Canvas info display */}
-            <div className="mt-4 flex items-center justify-center gap-3 text-sm text-gray-500 font-mono flex-wrap">
-              {/* Zoom controls */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => zoomBy(0.8)}
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                  title="Zoom out"
-                >
-                  −
-                </button>
-                <button
-                  onClick={() => zoomBy(1.25)}
-                  className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                  title="Zoom in"
-                >
-                  +
-                </button>
-                <button
-                  onClick={zoomFit}
-                  className="px-2 h-7 flex items-center justify-center rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                  title="Fit to screen"
-                >
-                  Fit
-                </button>
-              </div>
-              <p>
-                {(canvasScale * 100).toFixed(0)}% • {layout.width} ×{" "}
-                {layout.height}px
-              </p>
-              <button
-                onClick={() => setUseLivePreview((v) => !v)}
-                className="px-3 py-1 rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
-                title="Switch between Xibo's faithful preview and the editable structure view"
-              >
-                {useLivePreview ? "Show structure view" : "Show live preview"}
-              </button>
-            </div>
+            <CanvasControls
+              onZoomOut={() => zoomBy(0.8)}
+              onZoomIn={() => zoomBy(1.25)}
+              onZoomFit={zoomFit}
+              scale={canvasScale}
+              width={layout.width}
+              height={layout.height}
+              useLivePreview={useLivePreview}
+              onTogglePreview={() => setUseLivePreview((v) => !v)}
+            />
             </div>
           </div>
         </main>
