@@ -1,5 +1,5 @@
 import axios from "axios";
-import { xiboRequest } from "../utils/xiboClient.js";
+import { xiboRequest, xiboGetWithCount } from "../utils/xiboClient.js";
 import {
   getWebClient,
   getWebBaseUrl,
@@ -47,6 +47,42 @@ const LAYOUT_EMBED_FIELDS =
 
 export const getLayouts = async (req, res) => {
   try {
+    // Opt-in server-side pagination: only when the client sends `length` (the
+    // Layouts list view). Other consumers (the schedule layout dropdown, the
+    // draft lookup) send no `length` and still get the full owner-scoped list,
+    // so their behavior is unchanged.
+    if (req.query.length !== undefined) {
+      const { token, userId } = getUserContext(req);
+      const start = Math.max(0, parseInt(req.query.start, 10) || 0);
+      const length = Math.max(1, parseInt(req.query.length, 10) || 20);
+      const search = (req.query.search || "").trim();
+
+      const params = new URLSearchParams({
+        start: String(start),
+        length: String(length),
+        "order[0][column]": "modifiedDt",
+        "order[0][dir]": "desc",
+        embed: LAYOUT_EMBED_FIELDS,
+      });
+      if (userId !== undefined && userId !== null) {
+        params.append("ownerId", String(userId));
+        params.append("userId", String(userId));
+      }
+      // Xibo filters layouts by name with the `layout` param (LIKE match).
+      if (search) params.append("layout", search);
+
+      const { data, total } = await xiboGetWithCount(
+        `/layout?${params.toString()}`,
+        token
+      );
+      return res.json({
+        data,
+        total,
+        recordsTotal: total,
+        recordsFiltered: total,
+      });
+    }
+
     const layouts = await fetchUserScopedCollection({
       req,
       endpoint: "/layout",

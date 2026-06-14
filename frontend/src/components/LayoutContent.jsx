@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
@@ -12,66 +12,74 @@ const PAGE_SIZE = 20;
 
 export default function LayoutContent() {
   const navigate = useNavigate();
-  const [layouts, setLayouts] = useState([]);
+  const [layouts, setLayouts] = useState([]); // current page only
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { thumbs, loadThumbnails } = useLayoutThumbnails();
 
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Debounce the search box — searching is done server-side.
   useEffect(() => {
-    fetchLayouts();
-  }, []);
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const fetchLayouts = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await fetch(`${API_BASE_URL}/layouts`, {
-        headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      });
-      if (!res.ok) throw new Error(`Failed to fetch layouts: ${res.status}`);
-      const data = await res.json();
-      const list = data?.data || [];
-      // Newest first.
-      list.sort((a, b) => (b.modifiedDt || "").localeCompare(a.modifiedDt || ""));
-      setLayouts(list);
-    } catch (err) {
-      console.error("Error fetching layouts:", err);
-      setError(err.message || "Failed to load layouts");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // A new search starts back at the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return layouts;
-    return layouts.filter((l) =>
-      String(l.layout || l.name || "").toLowerCase().includes(q)
-    );
-  }, [layouts, search]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageRows = useMemo(
-    () => filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE),
-    [filtered, safePage]
-  );
-
-  // Reset to first page whenever the search changes.
-  useEffect(() => setPage(0), [search]);
+  // Fetch the current page from the server whenever the page, search, or an
+  // explicit refresh changes. The cancelled flag drops stale/out-of-order
+  // responses (paging fast, or while a search debounce settles).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const params = new URLSearchParams({
+          start: String(page * PAGE_SIZE),
+          length: String(PAGE_SIZE),
+        });
+        if (debouncedSearch) params.append("search", debouncedSearch);
+        const res = await fetch(`${API_BASE_URL}/layouts?${params.toString()}`, {
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+        });
+        if (!res.ok) throw new Error(`Failed to fetch layouts: ${res.status}`);
+        const data = await res.json();
+        if (cancelled) return;
+        setLayouts(data?.data || []);
+        setTotal(Number(data?.total) || 0);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("Error fetching layouts:", err);
+        setError(err.message || "Failed to load layouts");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, debouncedSearch, refreshKey]);
 
   // Lazy-load thumbnails for the rows currently on screen; cancel in-flight
-  // fetches when the visible rows change.
+  // fetches when the page changes.
   useEffect(() => {
     const controller = new AbortController();
     loadThumbnails(
-      pageRows.map((l) => l.layoutId),
+      layouts.map((l) => l.layoutId),
       { signal: controller.signal }
     );
     return () => controller.abort();
-  }, [pageRows, loadThumbnails]);
+  }, [layouts, loadThumbnails]);
 
   const formatDuration = (s) => {
     const n = Number(s) || 0;
@@ -108,7 +116,9 @@ export default function LayoutContent() {
     );
   };
 
-  if (loading) {
+  // Only take over the whole panel on the first load; paging/searching keeps the
+  // existing rows visible until the next page arrives (no spinner flash).
+  if (loading && layouts.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="w-10 h-10 border-4 border-gray-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -122,7 +132,7 @@ export default function LayoutContent() {
         <p className="font-semibold">Error loading layouts</p>
         <p>{error}</p>
         <button
-          onClick={fetchLayouts}
+          onClick={() => setRefreshKey((k) => k + 1)}
           className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
         >
           Retry
@@ -137,7 +147,7 @@ export default function LayoutContent() {
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">Layouts</h2>
           <p className="text-sm text-gray-500 mt-1">
-            {filtered.length} {filtered.length === 1 ? "layout" : "layouts"}
+            {total} {total === 1 ? "layout" : "layouts"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -148,7 +158,7 @@ export default function LayoutContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
           />
           <button
-            onClick={fetchLayouts}
+            onClick={() => setRefreshKey((k) => k + 1)}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
           >
             Refresh
@@ -173,7 +183,7 @@ export default function LayoutContent() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {pageRows.map((l) => {
+            {layouts.map((l) => {
               const thumb = thumbs.get(l.layoutId);
               return (
                 <tr
@@ -211,7 +221,7 @@ export default function LayoutContent() {
                 </tr>
               );
             })}
-            {pageRows.length === 0 && (
+            {layouts.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                   No layouts found
@@ -225,23 +235,23 @@ export default function LayoutContent() {
       {pageCount > 1 && (
         <div className="flex items-center justify-between text-sm text-gray-600">
           <span>
-            Showing {safePage * PAGE_SIZE + 1}–
-            {Math.min((safePage + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}
+            Showing {page * PAGE_SIZE + 1}–
+            {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={safePage === 0}
+              disabled={page === 0}
               className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Previous
             </button>
             <span className="px-2">
-              {safePage + 1} / {pageCount}
+              {page + 1} / {pageCount}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              disabled={safePage >= pageCount - 1}
+              disabled={page >= pageCount - 1}
               className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Next

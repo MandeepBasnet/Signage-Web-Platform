@@ -376,6 +376,20 @@ export async function getUserInfo(accessToken) {
   }
 }
 
+// GET a Xibo grid endpoint and also return the total row count from the
+// `X-Total-Count` response header (Xibo's standard for grid endpoints), which
+// `xiboRequest` discards. Used for server-side pagination. Returns
+// { data, total }; falls back to data.length when the header is absent.
+export async function xiboGetWithCount(endpoint, userToken = null) {
+  const accessToken = userToken || (await getAccessToken());
+  const res = await axios.get(`${process.env.XIBO_API_URL}${endpoint}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
+  const total = Number(res.headers["x-total-count"]);
+  return { data, total: Number.isFinite(total) ? total : data.length };
+}
+
 export async function xiboRequest(
   endpoint,
   method = "GET",
