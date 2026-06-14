@@ -15,6 +15,11 @@ import {
   formatFileSize,
 } from "../utils/mediaTypes.js";
 import SearchBar from "./SearchBar.jsx";
+import {
+  getMediaId,
+  getWidgetId,
+  normalizeMediaItems,
+} from "../utils/playlistItems.js";
 
 export default function PlaylistContent() {
   const [playlists, setPlaylists] = useState([]);
@@ -44,26 +49,6 @@ export default function PlaylistContent() {
   const [updatingExpiry, setUpdatingExpiry] = useState(false);
 
   // Helper functions
-  const getMediaId = (item) => {
-    return (
-      item.mediaId ||
-      item.media_id ||
-      item.id ||
-      item.media?.mediaId ||
-      item.media?.media_id ||
-      item.media?.id
-    );
-  };
-
-  const getWidgetId = (item) => {
-    return (
-      item.widgetId ||
-      item.widget_id ||
-      item.widget?.widgetId ||
-      item.widget?.widget_id
-    );
-  };
-
   const handlePreview = (item) => {
     const mediaId = getMediaId(item);
     const token = localStorage.getItem("auth_token");
@@ -118,79 +103,6 @@ export default function PlaylistContent() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const normalizeMediaItems = (playlist, mediaItems = []) => {
-    const widgets = playlist?.widgets || [];
-    const hasValidMedia = mediaItems?.some((item) => getMediaId(item));
-
-    if (hasValidMedia) {
-      return mediaItems.map((item) => {
-        const widgetId = getWidgetId(item);
-        const mediaId = getMediaId(item);
-        return {
-          ...item,
-          mediaId,
-          widgetId,
-          mediaType:
-            item.mediaType ||
-            item.type ||
-            item.widgetType ||
-            item.moduleName ||
-            "",
-          name:
-            item.name ||
-            item.mediaName ||
-            item.media?.name ||
-            item.fileName ||
-            (widgetId ? `Widget ${widgetId}` : "Playlist Item"),
-        };
-      });
-    }
-
-    const derivedItems = [];
-    widgets.forEach((widget) => {
-      const widgetId = widget.widgetId || widget.widget_id || widget.id;
-      const baseInfo = {
-        widgetId,
-        mediaType:
-          widget.type ||
-          widget.moduleName ||
-          widget.mediaType ||
-          widget.media?.mediaType,
-        name:
-          widget.name ||
-          widget.media?.name ||
-          (widgetId ? `Widget ${widgetId}` : "Playlist Widget"),
-        duration: widget.duration,
-        displayOrder: widget.displayOrder,
-        widget,
-      };
-
-      const widgetMediaIds = widget.mediaIds || widget.media_ids || [];
-      const ids =
-        widgetMediaIds.length > 0
-          ? widgetMediaIds
-          : [widget.mediaId || widget.media_id].filter(Boolean);
-
-      if (!ids.length) {
-        derivedItems.push({
-          ...baseInfo,
-          mediaId: null,
-        });
-        return;
-      }
-
-      ids.forEach((mediaId, idx) => {
-        derivedItems.push({
-          ...baseInfo,
-          mediaId,
-          orderIndex: idx,
-        });
-      });
-    });
-
-    return derivedItems;
   };
 
   const fetchPlaylistDetails = async (playlistId) => {
