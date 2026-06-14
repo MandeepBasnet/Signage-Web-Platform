@@ -2,10 +2,15 @@ import axios from "axios";
 import FormData from "form-data";
 import path from "path";
 import { Readable } from "stream";
-import { getAccessToken, xiboRequest } from "../utils/xiboClient.js";
+import {
+  getAccessToken,
+  xiboRequest,
+  xiboGetWithCount,
+} from "../utils/xiboClient.js";
 import {
   fetchUserScopedCollection,
   fetchLibraryCollection,
+  getUserContext,
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
@@ -187,6 +192,43 @@ export const validateMediaName = async (req, res) => {
 export const getLibraryMedia = async (req, res) => {
   try {
     const { folderId } = req.query;
+
+    // Opt-in server-side pagination: only when the client sends `length` (the
+    // Media list view). Other callers get the full collection as before.
+    if (req.query.length !== undefined) {
+      const { token, userId } = getUserContext(req);
+      const start = Math.max(0, parseInt(req.query.start, 10) || 0);
+      const length = Math.max(1, parseInt(req.query.length, 10) || 8);
+      const search = (req.query.search || "").trim();
+
+      const params = new URLSearchParams({
+        start: String(start),
+        length: String(length),
+        "order[0][column]": "modifiedDt",
+        "order[0][dir]": "desc",
+      });
+      // Mirror the scoping of the non-paginated branches: a folder-scoped view
+      // shows all media in the folder; otherwise scope to the user.
+      if (folderId && folderId !== "all") {
+        params.append("folderId", folderId);
+      } else if (userId !== undefined && userId !== null) {
+        params.append("ownerId", String(userId));
+        params.append("userId", String(userId));
+      }
+      // Xibo filters library items by name with the `media` param (LIKE match).
+      if (search) params.append("media", search);
+
+      const { data, total } = await xiboGetWithCount(
+        `/library?${params.toString()}`,
+        token
+      );
+      return res.json({
+        data,
+        total,
+        recordsTotal: total,
+        recordsFiltered: total,
+      });
+    }
 
     // Folder-scoped view (per-user library / folder picker): show ALL media in
     // the chosen folder (no owner filter). Without a folderId (or "all"), fall

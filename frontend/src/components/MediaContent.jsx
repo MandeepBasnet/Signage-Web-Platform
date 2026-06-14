@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -51,8 +51,11 @@ export default function MediaContent() {
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [refreshKey, setRefreshKey] = useState(0);
+  const requestRef = useRef(0);
   // Selected library folder (per-user library). null = not resolved yet.
   const [libraryFolder, setLibraryFolder] = useState(null);
   const ITEMS_PER_PAGE = 8;
@@ -92,28 +95,51 @@ export default function MediaContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch media whenever the selected folder is resolved/changed.
+  // Fetch the current page whenever folder, page, debounced search, or an
+  // explicit refresh changes.
   useEffect(() => {
-    if (libraryFolder !== null) fetchMedia(libraryFolder);
+    if (libraryFolder !== null) fetchMedia();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libraryFolder]);
+  }, [libraryFolder, currentPage, debouncedSearch, refreshKey]);
 
-  const fetchMedia = async (folderId = libraryFolder) => {
+  // Debounce the search box — searching is done server-side.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // A new search or folder selection starts back at the first page.
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, libraryFolder]);
+
+  const fetchMedia = async (
+    folderId = libraryFolder,
+    pageArg = currentPage,
+    searchArg = debouncedSearch
+  ) => {
+    const reqId = ++requestRef.current;
     try {
       setLoading(true);
       setError(null);
 
-      const qs =
-        folderId && folderId !== "all"
-          ? `?folderId=${encodeURIComponent(folderId)}`
-          : "";
-      const response = await fetch(`${API_BASE_URL}/library${qs}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
+      const params = new URLSearchParams({
+        start: String((pageArg - 1) * ITEMS_PER_PAGE),
+        length: String(ITEMS_PER_PAGE),
       });
+      if (folderId && folderId !== "all") params.append("folderId", folderId);
+      if (searchArg) params.append("search", searchArg);
+
+      const response = await fetch(
+        `${API_BASE_URL}/library?${params.toString()}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAuthHeaders(),
+          },
+        }
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -123,12 +149,10 @@ export default function MediaContent() {
       }
 
       const data = await response.json();
+      if (reqId !== requestRef.current) return; // superseded by a newer request
       const mediaItems = data?.data || [];
       setMedia(mediaItems);
-
-      // Reset to first page and recompute total pages whenever the list reloads
-      setCurrentPage(1);
-      setTotalPages(Math.max(1, Math.ceil(mediaItems.length / ITEMS_PER_PAGE)));
+      setTotal(Number(data?.total) || 0);
 
       // Pre-fetch media URLs for images/videos/audio
       const urlMap = new Map();
@@ -162,11 +186,18 @@ export default function MediaContent() {
 
       setMediaUrls(urlMap);
     } catch (err) {
+      if (reqId !== requestRef.current) return;
       console.error("Error fetching media:", err);
       setError(err.message || "Failed to load media");
     } finally {
-      setLoading(false);
+      if (reqId === requestRef.current) setLoading(false);
     }
+  };
+
+  // Reload from the first page (after upload/delete or an explicit refresh).
+  const reloadMedia = () => {
+    setCurrentPage(1);
+    setRefreshKey((k) => k + 1);
   };
 
   const fetchFolders = async () => {
@@ -390,7 +421,7 @@ export default function MediaContent() {
       // Wait a moment to show success message
       setTimeout(() => {
         closeUploadModal();
-        fetchMedia();
+        reloadMedia();
       }, 1000);
     } catch (err) {
       console.error("Error uploading media:", err);
@@ -434,7 +465,7 @@ export default function MediaContent() {
       }
 
       // Refresh media list
-      fetchMedia();
+      reloadMedia();
     } catch (err) {
       console.error("Error deleting media:", err);
       alert(`Failed to delete media: ${err.message}`);
@@ -450,7 +481,9 @@ export default function MediaContent() {
     );
   };
 
-  if (loading) {
+  // Only take over the whole panel on the first load; paging/searching keeps the
+  // existing rows visible until the next page arrives (no spinner flash).
+  if (loading && media.length === 0) {
     return (
       <section className="flex flex-col gap-5 relative p-4">
         <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
@@ -477,7 +510,7 @@ export default function MediaContent() {
             </div>
           </div>
           <button
-            onClick={fetchMedia}
+            onClick={reloadMedia}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
           >
             Retry
@@ -487,20 +520,9 @@ export default function MediaContent() {
     );
   }
 
-  // Client-side search over the already-loaded list (filter by media name).
-  const q = search.trim().toLowerCase();
-  const filteredMedia = q
-    ? media.filter((m) =>
-        String(m.name || m.fileName || m.mediaName || "")
-          .toLowerCase()
-          .includes(q)
-      )
-    : media;
-  const filteredTotalPages = Math.max(
-    1,
-    Math.ceil(filteredMedia.length / ITEMS_PER_PAGE)
-  );
-  const pageClamped = Math.min(currentPage, filteredTotalPages);
+  // Pagination + search are server-side: `media` is the current page and
+  // `total` is the server's (filtered) total.
+  const totalPages = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
 
   return (
     <section className="flex flex-col gap-5 relative p-4">
@@ -511,18 +533,14 @@ export default function MediaContent() {
               Media Library
             </h2>
             <p className="text-sm text-gray-500 mt-1">
-              {q
-                ? `${filteredMedia.length} of ${media.length} files`
-                : `${media.length} ${media.length === 1 ? "file" : "files"} found`}
+              {total} {total === 1 ? "file" : "files"}
+              {debouncedSearch ? " found" : ""}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={libraryFolder ?? "all"}
-              onChange={(e) => {
-                setLibraryFolder(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setLibraryFolder(e.target.value)}
               className="px-2 py-2 text-sm bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
               title="Filter library by folder"
             >
@@ -535,16 +553,10 @@ export default function MediaContent() {
             </select>
             <SearchBar
               value={search}
-              onChange={(v) => {
-                setSearch(v);
-                setCurrentPage(1);
-              }}
+              onChange={setSearch}
               placeholder="Search media…"
               className="w-56 pl-3 pr-8 py-2 text-sm bg-white text-gray-900 placeholder-gray-400 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              onClear={() => {
-                setSearch("");
-                setCurrentPage(1);
-              }}
+              onClear={() => setSearch("")}
             />
             <button
               onClick={openUploadModal}
@@ -553,7 +565,7 @@ export default function MediaContent() {
               Add Media
             </button>
             <button
-              onClick={fetchMedia}
+              onClick={reloadMedia}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
             >
               Refresh
@@ -561,13 +573,15 @@ export default function MediaContent() {
           </div>
         </div>
 
-        {filteredMedia.length === 0 ? (
+        {media.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">
-              {q ? "No media matches your search" : "No media files found"}
+              {debouncedSearch
+                ? "No media matches your search"
+                : "No media files found"}
             </p>
             <p className="text-gray-400 text-sm mt-2">
-              {q
+              {debouncedSearch
                 ? "Try a different name or clear the search."
                 : "Your media files will appear here once they are uploaded."}
             </p>
@@ -613,12 +627,7 @@ export default function MediaContent() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredMedia
-                  .slice(
-                    (pageClamped - 1) * ITEMS_PER_PAGE,
-                    pageClamped * ITEMS_PER_PAGE
-                  )
-                  .map((item) => {
+                {media.map((item) => {
                   const mediaId = getMediaId(item);
                   const mediaUrl = getMediaUrl(item);
                   const mediaType = item.mediaType || item.type || "";
@@ -752,29 +761,28 @@ export default function MediaContent() {
           </div>
         )}
 
-        {filteredMedia.length > ITEMS_PER_PAGE && (
+        {total > ITEMS_PER_PAGE && (
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-gray-500">
-              Showing {(pageClamped - 1) * ITEMS_PER_PAGE + 1}–
-              {Math.min(pageClamped * ITEMS_PER_PAGE, filteredMedia.length)} of{" "}
-              {filteredMedia.length}
+              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+              {Math.min(currentPage * ITEMS_PER_PAGE, total)} of {total}
             </p>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={pageClamped <= 1}
+                disabled={currentPage <= 1}
                 className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
               <span className="text-sm text-gray-600">
-                Page {pageClamped} of {filteredTotalPages}
+                Page {currentPage} of {totalPages}
               </span>
               <button
                 onClick={() =>
-                  setCurrentPage((p) => Math.min(filteredTotalPages, p + 1))
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
                 }
-                disabled={pageClamped >= filteredTotalPages}
+                disabled={currentPage >= totalPages}
                 className="px-3 py-1 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
