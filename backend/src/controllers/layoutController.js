@@ -14,37 +14,11 @@ import {
   HttpError,
 } from "../utils/xiboDataHelpers.js";
 import { parseXlf } from "./layoutPreviewProxy.js";
+import { createTtlCache } from "../utils/ttlCache.js";
 
-// In-memory LRU cache for layout thumbnails so we rarely re-hit the Xibo web UI.
-// Same approach as the media thumbnail cache in libraryController.
-const LAYOUT_THUMB_CACHE = new Map(); // layoutId -> { buffer, contentType, expiresAt }
-const LAYOUT_THUMB_CACHE_MAX = 500;
-const LAYOUT_THUMB_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-const getCachedLayoutThumb = (key) => {
-  const entry = LAYOUT_THUMB_CACHE.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    LAYOUT_THUMB_CACHE.delete(key);
-    return null;
-  }
-  // Mark most-recently-used
-  LAYOUT_THUMB_CACHE.delete(key);
-  LAYOUT_THUMB_CACHE.set(key, entry);
-  return entry;
-};
-
-const setCachedLayoutThumb = (key, buffer, contentType) => {
-  LAYOUT_THUMB_CACHE.set(key, {
-    buffer,
-    contentType,
-    expiresAt: Date.now() + LAYOUT_THUMB_CACHE_TTL_MS,
-  });
-  while (LAYOUT_THUMB_CACHE.size > LAYOUT_THUMB_CACHE_MAX) {
-    const oldest = LAYOUT_THUMB_CACHE.keys().next().value;
-    LAYOUT_THUMB_CACHE.delete(oldest);
-  }
-};
+// In-memory TTL/LRU cache for layout thumbnails so we rarely re-hit the Xibo web
+// UI. 5-minute TTL, bounded to 500 entries (see utils/ttlCache).
+const layoutThumbCache = createTtlCache({ maxSize: 500, ttlMs: 5 * 60 * 1000 });
 
 // A web response that is actually the login page / a redirect to /login means the
 // shared session has expired and we should re-login and retry.
@@ -324,7 +298,7 @@ export const getLayoutThumbnail = async (req, res) => {
     }
 
     // Serve from cache when available
-    const cached = getCachedLayoutThumb(layoutId);
+    const cached = layoutThumbCache.get(layoutId);
     if (cached) {
       res.setHeader("Content-Type", cached.contentType);
       res.setHeader("Cache-Control", "public, max-age=300");
@@ -364,7 +338,7 @@ export const getLayoutThumbnail = async (req, res) => {
       // list still shows a representative image instead of a placeholder.
       const fb = await fetchFirstMediaThumb(layoutId).catch(() => null);
       if (fb) {
-        setCachedLayoutThumb(layoutId, fb.buffer, fb.contentType);
+        layoutThumbCache.set(layoutId, { buffer: fb.buffer, contentType: fb.contentType });
         res.setHeader("Content-Type", fb.contentType);
         res.setHeader("Cache-Control", "public, max-age=300");
         res.setHeader("X-Layout-Thumb-Cache", "FALLBACK");
@@ -377,7 +351,7 @@ export const getLayoutThumbnail = async (req, res) => {
     if (contentType.includes("text/html")) contentType = "image/png";
 
     const buffer = Buffer.from(response.data, "binary");
-    setCachedLayoutThumb(layoutId, buffer, contentType);
+    layoutThumbCache.set(layoutId, { buffer, contentType });
 
     res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "public, max-age=300");

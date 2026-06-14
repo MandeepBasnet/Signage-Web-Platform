@@ -9,6 +9,7 @@ import {
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
+import { createTtlCache } from "../utils/ttlCache.js";
 
 // Extract the display name field that Xibo uses for duplicate checking
 // Xibo checks the "name" field (display name), not fileName
@@ -269,38 +270,11 @@ export const downloadMedia = async (req, res) => {
   }
 };
 
-// In-memory LRU cache for thumbnails so repeated loads / re-renders don't
-// re-stream the same image from the remote Xibo CMS on every request.
+// In-memory TTL/LRU cache for thumbnails so repeated loads / re-renders don't
+// re-stream the same image from the remote Xibo CMS on every request. 1-hour TTL
+// (matches the Cache-Control we send), bounded to 500 entries (see utils/ttlCache).
 // Thumbnails are small (e.g. 300x200), so a few hundred entries is cheap.
-const THUMBNAIL_CACHE = new Map(); // key -> { buffer, contentType, expiresAt }
-const THUMBNAIL_CACHE_MAX = 500;
-const THUMBNAIL_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour, matches Cache-Control
-
-const getCachedThumbnail = (key) => {
-  const entry = THUMBNAIL_CACHE.get(key);
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    THUMBNAIL_CACHE.delete(key);
-    return null;
-  }
-  // Mark as most-recently-used
-  THUMBNAIL_CACHE.delete(key);
-  THUMBNAIL_CACHE.set(key, entry);
-  return entry;
-};
-
-const setCachedThumbnail = (key, buffer, contentType) => {
-  THUMBNAIL_CACHE.set(key, {
-    buffer,
-    contentType,
-    expiresAt: Date.now() + THUMBNAIL_CACHE_TTL_MS,
-  });
-  // Evict oldest entries beyond the cap (Map preserves insertion order)
-  while (THUMBNAIL_CACHE.size > THUMBNAIL_CACHE_MAX) {
-    const oldestKey = THUMBNAIL_CACHE.keys().next().value;
-    THUMBNAIL_CACHE.delete(oldestKey);
-  }
-};
+const thumbnailCache = createTtlCache({ maxSize: 500, ttlMs: 60 * 60 * 1000 });
 
 // Get media thumbnail/preview from Xibo
 export const getMediaThumbnail = async (req, res) => {
@@ -316,7 +290,7 @@ export const getMediaThumbnail = async (req, res) => {
     const cacheKey = `${mediaId}:${width || ""}:${height || ""}:${previewVal}`;
 
     // Serve from cache when available
-    const cached = getCachedThumbnail(cacheKey);
+    const cached = thumbnailCache.get(cacheKey);
     if (cached) {
       res.setHeader("Content-Type", cached.contentType);
       res.setHeader("Cache-Control", "public, max-age=3600");
@@ -360,7 +334,7 @@ export const getMediaThumbnail = async (req, res) => {
     }
 
     const buffer = Buffer.from(response.data);
-    setCachedThumbnail(cacheKey, buffer, contentType);
+    thumbnailCache.set(cacheKey, { buffer, contentType });
 
     res.setHeader("Content-Type", contentType);
     res.setHeader(
