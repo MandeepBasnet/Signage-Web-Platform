@@ -4,10 +4,10 @@ import FormData from "form-data";
 import {
   fetchUserScopedCollection,
   handleControllerError,
-  getUserContext,
+  getOrCreateToken,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
-import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
+import { xiboRequest } from "../utils/xiboClient.js";
 
 // Pad a value to a string; small helper for date formatting (Y-m-d H:i:s).
 const pad = (n) => String(n).padStart(2, "0");
@@ -51,8 +51,7 @@ export const getSchedule = async (req, res) => {
     // generic owner filter: schedule events store their owner as `userId` (no
     // `ownerId`), so that filter would drop every event. A schedule view should
     // show the events affecting the displays in the window regardless of owner.
-    let { token } = getUserContext(req);
-    if (!token) token = await getAccessToken();
+    const { token } = await getOrCreateToken(req);
 
     const params = new URLSearchParams();
     if (fromDt) params.append("fromDt", fromDt); // required by Xibo
@@ -77,8 +76,7 @@ export const getSchedule = async (req, res) => {
 // Includes display-specific groups so a single display can be targeted.
 export const getDisplayGroups = async (req, res) => {
   try {
-    let { token } = getUserContext(req);
-    if (!token) token = await getAccessToken();
+    const { token } = await getOrCreateToken(req);
 
     const response = await xiboRequest("/displaygroup", "GET", null, token);
     const groups = Array.isArray(response)
@@ -136,8 +134,7 @@ const resolveLayoutCampaignId = async (layoutId, token) => {
 
 export const createScheduleEvent = async (req, res) => {
   try {
-    let { token } = getUserContext(req);
-    if (!token) token = await getAccessToken();
+    const { token } = await getOrCreateToken(req);
 
     const {
       contentType, // 'playlist' | 'layout'
@@ -217,8 +214,7 @@ export const createScheduleEvent = async (req, res) => {
 export const updateScheduleEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
-    let { token } = getUserContext(req);
-    if (!token) token = await getAccessToken();
+    const { token } = await getOrCreateToken(req);
 
     const {
       eventTypeId,
@@ -297,8 +293,7 @@ export const updateScheduleEvent = async (req, res) => {
 export const deleteScheduleEvent = async (req, res) => {
   try {
     const { eventId } = req.params;
-    let { token } = getUserContext(req);
-    if (!token) token = await getAccessToken();
+    const { token } = await getOrCreateToken(req);
 
     await xiboRequest(`/schedule/${eventId}`, "DELETE", null, token);
     res.status(204).send();

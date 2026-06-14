@@ -3,9 +3,10 @@ import FormData from "form-data";
 import {
   handleControllerError,
   getUserContext,
+  getOrCreateToken,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
-import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
+import { xiboRequest } from "../utils/xiboClient.js";
 
 /**
  * Helper function to check if value is numeric
@@ -37,11 +38,7 @@ export const addMediaToPlaylist = async (req, res) => {
   try {
     const { playlistId } = req.params;
     const { mediaIds, duration, useDuration, displayOrder } = req.body || {};
-    let { token, userId } = getUserContext(req);
-
-    if (!token) {
-        token = await getAccessToken();
-    }
+    const { token, userId } = await getOrCreateToken(req);
 
     // Validate required parameters
     if (!playlistId) {
@@ -282,11 +279,7 @@ export const updateMediaDurationInPlaylist = async (req, res) => {
 export const getMediaPreview = async (req, res) => {
   try {
     const { mediaId } = req.params;
-    let { token } = getUserContext(req);
-
-    if (!token) {
-        token = await getAccessToken();
-    }
+    const { token } = await getOrCreateToken(req);
 
     if (!mediaId) {
       return res.status(400).json({ message: "Media ID is required" });
@@ -330,11 +323,7 @@ export const getMediaPreview = async (req, res) => {
 export const uploadMediaToPlaylist = async (req, res) => {
   try {
     const { playlistId } = req.params;
-    let { token, userId } = getUserContext(req);
-    
-    if (!token) {
-        token = await getAccessToken();
-    }
+    const { token, userId } = await getOrCreateToken(req);
 
     const file = req.file;
     const {

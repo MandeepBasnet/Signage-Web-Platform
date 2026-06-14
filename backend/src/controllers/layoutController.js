@@ -1,5 +1,5 @@
 import axios from "axios";
-import { xiboRequest, getAccessToken } from "../utils/xiboClient.js";
+import { xiboRequest } from "../utils/xiboClient.js";
 import {
   getWebClient,
   getWebBaseUrl,
@@ -9,6 +9,7 @@ import {
 import {
   fetchUserScopedCollection,
   getUserContext,
+  getOrCreateToken,
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
@@ -399,11 +400,7 @@ export const getLayoutThumbnail = async (req, res) => {
 export const getLayoutPreview = async (req, res) => {
     try {
         const { layoutId } = req.params;
-        let { token } = getUserContext(req);
-
-        if (!token) {
-            token = await getAccessToken();
-        }
+        const { token } = await getOrCreateToken(req);
 
         // Try to export/download the layout
         // Based on user hint: "preview of a layout should be made that is via download"

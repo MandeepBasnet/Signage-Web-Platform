@@ -1,4 +1,4 @@
-import { xiboRequest } from "./xiboClient.js";
+import { xiboRequest, getAccessToken } from "./xiboClient.js";
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -132,6 +132,19 @@ function getUserContext(req) {
   }
 
   return { token, userId, username };
+}
+
+// Resolve a usable Xibo token for the request: the per-user token when present,
+// otherwise fall back to the shared backend app token. Returns the same
+// { token, userId, username } shape as getUserContext, but with a non-empty
+// token guaranteed. Consolidates the getUserContext()+getAccessToken() fallback
+// that was repeated across controllers.
+async function getOrCreateToken(req) {
+  const context = getUserContext(req);
+  return {
+    ...context,
+    token: context.token || (await getAccessToken()),
+  };
 }
 
 async function fetchUserScopedCollection({
@@ -296,6 +309,7 @@ export {
   fetchLibraryCollection,
   filterOwnedByUser,
   getUserContext,
+  getOrCreateToken,
   handleControllerError,
   normalizeListResponse,
 };
