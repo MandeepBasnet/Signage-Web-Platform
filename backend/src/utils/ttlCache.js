@@ -33,5 +33,8 @@ export function createTtlCache({ maxSize = 500, ttlMs }) {
     }
   };
 
-  return { get, set };
+  // Drop a key (used to invalidate a cached entry when its source changes).
+  const remove = (key) => store.delete(key);
+
+  return { get, set, delete: remove };
 }

@@ -20,6 +20,14 @@ import { createTtlCache } from "../utils/ttlCache.js";
 // UI. 5-minute TTL, bounded to 500 entries (see utils/ttlCache).
 const layoutThumbCache = createTtlCache({ maxSize: 500, ttlMs: 5 * 60 * 1000 });
 
+// Negative cache for the per-parent "has an open draft?" lookup that runs on
+// every designer open. We only cache the NULL result (no draft found): a stale
+// entry can only make us skip the lookup and fall through to the normal checkout
+// flow — never redirect to a draft that no longer exists. Invalidated on
+// checkout (which creates a draft). Short TTL bounds drafts created out-of-band
+// (e.g. directly in the Xibo CMS UI).
+const noDraftCache = createTtlCache({ maxSize: 500, ttlMs: 60 * 1000 });
+
 // A web response that is actually the login page / a redirect to /login means the
 // shared session has expired and we should re-login and retry.
 const looksLikeLoginRedirect = (response) => {
@@ -92,6 +100,10 @@ export const checkoutLayout = async (req, res) => {
     );
 
     console.log(`[checkoutLayout] Checkout successful. Result:`, JSON.stringify(result));
+
+    // A draft now exists for this parent — drop any cached "no draft" entry so
+    // the next designer open detects it.
+    noDraftCache.delete(String(layoutId));
 
     // Result should contain the new draft layout object or ID
     res.json(result);
@@ -219,8 +231,12 @@ export const getLayoutDetails = async (req, res) => {
     // We check if this layout IS a parent (parentId is 0 or null)
     let existingDraftId = null;
     const isParent = !normalizedLayout.parentId || normalizedLayout.parentId === 0;
+    const draftKey = String(layoutId);
 
-    if (isParent) {
+    // Skip the lookup when we've recently confirmed this parent has no draft.
+    // We only ever cache that NULL result, so a stale hit just falls through to
+    // the normal checkout flow (never a redirect to a missing draft).
+    if (isParent && !noDraftCache.get(draftKey)) {
        try {
           // Look for children of this layout that are Drafts (status 2)
           const draftResponse = await xiboRequest(
@@ -229,7 +245,7 @@ export const getLayoutDetails = async (req, res) => {
             null,
             token
           );
-          
+
           let drafts = [];
           if (Array.isArray(draftResponse)) {
             drafts = draftResponse;
@@ -241,10 +257,13 @@ export const getLayoutDetails = async (req, res) => {
 
           // Filter just in case API returns loose matches
            const exactDraft = drafts.find(d => String(d.parentId) === String(layoutId));
-           
+
            if (exactDraft) {
                existingDraftId = exactDraft.layoutId;
                console.log(`[getLayoutDetails] Found existing draft ${existingDraftId} for layout ${layoutId}`);
+           } else {
+               // Confirmed no draft — cache so repeated opens skip this lookup.
+               noDraftCache.set(draftKey, true);
            }
 
        } catch (draftErr) {
