@@ -64,130 +64,64 @@ export const checkMediaNameAvailability = async (req, desiredName) => {
       };
     }
 
-    // Query ONLY the user's own media using ownerId filter
-    // Xibo checks duplicates per user, not globally
-    // Include retired media in the check
-    // Use DataTables format for pagination
-    let mediaList = [];
-    let totalItemsFetched = 0;
-    let pageSize = 1000;
-    let pageNum = 0;
-    let fetchedAll = false;
+    // Query the user's own media, narrowed by Xibo's server-side name filter
+    // (`media=`), so we fetch only name-matching candidates instead of the whole
+    // library. Xibo checks duplicates per user (ownerId), case-insensitively.
+    // The `media=` filter is a substring (LIKE) match, so we still confirm with
+    // an exact, case-insensitive comparison on the returned rows — preserving the
+    // previous behavior while replacing the up-to-50k-row full-library sweep.
+    const targetLower = target.toLowerCase();
+    const candidates = [];
+    const pageSize = 1000;
 
-    while (!fetchedAll && pageNum < 50) {
+    // The name filter normally returns a handful of rows; cap the scan at a few
+    // pages purely as a safety net (vs. the old 50-page / 50k-row sweep).
+    for (let pageNum = 0; pageNum < 5; pageNum++) {
       const start = pageNum * pageSize;
       const queryStr = `/library?start=${start}&length=${pageSize}&draw=${
         pageNum + 1
-      }&ownerId=${userXiboUserId}`;
+      }&ownerId=${userXiboUserId}&media=${encodeURIComponent(target)}`;
 
-      console.log(
-        `Fetching user media page ${pageNum} with query: ${queryStr}`
-      );
-
+      let pageResponse;
       try {
-        const pageResponse = await xiboRequest(
-          queryStr,
-          "GET",
-          null,
-          userXiboToken
-        );
-
-        // Handle different response formats from Xibo
-        let pageItems = [];
-        if (Array.isArray(pageResponse)) {
-          pageItems = pageResponse;
-        } else if (pageResponse?.data && Array.isArray(pageResponse.data)) {
-          pageItems = pageResponse.data;
-        } else if (pageResponse && typeof pageResponse === "object") {
-          // Handle DataTables response format
-          pageItems = Array.isArray(pageResponse) ? pageResponse : [];
-        }
-
-        console.log(`Page ${pageNum}: Fetched ${pageItems.length} items`);
-
-        if (!pageItems.length) {
-          fetchedAll = true;
-          break;
-        }
-
-        mediaList.push(...pageItems);
-        totalItemsFetched += pageItems.length;
-        pageNum++;
-
-        // Stop if we got fewer items than page size
-        if (pageItems.length < pageSize) {
-          fetchedAll = true;
-        }
+        pageResponse = await xiboRequest(queryStr, "GET", null, userXiboToken);
       } catch (pageErr) {
         console.error(
-          `Error fetching page ${pageNum} of user media:`,
+          `Error fetching filtered media page ${pageNum}:`,
           pageErr.message
         );
-        // Continue with what we have
-        fetchedAll = true;
+        // Don't fail the upload on a lookup error — proceed with what we have.
+        break;
       }
+
+      const pageItems = Array.isArray(pageResponse)
+        ? pageResponse
+        : Array.isArray(pageResponse?.data)
+        ? pageResponse.data
+        : [];
+
+      if (!pageItems.length) break;
+      candidates.push(...pageItems);
+      if (pageItems.length < pageSize) break;
     }
 
-    console.log(
-      `Fetched ${totalItemsFetched} media items across ${pageNum} pages`
+    // Exact, case-insensitive match against the display name Xibo dedupes on.
+    const hasConflict = candidates.some(
+      (item) => extractMediaName(item)?.toLowerCase() === targetLower
     );
 
     console.log(
-      `Duplicate check: Found ${mediaList.length} media items owned by user ${userXiboUserId}`
+      `Duplicate check for "${target}" (user ${userXiboUserId}): ` +
+        `${candidates.length} name-filtered candidate(s), conflict=${hasConflict}`
     );
 
-    // Extract all existing media names (case-insensitive comparison as Xibo does)
-    // Check the primary "name" field which Xibo uses for duplicate detection
-    const existingNames = new Set();
-    const extractedNames = [];
-    const failedToExtract = [];
-
-    mediaList.forEach((item, index) => {
-      const mediaName = extractMediaName(item);
-      if (mediaName) {
-        existingNames.add(mediaName.toLowerCase());
-        extractedNames.push(mediaName);
-      } else {
-        // Track items where name extraction failed
-        failedToExtract.push({
-          index,
-          item: {
-            mediaId: item?.mediaId,
-            ownerId: item?.ownerId,
-            name: item?.name,
-            mediaName: item?.mediaName,
-            media_name: item?.media_name,
-            fileName: item?.fileName,
-          },
-        });
-      }
-    });
-
-    console.log(`Existing media names details:`, {
-      totalItems: mediaList.length,
-      totalUnique: existingNames.size,
-      successfullyExtracted: extractedNames.length,
-      failedToExtract: failedToExtract.length,
-      allNames: extractedNames,
-      failedItems: failedToExtract.slice(0, 5), // Show first 5 failures
-    });
-
-    const targetLower = target.toLowerCase();
-
-    if (!existingNames.has(targetLower)) {
-      console.log(
-        `Name "${target}" is unique for user ${userXiboUserId}. Found ${existingNames.size} existing names.`
-      );
+    if (!hasConflict) {
       return {
         hasConflict: false,
         originalName: target,
         suggestedName: target,
       };
     }
-
-    console.log(
-      `Duplicate name detected in user's media: "${target}". Existing items: ${existingNames.size}`
-    );
 
     const ext = path.extname(target);
     const base =
