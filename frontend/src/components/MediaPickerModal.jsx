@@ -1,8 +1,8 @@
-/* eslint-disable no-unused-vars */
 import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
+import { isImage, isVideo, formatFileSize } from "../utils/mediaTypes.js";
 
 export default function MediaPickerModal({
   isOpen,
@@ -74,39 +74,6 @@ export default function MediaPickerModal({
 
   const getMediaId = (item) => {
     return item.mediaId || item.media_id || item.id;
-  };
-
-  const isImage = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("image") ||
-      type.includes("jpg") ||
-      type.includes("jpeg") ||
-      type.includes("png") ||
-      type.includes("gif") ||
-      type.includes("webp") ||
-      type.includes("svg")
-    );
-  };
-
-  const isVideo = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("video") ||
-      type.includes("mp4") ||
-      type.includes("webm") ||
-      type.includes("ogg") ||
-      type.includes("mov") ||
-      type.includes("avi")
-    );
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "Unknown size";
-    const kb = bytes / 1024;
-    const mb = kb / 1024;
-    if (mb >= 1) return `${mb.toFixed(2)} MB`;
-    return `${kb.toFixed(2)} KB`;
   };
 
   // Filter media based on search query

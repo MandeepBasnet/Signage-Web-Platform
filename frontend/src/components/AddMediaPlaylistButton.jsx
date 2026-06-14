@@ -5,6 +5,7 @@ import { getAuthHeaders } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 
 import { API_BASE_URL } from "../config/api.js";
+import { isImage, isVideo, getMediaIcon } from "../utils/mediaTypes.js";
 
 /**
  * AddMediaPlaylistButton Component
@@ -64,41 +65,6 @@ export default function AddMediaPlaylistButton({
   const [uploadNameSuggestion, setUploadNameSuggestion] = useState(null);
   const [mediaUrls, setMediaUrls] = useState(new Map());
   const [previewMedia, setPreviewMedia] = useState(null);
-
-  // Helper functions for media types
-  const isImage = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("image") ||
-      type.includes("jpg") ||
-      type.includes("jpeg") ||
-      type.includes("png") ||
-      type.includes("gif") ||
-      type.includes("webp") ||
-      type.includes("svg")
-    );
-  };
-
-  const isVideo = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("video") ||
-      type.includes("mp4") ||
-      type.includes("webm") ||
-      type.includes("ogg") ||
-      type.includes("mov") ||
-      type.includes("avi")
-    );
-  };
-
-  const getMediaIcon = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    if (type.includes("image")) return "🖼️";
-    if (type.includes("video")) return "🎬";
-    if (type.includes("audio")) return "🎵";
-    if (type.includes("pdf")) return "📄";
-    return "📹";
-  };
 
   const getMediaUrl = (item) => {
     const mediaId = item.mediaId || item.id;

@@ -5,6 +5,13 @@ import { useEffect, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
+import {
+  isImage,
+  isVideo,
+  isAudio,
+  getMediaIcon,
+  formatFileSize,
+} from "../utils/mediaTypes.js";
 
 const ensureNameHasExtension = (desiredName = "", fallbackName = "") => {
   const trimmed = desiredName?.trim() ?? "";
@@ -54,42 +61,6 @@ export default function MediaContent() {
   // Helper functions
   const getMediaId = (item) => {
     return item.mediaId || item.media_id || item.id;
-  };
-
-  const isImage = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("image") ||
-      type.includes("jpg") ||
-      type.includes("jpeg") ||
-      type.includes("png") ||
-      type.includes("gif") ||
-      type.includes("webp") ||
-      type.includes("svg")
-    );
-  };
-
-  const isVideo = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("video") ||
-      type.includes("mp4") ||
-      type.includes("webm") ||
-      type.includes("ogg") ||
-      type.includes("mov") ||
-      type.includes("avi")
-    );
-  };
-
-  const isAudio = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    return (
-      type.includes("audio") ||
-      type.includes("mp3") ||
-      type.includes("wav") ||
-      type.includes("ogg") ||
-      type.includes("m4a")
-    );
   };
 
   const handlePreview = (item) => {
@@ -490,23 +461,6 @@ export default function MediaContent() {
       console.error("Error deleting media:", err);
       alert(`Failed to delete media: ${err.message}`);
     }
-  };
-
-  const getMediaIcon = (mediaType) => {
-    const type = mediaType?.toLowerCase() || "";
-    if (type.includes("image")) return "🖼️";
-    if (type.includes("video")) return "🎬";
-    if (type.includes("audio")) return "🎵";
-    if (type.includes("pdf")) return "📄";
-    return "📹";
-  };
-
-  const formatFileSize = (bytes) => {
-    if (!bytes) return "Unknown size";
-    const kb = bytes / 1024;
-    const mb = kb / 1024;
-    if (mb >= 1) return `${mb.toFixed(2)} MB`;
-    return `${kb.toFixed(2)} KB`;
   };
 
   const getMediaUrl = (item) => {
