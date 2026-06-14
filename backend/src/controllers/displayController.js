@@ -2,6 +2,14 @@ import { fetchUserScopedCollection, handleControllerError, getUserContext } from
 import { xiboRequest } from "../utils/xiboClient.js";
 import axios from "axios";
 
+// Resolving a scheduled campaign to its layoutId hits `/layout?campaignId=` once
+// per campaign on every dashboard load. That mapping is effectively static, so we
+// cache it with a short TTL: cached campaigns are served from memory and only
+// cache misses (or expired entries) re-fetch. Shared across requests because a
+// campaign -> layout resolution is the same regardless of the requesting user.
+const CAMPAIGN_LAYOUT_TTL_MS = 5 * 60 * 1000;
+const campaignLayoutCache = new Map(); // campaignId -> { layoutId, expiresAt }
+
 export const getDisplays = async (req, res) => {
   try {
     const { start, length } = req.query;
@@ -114,19 +122,39 @@ export const getDisplays = async (req, res) => {
             const campaignLayoutMap = new Map();
 
             if (campaignIds.length > 0) {
-                try {
-                    await Promise.all(campaignIds.map(async (campaignId) => {
-                        try {
-                            const layouts = await xiboRequest(`/layout?campaignId=${campaignId}`, 'GET');
-                            if (Array.isArray(layouts) && layouts.length > 0) {
-                                campaignLayoutMap.set(campaignId, layouts[0].layoutId);
+                const now = Date.now();
+
+                // Serve still-valid entries from cache; only re-fetch the misses.
+                const missingCampaignIds = [];
+                for (const campaignId of campaignIds) {
+                    const cached = campaignLayoutCache.get(campaignId);
+                    if (cached && cached.expiresAt > now) {
+                        campaignLayoutMap.set(campaignId, cached.layoutId);
+                    } else {
+                        missingCampaignIds.push(campaignId);
+                    }
+                }
+
+                if (missingCampaignIds.length > 0) {
+                    try {
+                        await Promise.all(missingCampaignIds.map(async (campaignId) => {
+                            try {
+                                const layouts = await xiboRequest(`/layout?campaignId=${campaignId}`, 'GET');
+                                if (Array.isArray(layouts) && layouts.length > 0) {
+                                    const layoutId = layouts[0].layoutId;
+                                    campaignLayoutMap.set(campaignId, layoutId);
+                                    campaignLayoutCache.set(campaignId, {
+                                        layoutId,
+                                        expiresAt: now + CAMPAIGN_LAYOUT_TTL_MS,
+                                    });
+                                }
+                            } catch (e) {
+                                console.warn(`Failed to fetch layouts for campaign ${campaignId}`, e);
                             }
-                        } catch (e) {
-                            console.warn(`Failed to fetch layouts for campaign ${campaignId}`, e);
-                        }
-                    }));
-                } catch (error) {
-                    console.error("Failed to resolve campaign layouts:", error);
+                        }));
+                    } catch (error) {
+                        console.error("Failed to resolve campaign layouts:", error);
+                    }
                 }
             }
             
