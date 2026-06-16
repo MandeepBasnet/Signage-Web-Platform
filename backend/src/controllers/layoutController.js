@@ -13,12 +13,18 @@ import {
   handleControllerError,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
+import path from "node:path";
 import { parseXlf } from "./layoutPreviewProxy.js";
 import { createTtlCache } from "../utils/ttlCache.js";
+import { createDiskThumbCache } from "../utils/diskThumbCache.js";
 
-// In-memory TTL/LRU cache for layout thumbnails so we rarely re-hit the Xibo web
-// UI. 5-minute TTL, bounded to 500 entries (see utils/ttlCache).
-const layoutThumbCache = createTtlCache({ maxSize: 500, ttlMs: 5 * 60 * 1000 });
+// Persistent (disk-backed) cache for layout thumbnails so we rarely re-hit the
+// slow Xibo web UI — and never re-pay it after a restart/deploy. 1-hour TTL;
+// bust on republish to refresh sooner (Step 2). See utils/diskThumbCache.
+const layoutThumbCache = createDiskThumbCache({
+  dir: path.join(process.cwd(), ".cache", "thumbnails", "layout"),
+  ttlMs: 60 * 60 * 1000,
+});
 
 // Negative cache for the per-parent "has an open draft?" lookup that runs on
 // every designer open. We only cache the NULL result (no draft found): a stale

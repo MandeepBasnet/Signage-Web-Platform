@@ -15,6 +15,7 @@ import {
   HttpError,
 } from "../utils/xiboDataHelpers.js";
 import { createTtlCache } from "../utils/ttlCache.js";
+import { createDiskThumbCache } from "../utils/diskThumbCache.js";
 
 // Extract the display name field that Xibo uses for duplicate checking
 // Xibo checks the "name" field (display name), not fileName
@@ -312,11 +313,14 @@ export const downloadMedia = async (req, res) => {
   }
 };
 
-// In-memory TTL/LRU cache for thumbnails so repeated loads / re-renders don't
-// re-stream the same image from the remote Xibo CMS on every request. 1-hour TTL
-// (matches the Cache-Control we send), bounded to 500 entries (see utils/ttlCache).
-// Thumbnails are small (e.g. 300x200), so a few hundred entries is cheap.
-const thumbnailCache = createTtlCache({ maxSize: 500, ttlMs: 60 * 60 * 1000 });
+// Persistent (disk-backed) cache for media thumbnails so repeated loads /
+// re-renders never re-stream from Xibo, and the cache survives restarts/deploys.
+// 24-hour TTL — media is effectively immutable once uploaded (a replace creates
+// a new mediaId). See utils/diskThumbCache.
+const thumbnailCache = createDiskThumbCache({
+  dir: path.join(process.cwd(), ".cache", "thumbnails", "library"),
+  ttlMs: 24 * 60 * 60 * 1000,
+});
 
 // Get media thumbnail/preview from Xibo
 export const getMediaThumbnail = async (req, res) => {
