@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import MediaPreviewModal from "./MediaPreviewModal";
@@ -20,17 +20,14 @@ import {
   getWidgetId,
   normalizeMediaItems,
 } from "../utils/playlistItems.js";
+import { usePlaylists } from "../hooks/queries/usePlaylists.js";
+import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
+
+const EMPTY_ARRAY = [];
 
 export default function PlaylistContent() {
-  const [playlists, setPlaylists] = useState([]);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [selectedPlaylist, setSelectedPlaylist] = useState(null);
-  const [playlistMedia, setPlaylistMedia] = useState([]);
-  const [playlistLoading, setPlaylistLoading] = useState(false);
-  const [playlistError, setPlaylistError] = useState(null);
-  const [mediaUrls, setMediaUrls] = useState(new Map());
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [newPlaylistDescription, setNewPlaylistDescription] = useState("");
@@ -48,6 +45,48 @@ export default function PlaylistContent() {
   const [deleteOnExpiry, setDeleteOnExpiry] = useState(false);
   const [updatingExpiry, setUpdatingExpiry] = useState(false);
 
+  // Cached playlists list.
+  const {
+    data: playlists = EMPTY_ARRAY,
+    isLoading: loading,
+    error,
+    refetch: refetchPlaylists,
+  } = usePlaylists();
+
+  // Detail (playlist + media) for the open playlist; enabled only when one is
+  // selected, cached per id. isFetching drives the loading overlay/spinner.
+  const {
+    data: detailData,
+    isFetching: playlistLoading,
+    error: playlistError,
+    refetch: refetchDetails,
+  } = usePlaylistDetails(selectedPlaylistId);
+  const selectedPlaylist = detailData?.playlist ?? null;
+  const playlistMedia = useMemo(
+    () =>
+      detailData
+        ? normalizeMediaItems(detailData.playlist, detailData.media || [])
+        : EMPTY_ARRAY,
+    [detailData]
+  );
+  const mediaUrls = useMemo(() => {
+    const map = new Map();
+    const token = localStorage.getItem("auth_token");
+    for (const item of playlistMedia) {
+      const mediaId = getMediaId(item);
+      if (!mediaId) continue;
+      const mediaType =
+        item.mediaType || item.type || item.widgetType || item.moduleName || "";
+      if (isImage(mediaType) || isVideo(mediaType)) {
+        map.set(
+          mediaId,
+          `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
+        );
+      }
+    }
+    return map;
+  }, [playlistMedia]);
+
   // Helper functions
   const handlePreview = (item) => {
     const mediaId = getMediaId(item);
@@ -60,115 +99,6 @@ export default function PlaylistContent() {
     });
   };
 
-  useEffect(() => {
-    fetchPlaylists();
-  }, []);
-
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      mediaUrls.forEach((url) => {
-        if (url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
-  }, [mediaUrls]);
-
-  const fetchPlaylists = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/playlists`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message || `Failed to fetch playlists: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      setPlaylists(data?.data || []);
-    } catch (err) {
-      console.error("Error fetching playlists:", err);
-      setError(err.message || "Failed to load playlists");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchPlaylistDetails = async (playlistId) => {
-    try {
-      setPlaylistLoading(true);
-      setPlaylistError(null);
-
-      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message ||
-            `Failed to fetch playlist details: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      setSelectedPlaylist(data.playlist);
-      const normalizedMediaItems = normalizeMediaItems(
-        data.playlist,
-        data.media || []
-      );
-
-      // Pre-fetch media URLs for images/videos/audio
-      const urlMap = new Map();
-      for (const item of normalizedMediaItems) {
-        const mediaId = getMediaId(item);
-        if (mediaId) {
-          const mediaType =
-            item.mediaType ||
-            item.type ||
-            item.widgetType ||
-            item.moduleName ||
-            "";
-          const isImageType = isImage(mediaType);
-          const isVideoType = isVideo(mediaType);
-
-          // Use the new thumbnail endpoint for previews
-          if (isImageType || isVideoType) {
-            // For images and videos, use the thumbnail endpoint with query param token
-            const token = localStorage.getItem("auth_token");
-            urlMap.set(
-              mediaId,
-              `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
-            );
-          }
-        }
-      }
-
-      setMediaUrls(urlMap);
-      setPlaylistMedia(normalizedMediaItems);
-    } catch (err) {
-      console.error("Error fetching playlist details:", err);
-      setPlaylistError(err.message || "Failed to load playlist details");
-    } finally {
-      setPlaylistLoading(false);
-    }
-  };
-
   const handlePlaylistClick = (playlist) => {
     // Try multiple possible ID field names
     const playlistId =
@@ -179,25 +109,14 @@ export default function PlaylistContent() {
       playlist.PlaylistId;
 
     if (playlistId) {
-      setPlaylistLoading(true); // Set loading immediately
-      fetchPlaylistDetails(playlistId);
+      setSelectedPlaylistId(String(playlistId));
     } else {
       console.error("No playlist ID found in playlist object:", playlist);
-      setPlaylistError("Could not find playlist ID. Please try again.");
     }
   };
 
   const handleBackClick = () => {
-    // Cleanup blob URLs
-    mediaUrls.forEach((url) => {
-      if (url.startsWith("blob:")) {
-        URL.revokeObjectURL(url);
-      }
-    });
-    setMediaUrls(new Map());
-    setSelectedPlaylist(null);
-    setPlaylistMedia([]);
-    setPlaylistError(null);
+    setSelectedPlaylistId(null);
   };
 
   const handleCreatePlaylist = async (e) => {
@@ -256,7 +175,7 @@ export default function PlaylistContent() {
         });
       }
       // Refresh the playlist list
-      fetchPlaylists();
+      refetchPlaylists();
     } catch (err) {
       console.error("Error creating playlist:", err);
       setCreateError(err.message || "Failed to create playlist");
@@ -295,7 +214,7 @@ export default function PlaylistContent() {
       }
 
       // Refresh playlist
-      fetchPlaylistDetails(playlistId);
+      refetchDetails();
     } catch (err) {
       console.error("Error deleting media:", err);
       alert("Failed to delete media");
@@ -357,7 +276,7 @@ export default function PlaylistContent() {
       // Success
       setExpiryModalOpen(false);
       // Refresh playlist to show updated data (if we display it)
-      fetchPlaylistDetails(playlistId);
+      refetchDetails();
       alert("Expiration settings updated successfully");
     } catch (err) {
       console.error("Error updating expiry:", err);
@@ -396,7 +315,7 @@ export default function PlaylistContent() {
       }
 
       // Refresh playlists
-      fetchPlaylists();
+      refetchPlaylists();
     } catch (err) {
       console.error("Error deleting playlist:", err);
       alert(`Failed to delete playlist: ${err.message}`);
@@ -455,7 +374,7 @@ export default function PlaylistContent() {
                   selectedPlaylist?.ID ||
                   selectedPlaylist?.PlaylistId;
                 if (playlistId) {
-                  fetchPlaylistDetails(playlistId);
+                  refetchDetails();
                 }
               }}
               onClose={() => {
@@ -482,7 +401,7 @@ export default function PlaylistContent() {
                 <span className="text-2xl">⚠️</span>
                 <div>
                   <h3 className="font-semibold text-red-800 mb-1">Error</h3>
-                  <p className="text-red-700">{playlistError}</p>
+                  <p className="text-red-700">{playlistError?.message || "Failed to load playlist details"}</p>
                 </div>
               </div>
               <button
@@ -491,7 +410,7 @@ export default function PlaylistContent() {
                     selectedPlaylist.playlistId ||
                     selectedPlaylist.playlist_id ||
                     selectedPlaylist.id;
-                  if (playlistId) fetchPlaylistDetails(playlistId);
+                  if (playlistId) refetchDetails();
                 }}
                 className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
               >
@@ -858,11 +777,11 @@ export default function PlaylistContent() {
             <span className="text-2xl">⚠️</span>
             <div>
               <h3 className="font-semibold text-red-800 mb-1">Error</h3>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{error?.message || "Failed to load playlists"}</p>
             </div>
           </div>
           <button
-            onClick={fetchPlaylists}
+            onClick={() => refetchPlaylists()}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
           >
             Retry
@@ -910,7 +829,7 @@ export default function PlaylistContent() {
               onClear={() => setSearch("")}
             />
             <button
-              onClick={fetchPlaylists}
+              onClick={() => refetchPlaylists()}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
             >
               Refresh
