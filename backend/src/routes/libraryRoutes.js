@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { revalidateList } from "../middleware/cacheControl.js";
+import { cacheList, invalidate } from "../middleware/responseCache.js";
 import {
   getLibraryMedia,
   getAllLibraryMedia,
@@ -21,13 +22,13 @@ const upload = multer({
   },
 });
 
-router.get("/", verifyToken, revalidateList, getLibraryMedia);
-router.get("/folders", verifyToken, revalidateList, getLibraryFolders);
-router.get("/all", verifyToken, revalidateList, getAllLibraryMedia);
+router.get("/", verifyToken, revalidateList, cacheList("library"), getLibraryMedia);
+router.get("/folders", verifyToken, revalidateList, cacheList("folders", 5 * 60 * 1000), getLibraryFolders);
+router.get("/all", verifyToken, revalidateList, cacheList("library"), getAllLibraryMedia);
 router.post("/validate-name", verifyToken, validateMediaName);
-router.post("/upload", verifyToken, upload.single("media"), uploadMedia);
+router.post("/upload", verifyToken, invalidate("library"), upload.single("media"), uploadMedia);
 router.get("/:mediaId/download", verifyToken, downloadMedia);
 router.get("/:mediaId/thumbnail", verifyToken, getMediaThumbnail);
-router.delete("/:mediaId", verifyToken, deleteMedia);
+router.delete("/:mediaId", verifyToken, invalidate("library"), deleteMedia);
 
 export default router;

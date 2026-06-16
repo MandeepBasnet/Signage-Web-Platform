@@ -2,6 +2,7 @@ import express from "express";
 import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
 import { revalidateList } from "../middleware/cacheControl.js";
+import { cacheList, invalidate } from "../middleware/responseCache.js";
 import {
   getPlaylists,
   getPlaylistDetails,
@@ -30,10 +31,10 @@ const upload = multer({
 });
 
 // Playlist CRUD operations
-router.post("/", verifyToken, createPlaylist);
-router.get("/", verifyToken, revalidateList, getPlaylists);
+router.post("/", verifyToken, invalidate("playlists"), createPlaylist);
+router.get("/", verifyToken, revalidateList, cacheList("playlists"), getPlaylists);
 router.get("/:playlistId", verifyToken, getPlaylistDetails);
-router.delete("/:playlistId", verifyToken, deletePlaylist);
+router.delete("/:playlistId", verifyToken, invalidate("playlists"), deletePlaylist);
 
 // Media management for playlists
 router.post("/:playlistId/media", verifyToken, addMediaToPlaylist);
@@ -58,6 +59,7 @@ router.put(
 router.post(
   "/:playlistId/upload",
   verifyToken,
+  invalidate("library"),
   upload.single("media"),
   uploadMediaToPlaylist
 );
