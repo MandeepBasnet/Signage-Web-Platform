@@ -1,5 +1,6 @@
 import { fetchUserScopedCollection, handleControllerError, getUserContext } from "../utils/xiboDataHelpers.js";
 import { xiboRequest } from "../utils/xiboClient.js";
+import { createTtlCache } from "../utils/ttlCache.js";
 import axios from "axios";
 
 // Resolving a scheduled campaign to its layoutId hits `/layout?campaignId=` once
@@ -9,6 +10,13 @@ import axios from "axios";
 // campaign -> layout resolution is the same regardless of the requesting user.
 const CAMPAIGN_LAYOUT_TTL_MS = 5 * 60 * 1000;
 const campaignLayoutCache = new Map(); // campaignId -> { layoutId, expiresAt }
+
+// User group membership changes rarely, so cache the resolved
+// { canonicalUserId, userGroups } per requester to skip the /user call on warm
+// dashboard loads. Schedules change infrequently relative to dashboard
+// refreshes, so cache them briefly keyed by the set of display groups queried.
+const userContextCache = createTtlCache({ maxSize: 500, ttlMs: 5 * 60 * 1000 });
+const scheduleCache = createTtlCache({ maxSize: 200, ttlMs: 30 * 1000 });
 
 export const getDisplays = async (req, res) => {
   try {
@@ -20,53 +28,63 @@ export const getDisplays = async (req, res) => {
     const rawId = req.user.id;
     const idIsNumeric = rawId !== undefined && rawId !== null && !isNaN(Number(rawId));
 
-    // 1. Fetch User Details to get the canonical userId + Groups.
-    // Query by userId when we have a numeric one, otherwise by userName.
-    let userGroups = [];
-    let user = null;
-    let canonicalUserId = idIsNumeric ? Number(rawId) : null;
-    try {
-      const userQuery = idIsNumeric
-        ? `/user?userId=${rawId}&embed=groups`
-        : `/user?userName=${encodeURIComponent(req.user.username || rawId)}&embed=groups`;
+    // 1. Resolve the user's canonical id + groups. Cached (groups rarely change)
+    // and run CONCURRENTLY with the displays fetch below — neither depends on the
+    // other; only the filtering step needs both.
+    const userKey = idIsNumeric
+      ? `id:${rawId}`
+      : `name:${req.user.username || rawId}`;
+    const resolveUserContext = async () => {
+      const hit = userContextCache.get(userKey);
+      if (hit) return hit;
+      let userGroups = [];
+      let canonicalUserId = idIsNumeric ? Number(rawId) : null;
+      try {
+        const userQuery = idIsNumeric
+          ? `/user?userId=${rawId}&embed=groups`
+          : `/user?userName=${encodeURIComponent(req.user.username || rawId)}&embed=groups`;
+        const userDetails = await xiboRequest(userQuery, "GET");
 
-      const userDetails = await xiboRequest(userQuery, "GET");
+        let user = null;
+        if (Array.isArray(userDetails)) {
+          user = userDetails[0];
+        } else if (userDetails.data) {
+          user = Array.isArray(userDetails.data) ? userDetails.data[0] : userDetails.data;
+        } else {
+          user = userDetails;
+        }
 
-      if (Array.isArray(userDetails)) {
-        user = userDetails[0];
-      } else if (userDetails.data) {
-         user = Array.isArray(userDetails.data) ? userDetails.data[0] : userDetails.data;
-      } else {
-        user = userDetails;
+        if (user) {
+          // Trust the userId Xibo returns over whatever was in the JWT.
+          if (user.userId !== undefined && user.userId !== null) {
+            canonicalUserId = Number(user.userId);
+          }
+          if (user.groups) {
+            userGroups = user.groups.map((g) => g.group);
+          }
+          if (user.group) {
+            userGroups.push(user.group);
+          }
+        }
+      } catch (userError) {
+        console.error(`[getDisplays] Failed to fetch user details:`, userError.message);
+        return { canonicalUserId, userGroups }; // don't cache a failed lookup
       }
+      const ctx = { canonicalUserId, userGroups };
+      userContextCache.set(userKey, ctx);
+      return ctx;
+    };
 
-      if (user) {
-        // Trust the userId Xibo returns over whatever was in the JWT.
-        if (user.userId !== undefined && user.userId !== null) {
-          canonicalUserId = Number(user.userId);
-        }
-        if (user.groups) {
-          userGroups = user.groups.map(g => g.group);
-        }
-        if (user.group) {
-          userGroups.push(user.group);
-        }
-      }
-    } catch (userError) {
-      console.error(`[getDisplays] Failed to fetch user details:`, userError.message);
-    }
-
-    // 2. Fetch All Displays
+    // 2. Fetch user context and all displays concurrently (independent calls).
     const params = new URLSearchParams({
       start: 0,
       length: 1000,
-      embed: "status,currentLayout,displayGroup,groupsWithPermissions", 
+      embed: "status,currentLayout,displayGroup,groupsWithPermissions",
     });
-
-    const response = await xiboRequest(
-      `/display?${params.toString()}`, 
-      "GET"
-    );
+    const [{ canonicalUserId, userGroups }, response] = await Promise.all([
+      resolveUserContext(),
+      xiboRequest(`/display?${params.toString()}`, "GET"),
+    ]);
 
     let displays = [];
     if (Array.isArray(response)) {
@@ -103,17 +121,24 @@ export const getDisplays = async (req, res) => {
     let scheduledLayouts = [];
     if (uniqueGroupIds.length > 0) {
         try {
-            const scheduleParams = new URLSearchParams();
-            uniqueGroupIds.forEach(id => scheduleParams.append('displayGroupIds[]', id));
-            const scheduleResponse = await xiboRequest(`/schedule?${scheduleParams.toString()}`, 'GET');
-            
-            let events = [];
-            if (Array.isArray(scheduleResponse)) {
-                events = scheduleResponse;
-            } else if (scheduleResponse.data) {
-                events = scheduleResponse.data;
+            // Cache schedules briefly, keyed by the set of display groups queried.
+            const scheduleKey = [...uniqueGroupIds].sort((a, b) => a - b).join(",");
+            let events = scheduleCache.get(scheduleKey);
+            if (!events) {
+                const scheduleParams = new URLSearchParams();
+                uniqueGroupIds.forEach(id => scheduleParams.append('displayGroupIds[]', id));
+                const scheduleResponse = await xiboRequest(`/schedule?${scheduleParams.toString()}`, 'GET');
+
+                if (Array.isArray(scheduleResponse)) {
+                    events = scheduleResponse;
+                } else if (scheduleResponse.data) {
+                    events = scheduleResponse.data;
+                } else {
+                    events = [];
+                }
+                scheduleCache.set(scheduleKey, events);
             }
-            
+
             // Filter for Layouts (eventTypeId = 1)
             scheduledLayouts = events.filter(e => e.eventTypeId === 1);
 
