@@ -2,25 +2,28 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAuthHeaders } from "../utils/auth.js";
 
-import { API_BASE_URL } from "../config/api.js";
 import SearchBar from "./SearchBar.jsx";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
+import { useLayouts, PAGE_SIZE } from "../hooks/queries/useLayouts.js";
 
-const PAGE_SIZE = 20;
+const EMPTY_LAYOUTS = [];
 
 export default function LayoutContent() {
   const navigate = useNavigate();
-  const [layouts, setLayouts] = useState([]); // current page only
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(0);
-  const [refreshKey, setRefreshKey] = useState(0);
   const { thumbs, loadThumbnails } = useLayoutThumbnails();
+
+  // Cached, server-paginated layouts. Switching tabs and paging reuse the cache;
+  // keepPreviousData keeps rows on screen while the next page/search loads.
+  const { data, isLoading: loading, error, refetch } = useLayouts({
+    page,
+    search: debouncedSearch,
+  });
+  const layouts = data?.layouts ?? EMPTY_LAYOUTS;
+  const total = data?.total ?? 0;
 
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -34,41 +37,6 @@ export default function LayoutContent() {
   useEffect(() => {
     setPage(0);
   }, [debouncedSearch]);
-
-  // Fetch the current page from the server whenever the page, search, or an
-  // explicit refresh changes. The cancelled flag drops stale/out-of-order
-  // responses (paging fast, or while a search debounce settles).
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const params = new URLSearchParams({
-          start: String(page * PAGE_SIZE),
-          length: String(PAGE_SIZE),
-        });
-        if (debouncedSearch) params.append("search", debouncedSearch);
-        const res = await fetch(`${API_BASE_URL}/layouts?${params.toString()}`, {
-          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-        });
-        if (!res.ok) throw new Error(`Failed to fetch layouts: ${res.status}`);
-        const data = await res.json();
-        if (cancelled) return;
-        setLayouts(data?.data || []);
-        setTotal(Number(data?.total) || 0);
-      } catch (err) {
-        if (cancelled) return;
-        console.error("Error fetching layouts:", err);
-        setError(err.message || "Failed to load layouts");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [page, debouncedSearch, refreshKey]);
 
   // Lazy-load thumbnails for the rows currently on screen; cancel in-flight
   // fetches when the page changes.
@@ -130,9 +98,9 @@ export default function LayoutContent() {
     return (
       <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
         <p className="font-semibold">Error loading layouts</p>
-        <p>{error}</p>
+        <p>{error?.message || "Failed to load layouts"}</p>
         <button
-          onClick={() => setRefreshKey((k) => k + 1)}
+          onClick={() => refetch()}
           className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700"
         >
           Retry
@@ -158,7 +126,7 @@ export default function LayoutContent() {
             className="px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
           />
           <button
-            onClick={() => setRefreshKey((k) => k + 1)}
+            onClick={() => refetch()}
             className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
           >
             Refresh
