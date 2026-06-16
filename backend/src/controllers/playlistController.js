@@ -32,7 +32,7 @@ export const createPlaylist = async (req, res) => {
         `/playlist?${existingParams.toString()}`,
         "GET",
         null,
-        token
+        token,
       );
 
       // Handle different response formats
@@ -49,7 +49,7 @@ export const createPlaylist = async (req, res) => {
       // Check if any of user's playlists match this name (case-insensitive)
       nameExists = playlistList.some(
         (p) =>
-          p.name && p.name.trim().toLowerCase() === playlistName.toLowerCase()
+          p.name && p.name.trim().toLowerCase() === playlistName.toLowerCase(),
       );
 
       if (nameExists) {
@@ -58,7 +58,7 @@ export const createPlaylist = async (req, res) => {
         finalPlaylistName = `${playlistName}_${timestamp}`;
         nameWasChanged = true;
         console.log(
-          `Playlist name duplicate detected: "${playlistName}" → "${finalPlaylistName}"`
+          `Playlist name duplicate detected: "${playlistName}" → "${finalPlaylistName}"`,
         );
       }
     } catch (checkErr) {
@@ -88,7 +88,7 @@ export const createPlaylist = async (req, res) => {
       "/playlist",
       "POST",
       playlistData,
-      token
+      token,
     );
 
     // CRITICAL: Set ownership to authenticated user
@@ -107,13 +107,13 @@ export const createPlaylist = async (req, res) => {
           {
             ownerId: String(userId), // Transfer ownership to authenticated user
           },
-          token
+          token,
         );
         console.log(`Playlist ${playlistId} ownership set to user ${userId}`);
       } catch (ownershipErr) {
         console.warn(
           `Could not set ownership for playlist ${playlistId}:`,
-          ownershipErr.message
+          ownershipErr.message,
         );
         // Continue anyway - playlist is created even if ownership change fails
       }
@@ -193,19 +193,19 @@ export const getPlaylistDetails = async (req, res) => {
           `/playlist?${params.toString()}`,
           "GET",
           null,
-          token
+          token,
         );
       } catch (filterError) {
         // If filtering fails, get all playlists and find the one we need
         console.warn(
           "Filter search failed, fetching all playlists:",
-          filterError.message
+          filterError.message,
         );
         response = await xiboRequest(
           `/playlist?embed=${encodeURIComponent(EMBED_FIELDS)}`,
           "GET",
           null,
-          token
+          token,
         );
       }
 
@@ -224,7 +224,7 @@ export const getPlaylistDetails = async (req, res) => {
       // Find the playlist with matching ID
       playlist = playlists.find(
         (p) =>
-          String(p.playlistId || p.playlist_id || p.id) === String(playlistId)
+          String(p.playlistId || p.playlist_id || p.id) === String(playlistId),
       );
 
       if (!playlist) {
@@ -240,16 +240,19 @@ export const getPlaylistDetails = async (req, res) => {
     const mediaItems = [];
 
     console.log(
-      `Processing ${widgets.length} widgets for playlist ${playlistId}`
+      `Processing ${widgets.length} widgets for playlist ${playlistId}`,
     );
 
-    // Process widgets to extract media information
-    for (const widget of widgets) {
+    // Resolve a single widget into its media items (0, 1, or many). Each
+    // widget needs one Xibo call for its data; running these per-widget in a
+    // sequential loop was the N+1 bottleneck, so widgets are processed in
+    // bounded-concurrency batches below. Returns an array so ordering is
+    // preserved when the batch results are flattened.
+    const processWidget = async (widget) => {
+      const out = [];
       try {
         const widgetId = widget.widgetId || widget.id || widget.widget_id;
         const widgetType = widget.type || widget.widgetType || "";
-
-        console.log(`Processing widget ${widgetId} of type ${widgetType}`);
 
         // Helper function to extract mediaId from various structures
         const extractMediaId = (obj) => {
@@ -305,30 +308,21 @@ export const getPlaylistDetails = async (req, res) => {
         // First, check if widget itself has media info
         const directMediaId = extractMediaId(widget);
         if (directMediaId) {
-          console.log(
-            `Found direct mediaId ${directMediaId} in widget ${widgetId}`
-          );
           const mediaInfo = extractMediaInfo(widget, widget);
           if (mediaInfo) {
-            mediaItems.push(mediaInfo);
-            continue;
+            out.push(mediaInfo);
+            return out;
           }
         }
 
         // Always fetch widget data to get complete information
         if (widgetId) {
           try {
-            console.log(`Fetching widget data for widget ${widgetId}`);
             const widgetData = await xiboRequest(
               `/playlist/widget/data/${widgetId}`,
               "GET",
               null,
-              token
-            );
-
-            console.log(
-              `Widget data for ${widgetId}:`,
-              JSON.stringify(widgetData).substring(0, 200)
+              token,
             );
 
             // Extract media information from widget data
@@ -336,52 +330,39 @@ export const getPlaylistDetails = async (req, res) => {
               // Case 1: Widget data is a single object with mediaId
               const singleMediaId = extractMediaId(widgetData);
               if (singleMediaId) {
-                console.log(`Found mediaId ${singleMediaId} in widget data`);
                 const mediaInfo = extractMediaInfo(widgetData, widget);
                 if (mediaInfo) {
-                  mediaItems.push(mediaInfo);
-                  continue;
+                  out.push(mediaInfo);
+                  return out;
                 }
               }
 
               // Case 2: Widget data is an array
               if (Array.isArray(widgetData)) {
-                console.log(
-                  `Widget data is an array with ${widgetData.length} items`
-                );
-                widgetData.forEach((item, index) => {
+                widgetData.forEach((item) => {
                   const itemMediaId = extractMediaId(item);
                   if (itemMediaId) {
-                    console.log(
-                      `Found mediaId ${itemMediaId} in array item ${index}`
-                    );
                     const mediaInfo = extractMediaInfo(item, widget);
                     if (mediaInfo) {
-                      mediaItems.push(mediaInfo);
+                      out.push(mediaInfo);
                     }
                   }
                 });
-                continue;
+                return out;
               }
 
               // Case 3: Widget data has a data property that's an array
               if (widgetData.data && Array.isArray(widgetData.data)) {
-                console.log(
-                  `Widget data has data array with ${widgetData.data.length} items`
-                );
-                widgetData.data.forEach((item, index) => {
+                widgetData.data.forEach((item) => {
                   const itemMediaId = extractMediaId(item);
                   if (itemMediaId) {
-                    console.log(
-                      `Found mediaId ${itemMediaId} in data array item ${index}`
-                    );
                     const mediaInfo = extractMediaInfo(item, widget);
                     if (mediaInfo) {
-                      mediaItems.push(mediaInfo);
+                      out.push(mediaInfo);
                     }
                   }
                 });
-                continue;
+                return out;
               }
 
               // Case 4: Widget data has nested structures
@@ -392,33 +373,36 @@ export const getPlaylistDetails = async (req, res) => {
                 widgetData.item?.mediaId ||
                 widgetData.item?.media_id;
               if (nestedMediaId) {
-                console.log(`Found nested mediaId ${nestedMediaId}`);
                 const mediaInfo = extractMediaInfo(widgetData, widget);
                 if (mediaInfo) {
-                  mediaItems.push(mediaInfo);
-                  continue;
+                  out.push(mediaInfo);
+                  return out;
                 }
               }
 
               console.warn(
-                `Could not extract mediaId from widget data for widget ${widgetId}`
+                `Could not extract mediaId from widget data for widget ${widgetId}`,
               );
             }
           } catch (widgetDataError) {
             // Suppress 405 Method Not Allowed errors as some widgets don't support data retrieval
-            if (widgetDataError.message && widgetDataError.message.includes('405')) {
-                console.log(`Widget ${widgetId} does not support data retrieval (405). Using basic info.`);
+            if (
+              widgetDataError.message &&
+              widgetDataError.message.includes("405")
+            ) {
+              console.log(
+                `Widget ${widgetId} does not support data retrieval (405). Using basic info.`,
+              );
             } else {
-                console.warn(
+              console.warn(
                 `Could not fetch data for widget ${widgetId}:`,
-                widgetDataError.message
-                );
+                widgetDataError.message,
+              );
             }
-            
+
             // If widget data fetch fails but widget has basic info, include it
             if (widget.name || widget.type) {
-              // console.log(`Including widget ${widgetId} with basic info`);
-              mediaItems.push({
+              out.push({
                 ...widget,
                 widgetId: widgetId,
                 widgetType: widgetType,
@@ -432,10 +416,21 @@ export const getPlaylistDetails = async (req, res) => {
         console.warn(`Error processing widget:`, widgetError.message);
         // Continue processing other widgets
       }
+      return out;
+    };
+
+    // Process widgets in bounded-concurrency batches (was a sequential N+1
+    // loop). Order is preserved: batches run in sequence and each batch's
+    // results are flattened in widget order.
+    const WIDGET_FETCH_CONCURRENCY = 20;
+    for (let i = 0; i < widgets.length; i += WIDGET_FETCH_CONCURRENCY) {
+      const batch = widgets.slice(i, i + WIDGET_FETCH_CONCURRENCY);
+      const batchResults = await Promise.all(batch.map(processWidget));
+      for (const items of batchResults) mediaItems.push(...items);
     }
 
     console.log(
-      `Extracted ${mediaItems.length} media items from ${widgets.length} widgets`
+      `Extracted ${mediaItems.length} media items from ${widgets.length} widgets`,
     );
 
     res.json({
@@ -474,7 +469,7 @@ export const updatePlaylistWidgetItemExpiry = async (req, res) => {
 
     console.log(
       `Updating expiry for widget ${widgetId} in playlist ${playlistId}`,
-      { fromDt, toDt, deleteOnExpiry }
+      { fromDt, toDt, deleteOnExpiry },
     );
 
     const updateData = {};
@@ -487,7 +482,7 @@ export const updatePlaylistWidgetItemExpiry = async (req, res) => {
       `/playlist/widget/${widgetId}/expiry`,
       "PUT",
       updateData,
-      token
+      token,
     );
 
     res.json({
