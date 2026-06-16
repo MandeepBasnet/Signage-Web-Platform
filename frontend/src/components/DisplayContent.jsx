@@ -1,60 +1,30 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
+import { useDisplays } from "../hooks/queries/useDisplays.js";
 
 export default function DisplayContent() {
   const navigate = useNavigate();
-  const [displays, setDisplays] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  // Displays come from the React Query cache, so switching tabs and returning
+  // reuses the data instead of re-fetching. `fetchDisplays` (refetch) is still
+  // wired to the Retry/Refresh buttons for an explicit reload. Thumbnails are
+  // preloaded lazily when a display row is expanded (see toggleExpand).
+  const {
+    data: displays = [],
+    isLoading: loading,
+    error,
+    refetch: fetchDisplays,
+  } = useDisplays();
   const { thumbs: layoutThumbs, loadThumbnails } = useLayoutThumbnails();
   const [expandedId, setExpandedId] = useState(null);
 
   // Checkout Layout State
   const [checkingOut, setCheckingOut] = useState(false);
-
-  useEffect(() => {
-    fetchDisplays();
-  }, []);
-
-  const fetchDisplays = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await fetch(`${API_BASE_URL}/displays`, {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message || `Failed to fetch displays: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      const fetchedDisplays = data?.data || [];
-      setDisplays(fetchedDisplays);
-      // Thumbnails are now preloaded lazily when a display row is expanded
-      // (see toggleExpand) to avoid fetching every layout thumbnail up front.
-
-    } catch (err) {
-      console.error("Error fetching displays:", err);
-      setError(err.message || "Failed to load displays");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getThumbnailUrl = (layoutId) => {
     if (!layoutId) return null;
@@ -260,7 +230,7 @@ export default function DisplayContent() {
     return (
       <div className="p-4 bg-red-50 border border-red-200 rounded-md text-red-700">
         <p className="font-semibold">Error loading displays</p>
-        <p>{error}</p>
+        <p>{error?.message || "Failed to load displays"}</p>
         <button
           onClick={fetchDisplays}
           className="mt-2 px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
