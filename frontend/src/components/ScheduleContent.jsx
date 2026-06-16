@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "../utils/auth.js";
 import DatePicker from "./DatePicker.jsx";
 
 import { API_BASE_URL } from "../config/api.js";
+import { useSchedule } from "../hooks/queries/useSchedule.js";
+import { useScheduleOptions } from "../hooks/queries/useScheduleOptions.js";
 
 // datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
 const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");
@@ -21,23 +24,16 @@ const toLocalInput = (value) => {
   )}:${p(d.getMinutes())}`;
 };
 
-const pickArray = (data) =>
-  Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+const EMPTY_ARRAY = [];
 
 export default function ScheduleContent() {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
   // Add/edit modal state
   const [showAdd, setShowAdd] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null); // null = create mode
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
-
-  const [playlists, setPlaylists] = useState([]);
-  const [layouts, setLayouts] = useState([]);
-  const [displayGroups, setDisplayGroups] = useState([]);
 
   const [contentType, setContentType] = useState("playlist"); // 'playlist' | 'layout'
   const [contentId, setContentId] = useState("");
@@ -55,42 +51,21 @@ export default function ScheduleContent() {
     () => new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0]
   );
 
-  useEffect(() => {
-    fetchSchedule();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangeFrom, rangeTo]);
+  // Cached schedule events for the selected range (refetches when range changes).
+  const {
+    data: events = EMPTY_ARRAY,
+    isLoading: loading,
+    error,
+    refetch: refetchSchedule,
+  } = useSchedule({ from: rangeFrom, to: rangeTo });
 
-  const fetchSchedule = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  // Picker lists, loaded (and cached) while the Add/Edit modal is open.
+  const { data: options, error: optionsError } = useScheduleOptions(showAdd);
+  const playlists = options?.playlists ?? EMPTY_ARRAY;
+  const layouts = options?.layouts ?? EMPTY_ARRAY;
+  const displayGroups = options?.displayGroups ?? EMPTY_ARRAY;
 
-      const from = `${rangeFrom} 00:00:00`;
-      const to = `${rangeTo} 23:59:59`;
-
-      const response = await fetch(
-        `${API_BASE_URL}/schedule?fromDt=${from}&toDt=${to}`,
-        { method: "GET", headers: { ...getAuthHeaders() } }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message || `Failed to fetch schedule: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      setEvents(data?.data || []);
-    } catch (err) {
-      console.error("Error fetching schedule:", err);
-      setError(err.message || "Failed to load schedule");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const openAddModal = async (event = null) => {
+  const openAddModal = (event = null) => {
     setFormError(null);
     setShowAdd(true);
     // Start the content picker fresh ("" = pick for create / keep-current for edit).
@@ -116,22 +91,8 @@ export default function ScheduleContent() {
       setEditingEvent(null);
     }
 
-    // Load the pickers (best-effort; each independent)
-    try {
-      const [plRes, loRes, dgRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/playlists`, { headers: { ...getAuthHeaders() } }),
-        fetch(`${API_BASE_URL}/layouts`, { headers: { ...getAuthHeaders() } }),
-        fetch(`${API_BASE_URL}/schedule/display-groups`, {
-          headers: { ...getAuthHeaders() },
-        }),
-      ]);
-      setPlaylists(pickArray(await plRes.json().catch(() => ({}))));
-      setLayouts(pickArray(await loRes.json().catch(() => ({}))));
-      setDisplayGroups(pickArray(await dgRes.json().catch(() => ({}))));
-    } catch (err) {
-      console.error("Error loading schedule pickers:", err);
-      setFormError("Failed to load playlists / layouts / display groups.");
-    }
+    // Picker lists are loaded by useScheduleOptions (enabled while the modal is
+    // open) and cached across opens.
   };
 
   const closeAddModal = () => {
@@ -232,7 +193,7 @@ export default function ScheduleContent() {
       }
 
       closeAddModal();
-      fetchSchedule();
+      refetchSchedule();
     } catch (err) {
       console.error("Error saving schedule event:", err);
       setFormError(err.message || "Failed to save schedule event");
@@ -253,7 +214,9 @@ export default function ScheduleContent() {
       if (!response.ok && response.status !== 204) {
         throw new Error(`Failed to delete event: ${response.status}`);
       }
-      setEvents((prev) => prev.filter((ev) => ev.eventId !== eventId));
+      queryClient.setQueryData(["schedule", rangeFrom, rangeTo], (old) =>
+        (old || []).filter((ev) => ev.eventId !== eventId)
+      );
     } catch (err) {
       console.error("Error deleting schedule event:", err);
       alert(err.message || "Failed to delete event");
@@ -306,7 +269,7 @@ export default function ScheduleContent() {
               Add Event
             </button>
             <button
-              onClick={fetchSchedule}
+              onClick={() => refetchSchedule()}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
             >
               Refresh
@@ -316,7 +279,7 @@ export default function ScheduleContent() {
 
         {error ? (
           <div className="text-center py-12 text-red-600">
-            <p>{error}</p>
+            <p>{error?.message || "Failed to load schedule"}</p>
           </div>
         ) : events.length === 0 ? (
           <div className="text-center py-12">
@@ -528,9 +491,10 @@ export default function ScheduleContent() {
                 High priority
               </label>
 
-              {formError && (
+              {(formError || optionsError) && (
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {formError}
+                  {formError ||
+                    "Failed to load playlists / layouts / display groups."}
                 </div>
               )}
 
