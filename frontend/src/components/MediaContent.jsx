@@ -1,7 +1,8 @@
 /* eslint-disable no-unused-vars */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -12,33 +13,49 @@ import {
   getMediaIcon,
   formatFileSize,
 } from "../utils/mediaTypes.js";
-import { flattenFolders } from "../utils/folderUtils.js";
 import SearchBar from "./SearchBar.jsx";
 import MediaPreviewModal from "./MediaPreviewModal";
 import UploadMediaModal from "./UploadMediaModal.jsx";
+import { useFolders } from "../hooks/queries/useFolders.js";
+import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
+
+const EMPTY_ARRAY = [];
 
 export default function MediaContent() {
-  const [media, setMedia] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [mediaUrls, setMediaUrls] = useState(new Map());
+  const queryClient = useQueryClient();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [folderOptions, setFolderOptions] = useState([]);
-  const [foldersLoading, setFoldersLoading] = useState(false);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [refreshKey, setRefreshKey] = useState(0);
-  const requestRef = useRef(0);
   // Selected library folder (per-user library). null = not resolved yet.
   const [libraryFolder, setLibraryFolder] = useState(null);
-  const ITEMS_PER_PAGE = 8;
 
   // Preview state
   const [previewMedia, setPreviewMedia] = useState(null);
+
+  // Folder list + home folder (cached); resolves the default folder view below.
+  const {
+    data: foldersData,
+    isFetching: foldersLoading,
+    isError: foldersError,
+    refetch: refetchFolders,
+  } = useFolders();
+  const folderOptions = foldersData?.folders ?? EMPTY_ARRAY;
+
+  // Cached, server-paginated media for the selected folder/search. Gated until
+  // the default folder is resolved (libraryFolder !== null).
+  const {
+    data: mediaData,
+    isLoading: loading,
+    error,
+  } = useMedia(
+    { folder: libraryFolder, page: currentPage, search: debouncedSearch },
+    { enabled: libraryFolder !== null }
+  );
+  const media = mediaData?.media ?? EMPTY_ARRAY;
+  const total = mediaData?.total ?? 0;
 
   // Helper functions
   const getMediaId = (item) => {
@@ -56,28 +73,39 @@ export default function MediaContent() {
     });
   };
 
-  // On mount: load the folder list, which also resolves the user's home folder
-  // and sets the default library view (see fetchFolders).
-  useEffect(() => {
-    fetchFolders();
+  // Thumbnail URLs for the current page's images/videos, derived from the media
+  // list (no separate state to keep in sync).
+  const mediaUrls = useMemo(() => {
+    const map = new Map();
+    const token = localStorage.getItem("auth_token");
+    for (const item of media) {
+      const mediaId = item.mediaId || item.media_id || item.id;
+      if (!mediaId) continue;
+      const mediaType = item.mediaType || item.type || "";
+      if (isImage(mediaType) || isVideo(mediaType)) {
+        map.set(
+          mediaId,
+          `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
+        );
+      }
+    }
+    return map;
+  }, [media]);
 
-    // Cleanup: revoke object URLs when component unmounts
-    return () => {
-      mediaUrls.forEach((url) => {
-        if (url.startsWith("blob:")) {
-          URL.revokeObjectURL(url);
-        }
-      });
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Fetch the current page whenever folder, page, debounced search, or an
-  // explicit refresh changes.
+  // Resolve the default folder once folders load (or fall back to "all" on
+  // error). Treat root ("1") as "All folders". Don't override a user choice.
   useEffect(() => {
-    if (libraryFolder !== null) fetchMedia();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libraryFolder, currentPage, debouncedSearch, refreshKey]);
+    if (libraryFolder !== null) return;
+    if (foldersData) {
+      const home =
+        foldersData.homeFolderId != null
+          ? String(foldersData.homeFolderId)
+          : null;
+      setLibraryFolder(home && home !== "1" ? home : "all");
+    } else if (foldersError) {
+      setLibraryFolder("all");
+    }
+  }, [foldersData, foldersError, libraryFolder]);
 
   // Debounce the search box — searching is done server-side.
   useEffect(() => {
@@ -90,132 +118,17 @@ export default function MediaContent() {
     setCurrentPage(1);
   }, [debouncedSearch, libraryFolder]);
 
-  const fetchMedia = async (
-    folderId = libraryFolder,
-    pageArg = currentPage,
-    searchArg = debouncedSearch
-  ) => {
-    const reqId = ++requestRef.current;
-    try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams({
-        start: String((pageArg - 1) * ITEMS_PER_PAGE),
-        length: String(ITEMS_PER_PAGE),
-      });
-      if (folderId && folderId !== "all") params.append("folderId", folderId);
-      if (searchArg) params.append("search", searchArg);
-
-      const response = await fetch(
-        `${API_BASE_URL}/library?${params.toString()}`,
-        {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message || `Failed to fetch media: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      if (reqId !== requestRef.current) return; // superseded by a newer request
-      const mediaItems = data?.data || [];
-      setMedia(mediaItems);
-      setTotal(Number(data?.total) || 0);
-
-      // Pre-fetch media URLs for images/videos/audio
-      const urlMap = new Map();
-
-      for (const item of mediaItems) {
-        const mediaId = getMediaId(item);
-        if (mediaId) {
-          const mediaType = item.mediaType || item.type || "";
-          const isImageType = isImage(mediaType);
-          const isVideoType = isVideo(mediaType);
-          const isAudioType = isAudio(mediaType);
-
-          // Use the new thumbnail endpoint for previews
-          if (isImageType || isVideoType) {
-            // For images and videos, use the thumbnail endpoint with query param token
-            // This allows the browser to handle caching and parallel loading
-            const token = localStorage.getItem("auth_token"); // Correct key from auth.js
-            urlMap.set(
-              mediaId,
-              `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
-            );
-          } else if (isAudioType) {
-            // For audio, we might still want the download URL or a specific icon
-            // Keeping download URL for audio for now if it's used for playback
-            // But for previewing in a grid, we usually just show an icon.
-            // If there's a waveform thumbnail, we could use that.
-            // For now, let's stick to the pattern but maybe just use the icon logic in render.
-          }
-        }
-      }
-
-      setMediaUrls(urlMap);
-    } catch (err) {
-      if (reqId !== requestRef.current) return;
-      console.error("Error fetching media:", err);
-      setError(err.message || "Failed to load media");
-    } finally {
-      if (reqId === requestRef.current) setLoading(false);
-    }
-  };
-
-  // Reload from the first page (after upload/delete or an explicit refresh).
+  // Reload from the first page after upload/delete or an explicit refresh:
+  // invalidate the cached media pages so they refetch.
   const reloadMedia = () => {
     setCurrentPage(1);
-    setRefreshKey((k) => k + 1);
-  };
-
-  const fetchFolders = async () => {
-    try {
-      setFoldersLoading(true);
-      const response = await fetch(`${API_BASE_URL}/library/folders`, {
-        headers: {
-          ...getAuthHeaders(),
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData?.message || `Failed to fetch folders: ${response.status}`
-        );
-      }
-
-      const data = await response.json();
-      const flat = flattenFolders(data?.folders || []);
-      setFolderOptions(flat);
-      // Default the library view to the user's home folder; treat root ("1") as
-      // "All folders". Only set if not already chosen (don't override the user).
-      const home =
-        data?.homeFolderId != null ? String(data.homeFolderId) : null;
-      setLibraryFolder((prev) =>
-        prev ?? (home && home !== "1" ? home : "all")
-      );
-    } catch (err) {
-      console.error("Error fetching folders:", err);
-      // Don't block the library if folders fail — show everything.
-      setLibraryFolder((prev) => prev ?? "all");
-    } finally {
-      setFoldersLoading(false);
-    }
+    queryClient.invalidateQueries({ queryKey: ["media"] });
   };
 
   const openUploadModal = () => {
     setIsUploadOpen(true);
     if (!folderOptions.length) {
-      fetchFolders();
+      refetchFolders();
     }
   };
 
@@ -284,8 +197,9 @@ export default function MediaContent() {
   };
 
   // Only take over the whole panel on the first load; paging/searching keeps the
-  // existing rows visible until the next page arrives (no spinner flash).
-  if (loading && media.length === 0) {
+  // existing rows visible until the next page arrives (no spinner flash). Treat
+  // the pre-resolution window (default folder not picked yet) as loading too.
+  if ((loading || libraryFolder === null) && media.length === 0) {
     return (
       <section className="flex flex-col gap-5 relative p-4">
         <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
@@ -308,7 +222,7 @@ export default function MediaContent() {
             <span className="text-2xl">⚠️</span>
             <div>
               <h3 className="font-semibold text-red-800 mb-1">Error</h3>
-              <p className="text-red-700">{error}</p>
+              <p className="text-red-700">{error?.message || "Failed to load media"}</p>
             </div>
           </div>
           <button
@@ -599,7 +513,7 @@ export default function MediaContent() {
           onClose={() => setIsUploadOpen(false)}
           folderOptions={folderOptions}
           foldersLoading={foldersLoading}
-          onRefreshFolders={fetchFolders}
+          onRefreshFolders={refetchFolders}
           onUploaded={handleUploaded}
         />
       )}
