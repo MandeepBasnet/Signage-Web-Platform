@@ -3,6 +3,7 @@ import FormData from "form-data";
 import qs from "qs";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
+import { timedXibo } from "./perf.js";
 let token = null;
 let tokenPromise = null; // shared in-flight auth request (prevents stampedes)
 
@@ -382,9 +383,11 @@ export async function getUserInfo(accessToken) {
 // { data, total }; falls back to data.length when the header is absent.
 export async function xiboGetWithCount(endpoint, userToken = null) {
   const accessToken = userToken || (await getAccessToken());
-  const res = await axios.get(`${process.env.XIBO_API_URL}${endpoint}`, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const res = await timedXibo(() =>
+    axios.get(`${process.env.XIBO_API_URL}${endpoint}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+  );
   const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
   const total = Number(res.headers["x-total-count"]);
   return { data, total: Number.isFinite(total) ? total : data.length };
@@ -447,7 +450,7 @@ export async function xiboRequest(
       dataKeys: data ? Object.keys(data) : null,
       headers: Object.keys(requestConfig.headers),
     });
-    const res = await axios(requestConfig);
+    const res = await timedXibo(() => axios(requestConfig));
     return res.data;
   } catch (err) {
     // Retry on 401 Unauthorized
@@ -464,7 +467,7 @@ export async function xiboRequest(
         // Update header with new token
         requestConfig.headers.Authorization = `Bearer ${freshToken}`;
 
-        const retryRes = await axios(requestConfig);
+        const retryRes = await timedXibo(() => axios(requestConfig));
         return retryRes.data;
       } catch (retryErr) {
         console.error(

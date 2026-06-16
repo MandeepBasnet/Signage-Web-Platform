@@ -13,12 +13,17 @@ import scheduleRoutes from "./routes/scheduleRoutes.js";
 import regionRoutes from "./routes/regionRoutes.js";
 import widgetRoutes from "./routes/widgetRoutes.js";
 import xiboProxyRoutes from "./routes/xiboProxyRoutes.js";
+import { perfMiddleware } from "./middleware/perfMiddleware.js";
 
 dotenv.config();
 
 const app = express();
 
 const isDev = process.env.NODE_ENV !== "production";
+
+// Phase 0 instrumentation — record total time + Xibo upstream calls per request.
+// Placed first so totalMs covers the full request lifecycle.
+app.use(perfMiddleware);
 
 // Debug middleware BEFORE body parsing (dev only — avoids per-request logging in prod)
 if (isDev) {
