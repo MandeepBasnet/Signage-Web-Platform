@@ -1,91 +1,66 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import AddRowModal from "./AddRowModal";
 
 import { API_BASE_URL } from "../config/api.js";
+import { useDatasets } from "../hooks/queries/useDatasets.js";
+import { useDatasetColumns } from "../hooks/queries/useDatasetColumns.js";
+import { useDatasetRows } from "../hooks/queries/useDatasetRows.js";
+
+const EMPTY_ARRAY = [];
 
 export default function DatasetContent() {
   const [view, setView] = useState("list"); // 'list' or 'details'
-  const [datasets, setDatasets] = useState([]);
   const [selectedDataset, setSelectedDataset] = useState(null);
-  const [columns, setColumns] = useState([]);
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Fetch Datasets on Mount
-  useEffect(() => {
-    fetchDatasets();
-  }, []);
+  // Cached datasets list.
+  const {
+    data: datasets = EMPTY_ARRAY,
+    isLoading: datasetsLoading,
+    error: datasetsError,
+  } = useDatasets();
 
-  const fetchDatasets = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem("auth_token");
+  // Detail (columns + rows) for the selected dataset; both queries are enabled
+  // only when a dataset is selected and cached per id. Mutations refetch rows.
+  const dataSetId = selectedDataset?.dataSetId;
+  const {
+    data: columns = EMPTY_ARRAY,
+    isLoading: columnsLoading,
+    error: columnsError,
+  } = useDatasetColumns(dataSetId);
+  const {
+    data: rows = EMPTY_ARRAY,
+    isLoading: rowsLoading,
+    error: rowsError,
+    refetch: refetchRows,
+  } = useDatasetRows(dataSetId);
 
-      const response = await fetch(`${API_BASE_URL}/datasets`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!response.ok) throw new Error("Failed to fetch datasets");
-      const data = await response.json();
-      // Xibo returns { data: [...] } for lists
-      setDatasets(data.data || []);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const detailLoading = columnsLoading || rowsLoading;
+  const error = view === "list" ? datasetsError : columnsError || rowsError;
 
-  const handleDatasetClick = async (dataset) => {
+  const handleDatasetClick = (dataset) => {
     setSelectedDataset(dataset);
     setView("details");
-    setLoading(true);
-    setError(null);
-    try {
-      const token = localStorage.getItem("auth_token");
-      
-      // Fetch Columns
-      const colResponse = await fetch(`${API_BASE_URL}/datasets/${dataset.dataSetId}/column`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const colData = await colResponse.json();
-      setColumns(colData.data || []);
-
-      // Fetch Data
-      const dataResponse = await fetch(`${API_BASE_URL}/datasets/data/${dataset.dataSetId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const rowData = await dataResponse.json();
-      setRows(rowData.data || []);
-
-    } catch (err) {
-      setError("Failed to load dataset details");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleAddRow = async (formData) => {
     const token = localStorage.getItem("auth_token");
-    const response = await fetch(`${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams(formData),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams(formData),
+      }
+    );
 
     if (!response.ok) throw new Error("Failed to add row");
-    
-    // Refresh data
-    const dataResponse = await fetch(`${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const rowData = await dataResponse.json();
-    setRows(rowData.data || []);
+
+    // Refresh the rows
+    await refetchRows();
   };
 
   const handleDeleteRow = async (rowId) => {
@@ -93,19 +68,18 @@ export default function DatasetContent() {
 
     try {
       const token = localStorage.getItem("auth_token");
-      const response = await fetch(`${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}/${rowId}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}/${rowId}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
       if (!response.ok) throw new Error("Failed to delete row");
 
-      // Refresh data
-      const dataResponse = await fetch(`${API_BASE_URL}/datasets/data/${selectedDataset.dataSetId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const rowData = await dataResponse.json();
-      setRows(rowData.data || []);
+      // Refresh the rows
+      await refetchRows();
     } catch (err) {
       alert("Failed to delete row: " + err.message);
     }
@@ -114,12 +88,9 @@ export default function DatasetContent() {
   const handleBack = () => {
     setView("list");
     setSelectedDataset(null);
-    setColumns([]);
-    setRows([]);
-    setError(null);
   };
 
-  if (loading && view === "list" && datasets.length === 0) {
+  if (datasetsLoading && view === "list" && datasets.length === 0) {
     return <div className="p-8 text-center text-gray-500">Loading datasets...</div>;
   }
 
@@ -127,7 +98,7 @@ export default function DatasetContent() {
     <div className="p-6 h-full flex flex-col">
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-          {error}
+          {error.message || "Something went wrong"}
         </div>
       )}
 
@@ -155,7 +126,7 @@ export default function DatasetContent() {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{ds.code}</td>
                   </tr>
                 ))}
-                {datasets.length === 0 && !loading && (
+                {datasets.length === 0 && !datasetsLoading && (
                   <tr>
                     <td colSpan="3" className="px-6 py-8 text-center text-gray-500">No datasets found.</td>
                   </tr>
@@ -184,7 +155,7 @@ export default function DatasetContent() {
             </button>
           </div>
 
-          {loading ? (
+          {detailLoading ? (
              <div className="p-8 text-center text-gray-500">Loading data...</div>
           ) : (
             <div className="bg-white rounded-lg shadow overflow-x-auto">
