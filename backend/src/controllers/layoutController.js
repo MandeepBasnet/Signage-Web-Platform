@@ -19,11 +19,12 @@ import { createTtlCache } from "../utils/ttlCache.js";
 import { createDiskThumbCache } from "../utils/diskThumbCache.js";
 
 // Persistent (disk-backed) cache for layout thumbnails so we rarely re-hit the
-// slow Xibo web UI — and never re-pay it after a restart/deploy. 1-hour TTL;
-// bust on republish to refresh sooner (Step 2). See utils/diskThumbCache.
+// slow Xibo web UI — and never re-pay it after a restart/deploy. 6-hour TTL:
+// in-app publishes bust the entry immediately (see publishLayout), so the TTL
+// only bounds out-of-band edits made directly in the Xibo CMS. See diskThumbCache.
 const layoutThumbCache = createDiskThumbCache({
   dir: path.join(process.cwd(), ".cache", "thumbnails", "layout"),
-  ttlMs: 60 * 60 * 1000,
+  ttlMs: 6 * 60 * 60 * 1000,
 });
 
 // Negative cache for the per-parent "has an open draft?" lookup that runs on
@@ -116,6 +117,11 @@ export const publishLayout = async (req, res) => {
       req.body,
       token
     );
+
+    // The published layout's content (and thus its thumbnail) just changed —
+    // drop the cached thumbnail (memory + disk) so the next request regenerates
+    // it from Xibo instead of serving the stale pre-publish image.
+    layoutThumbCache.delete(String(layoutId));
 
     res.json(result);
   } catch (err) {
