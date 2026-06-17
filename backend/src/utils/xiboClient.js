@@ -4,6 +4,12 @@ import qs from "qs";
 import { wrapper } from "axios-cookiejar-support";
 import { CookieJar } from "tough-cookie";
 import { timedXibo } from "./perf.js";
+
+// Cap Xibo API calls so a hung/slow upstream returns an error instead of holding
+// a request (and a server worker) open indefinitely. Streaming web-session/proxy
+// calls deliberately don't use this.
+const XIBO_TIMEOUT_MS = 30000;
+
 let token = null;
 let tokenPromise = null; // shared in-flight auth request (prevents stampedes)
 
@@ -294,6 +300,7 @@ export async function xiboGetWithCount(endpoint, userToken = null) {
   const res = await timedXibo(() =>
     axios.get(`${process.env.XIBO_API_URL}${endpoint}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      timeout: XIBO_TIMEOUT_MS,
     })
   );
   const data = Array.isArray(res.data) ? res.data : res.data?.data || [];
@@ -317,6 +324,7 @@ export async function xiboRequest(
   let requestConfig = {
     method,
     url: `${process.env.XIBO_API_URL}${endpoint}`,
+    timeout: XIBO_TIMEOUT_MS,
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...customHeaders,
