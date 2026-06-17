@@ -88,10 +88,15 @@ app.use(
 // Gzip-compress responses (large library/dataset JSON payloads)
 app.use(compression());
 
-// ✅ Multer middleware for multipart/form-data (FormData API)
-// This handles form data without file uploads
-const upload = multer();
-app.use(upload.none()); // Parse form fields only (no files)
+// Parse multipart form FIELDS (no files) for FormData requests that don't
+// upload a file (e.g. schedule create). The file-upload routes have their own
+// multer, so skip them here — otherwise multer().none() rejects the file part
+// as "Unexpected field" before the route ever sees it.
+const formFields = multer().none();
+app.use((req, res, next) => {
+  if (req.path.endsWith("/upload")) return next();
+  return formFields(req, res, next);
+});
 
 // Body parsing middleware with error handling
 app.use(express.json({ limit: "10mb" }));
