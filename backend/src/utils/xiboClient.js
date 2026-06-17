@@ -32,11 +32,11 @@ async function fetchAccessToken() {
   formData.append("client_secret", process.env.XIBO_CLIENT_SECRET);
   formData.append("grant_type", "client_credentials");
 
-  console.log(`[xiboClient] Authenticating with:`);
-  console.log(`  - URL: ${process.env.XIBO_API_URL}/authorize/access_token`);
-  console.log(`  - Client ID: ${process.env.XIBO_CLIENT_ID}`);
+  // Don't log the client id/secret (reconnaissance value). Show only a short
+  // prefix to help correlate which credentials are in use.
+  const clientIdHint = (process.env.XIBO_CLIENT_ID || "").slice(0, 6);
   console.log(
-    `  - Client Secret length: ${process.env.XIBO_CLIENT_SECRET?.length || 0}`
+    `[xiboClient] Authenticating to ${process.env.XIBO_API_URL}/authorize/access_token (client ${clientIdHint}…)`
   );
 
   try {

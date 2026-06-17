@@ -31,19 +31,25 @@ const app = express();
 app.set("trust proxy", 1);
 
 const isDev = process.env.NODE_ENV !== "production";
+// Verbose per-request logging is OFF by default (even in dev) and never logs
+// secrets. Opt in with DEBUG_HTTP=true; sensitive values are still redacted.
+const debugHttp = process.env.DEBUG_HTTP === "true";
 
 // Phase 0 instrumentation — record total time + Xibo upstream calls per request.
 // Placed first so totalMs covers the full request lifecycle.
 app.use(perfMiddleware);
 
-// Debug middleware BEFORE body parsing (dev only — avoids per-request logging in prod)
-if (isDev) {
+// Debug middleware BEFORE body parsing (opt-in; Authorization/Cookie redacted)
+if (debugHttp) {
   app.use((req, res, next) => {
     if (req.method === "POST" || req.method === "PUT") {
+      const safeHeaders = { ...req.headers };
+      if (safeHeaders.authorization) safeHeaders.authorization = "[REDACTED]";
+      if (safeHeaders.cookie) safeHeaders.cookie = "[REDACTED]";
       console.log("\n=== INCOMING REQUEST ===");
       console.log(`${req.method} ${req.path}`);
       console.log("Content-Type:", req.headers["content-type"]);
-      console.log("All headers:", JSON.stringify(req.headers, null, 2));
+      console.log("Headers:", JSON.stringify(safeHeaders, null, 2));
     }
     next();
   });
@@ -102,13 +108,16 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Debug middleware AFTER body parsing (dev only)
-if (isDev) {
+// Debug middleware AFTER body parsing (opt-in; secret fields redacted)
+if (debugHttp) {
+  const SECRET_FIELDS = ["password", "secret", "clientSecret", "token"];
   app.use((req, res, next) => {
     if (req.method === "POST" || req.method === "PUT") {
-      console.log("Body after parsing:", req.body);
-      console.log("Body type:", typeof req.body);
-      console.log("Body is object:", typeof req.body === "object");
+      const safeBody = { ...req.body };
+      for (const k of SECRET_FIELDS) {
+        if (safeBody[k] !== undefined) safeBody[k] = "[REDACTED]";
+      }
+      console.log("Body after parsing:", safeBody);
       console.log("===================\n");
     }
     next();
