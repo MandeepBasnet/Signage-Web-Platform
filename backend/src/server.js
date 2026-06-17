@@ -138,6 +138,18 @@ app.use("/api/regions", regionRoutes);
 app.use("/api/widgets", widgetRoutes);
 app.use("/api/xibo-web", xiboProxyRoutes);
 
+// Surface upload validation failures (multer size limit / disallowed MIME type)
+// as clean 400s instead of a generic 500.
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: `Upload error: ${err.message}` });
+  }
+  if (err && /Unsupported file type/i.test(err.message || "")) {
+    return res.status(400).json({ message: err.message });
+  }
+  next(err);
+});
+
 
 
 app.listen(process.env.PORT, () =>

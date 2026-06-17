@@ -1,5 +1,6 @@
 import axios from "axios";
 import FormData from "form-data";
+import path from "node:path";
 import {
   handleControllerError,
   getUserContext,
@@ -349,7 +350,9 @@ export const uploadMediaToPlaylist = async (req, res) => {
     const { checkMediaNameAvailability, ensureExtension, updateMediaName } =
       await import("./libraryController.js");
 
-    // 1. Prepare Name
+    // 1. Prepare Name. Strip any path components from the client filename
+    // (sanitizes every downstream use of file.originalname).
+    if (file?.originalname) file.originalname = path.basename(file.originalname);
     let requestedName = file.originalname;
     if (typeof name === "string" && name.trim().length) {
       requestedName = name.trim();

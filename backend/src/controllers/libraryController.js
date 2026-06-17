@@ -542,6 +542,10 @@ export const uploadMedia = async (req, res) => {
       );
     }
 
+    // Strip any path components from the client-supplied filename (this
+    // sanitizes every downstream use of file.originalname).
+    if (file?.originalname) file.originalname = path.basename(file.originalname);
+
     // Always set the name field to the actual filename unless the user specifies otherwise
     let requestedName = file.originalname;
     if (typeof name === "string" && name.trim().length) {
