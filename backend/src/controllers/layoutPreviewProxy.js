@@ -20,7 +20,7 @@ import {
 // authenticated proxy without needing a token per request.
 // ---------------------------------------------------------------------------
 
-const PREVIEW_TTL_MS = 60 * 60 * 1000; // 1 hour
+const PREVIEW_TTL_MS = 30 * 60 * 1000; // 30 min — smaller window if a sid leaks
 const previewSessions = new Map(); // sid -> { expiresAt }
 
 const makeSid = () => crypto.randomBytes(18).toString("hex");
@@ -393,7 +393,12 @@ export const getLayoutLivePreview = async (req, res) => {
 
     const webBase = getWebBaseUrl();
     const sid = makeSid();
-    previewSessions.set(sid, { expiresAt: Date.now() + PREVIEW_TTL_MS });
+    // Record the owner (from the authenticated mint request) for audit; full
+    // per-user enforcement on the proxy needs the cookie-auth work (2.1).
+    previewSessions.set(sid, {
+      userId: req.user?.id,
+      expiresAt: Date.now() + PREVIEW_TTL_MS,
+    });
 
     const prefix = `${publicBase(req)}/api/xibo-web/${sid}`;
     const proxify = makeProxify(webBase, prefix);
