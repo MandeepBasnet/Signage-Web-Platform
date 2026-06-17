@@ -1,3 +1,4 @@
+import DOMPurify from "dompurify";
 import { API_BASE_URL } from "../config/api.js";
 
 // Renders a single global/canvas element preview (image or text) scaled to the
@@ -79,7 +80,9 @@ export default function LayoutElement({ element, canvasScale }) {
               height: "100%",
             }}
           >
-            <div dangerouslySetInnerHTML={{ __html: text }}></div>
+            <div
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(text) }}
+            ></div>
           </div>
         </div>
       </div>

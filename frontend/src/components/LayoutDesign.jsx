@@ -3,6 +3,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import DOMPurify from "dompurify";
 import { getAuthHeaders, getStoredToken } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
@@ -852,7 +853,9 @@ export default function LayoutDesign() {
               ...style,
             }}
           >
-            <div dangerouslySetInnerHTML={{ __html: textContent }} />
+            <div
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(textContent) }}
+            />
           </div>
         );
       }
