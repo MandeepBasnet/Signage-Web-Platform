@@ -323,6 +323,19 @@ const thumbnailCache = createDiskThumbCache({
   ttlMs: 24 * 60 * 60 * 1000,
 });
 
+// Placeholder served when Xibo has no thumbnail for a media item (commonly a
+// video with no generated cover) so the frontend <img> shows a clean icon
+// instead of a broken image.
+const THUMBNAIL_PLACEHOLDER = Buffer.from(
+  `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="200" viewBox="0 0 300 200"><rect width="300" height="200" fill="#1f2937"/><rect x="112" y="74" width="76" height="52" rx="6" fill="none" stroke="#6b7280" stroke-width="5"/><path d="M138 88l22 12-22 12z" fill="#6b7280"/><text x="150" y="158" fill="#9ca3af" font-family="sans-serif" font-size="13" text-anchor="middle">No preview</text></svg>`
+);
+const sendThumbnailPlaceholder = (res, marker = "PLACEHOLDER") => {
+  res.setHeader("Content-Type", "image/svg+xml");
+  res.setHeader("Cache-Control", "public, max-age=3600");
+  res.setHeader("X-Thumbnail-Cache", marker);
+  return res.status(200).end(THUMBNAIL_PLACEHOLDER);
+};
+
 // Get media thumbnail/preview from Xibo
 export const getMediaThumbnail = async (req, res) => {
   try {
@@ -369,8 +382,14 @@ export const getMediaThumbnail = async (req, res) => {
     });
 
     if (response.status === 404) {
-      // If thumbnail not found, return 404 or a placeholder
-      return res.status(404).json({ message: "Thumbnail not available" });
+      // Xibo has no thumbnail (e.g. a video with no generated cover). Cache a
+      // placeholder so repeat loads don't re-hit Xibo, and serve it so the
+      // frontend <img> shows an icon instead of a broken image.
+      thumbnailCache.set(cacheKey, {
+        buffer: THUMBNAIL_PLACEHOLDER,
+        contentType: "image/svg+xml",
+      });
+      return sendThumbnailPlaceholder(res);
     }
 
     // Set appropriate headers
@@ -393,8 +412,8 @@ export const getMediaThumbnail = async (req, res) => {
     res.end(buffer);
   } catch (err) {
     console.error("Error fetching media thumbnail:", err.message);
-    // Don't crash on thumbnail errors, just return 404
-    res.status(404).json({ message: "Thumbnail fetch failed" });
+    // Transient failure — serve the placeholder (not cached, so it can recover).
+    sendThumbnailPlaceholder(res, "PLACEHOLDER-ERR");
   }
 };
 
