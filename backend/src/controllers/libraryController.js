@@ -16,6 +16,7 @@ import {
 } from "../utils/xiboDataHelpers.js";
 import { createTtlCache } from "../utils/ttlCache.js";
 import { createDiskThumbCache } from "../utils/diskThumbCache.js";
+import { withSignedMediaUrls } from "../utils/mediaUrlSigner.js";
 
 // Extract the display name field that Xibo uses for duplicate checking
 // Xibo checks the "name" field (display name), not fileName
@@ -224,7 +225,7 @@ export const getLibraryMedia = async (req, res) => {
         token
       );
       return res.json({
-        data,
+        data: withSignedMediaUrls(data),
         total,
         recordsTotal: total,
         recordsFiltered: total,
@@ -248,7 +249,7 @@ export const getLibraryMedia = async (req, res) => {
             idKeys: ["mediaId", "media_id", "id"],
           });
 
-    res.json({ data: media, total: media.length });
+    res.json({ data: withSignedMediaUrls(media), total: media.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch library media");
   }
@@ -262,7 +263,7 @@ export const getAllLibraryMedia = async (req, res) => {
       idKeys: ["mediaId", "media_id", "id"],
     });
 
-    res.json({ data: media, total: media.length });
+    res.json({ data: withSignedMediaUrls(media), total: media.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch library media");
   }

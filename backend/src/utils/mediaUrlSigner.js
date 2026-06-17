@@ -40,3 +40,35 @@ export function isValidMediaSignature(originalUrl) {
   const b = Buffer.from(provided);
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
+
+// Signed URLs embedded in API responses live as long as a page might stay open.
+const EMBED_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+// Sign a media route and return the path AFTER the `/api` mount, ready to concat
+// with the frontend's API base (`${API_BASE_URL}${path}`). The signature still
+// covers the full `/api/...` path the server will receive.
+const signedAfterApi = (apiPath, ttlMs = EMBED_TTL_MS) =>
+  signMediaUrl(apiPath, ttlMs).slice("/api".length);
+
+export const signedThumbnailPath = (mediaId, { width = 300, height = 200 } = {}) =>
+  signedAfterApi(
+    `/api/library/${mediaId}/thumbnail?preview=1&width=${width}&height=${height}`
+  );
+
+export const signedDownloadPath = (mediaId) =>
+  signedAfterApi(`/api/library/${mediaId}/download?preview=1`);
+
+// Attach signed `thumbnailUrl` + `downloadUrl` (token-free) to each media item
+// in a list/detail response, so the frontend never puts a token in <img>/
+// download URLs. Items without a resolvable media id are returned unchanged.
+export function withSignedMediaUrls(items) {
+  return (items || []).map((item) => {
+    const id = item?.mediaId || item?.media_id || item?.id;
+    if (!id) return item;
+    return {
+      ...item,
+      thumbnailUrl: signedThumbnailPath(id),
+      downloadUrl: signedDownloadPath(id),
+    };
+  });
+}

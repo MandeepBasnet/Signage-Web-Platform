@@ -63,9 +63,10 @@ export default function MediaContent() {
   };
 
   const handlePreview = (item) => {
-    const mediaId = getMediaId(item);
-    const token = localStorage.getItem("auth_token");
-    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    // Use the backend-signed download URL (no token in the URL).
+    const previewUrl = item.downloadUrl
+      ? `${API_BASE_URL}${item.downloadUrl}`
+      : null;
 
     setPreviewMedia({
       ...item,
@@ -73,20 +74,16 @@ export default function MediaContent() {
     });
   };
 
-  // Thumbnail URLs for the current page's images/videos, derived from the media
-  // list (no separate state to keep in sync).
+  // Thumbnail URLs for the current page's images/videos, from the backend-signed
+  // `thumbnailUrl` on each item (no token in the URL).
   const mediaUrls = useMemo(() => {
     const map = new Map();
-    const token = localStorage.getItem("auth_token");
     for (const item of media) {
       const mediaId = item.mediaId || item.media_id || item.id;
-      if (!mediaId) continue;
+      if (!mediaId || !item.thumbnailUrl) continue;
       const mediaType = item.mediaType || item.type || "";
       if (isImage(mediaType) || isVideo(mediaType)) {
-        map.set(
-          mediaId,
-          `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
-        );
+        map.set(mediaId, `${API_BASE_URL}${item.thumbnailUrl}`);
       }
     }
     return map;
@@ -190,9 +187,10 @@ export default function MediaContent() {
   const getMediaUrl = (item) => {
     const mediaId = getMediaId(item);
     if (!mediaId) return null;
-    // Use blob URL if available, otherwise use direct download URL
+    // Signed thumbnail if present, else the backend-signed download URL.
     return (
-      mediaUrls.get(mediaId) || `${API_BASE_URL}/library/${mediaId}/download`
+      mediaUrls.get(mediaId) ||
+      (item.downloadUrl ? `${API_BASE_URL}${item.downloadUrl}` : null)
     );
   };
 
