@@ -14,8 +14,13 @@ import regionRoutes from "./routes/regionRoutes.js";
 import widgetRoutes from "./routes/widgetRoutes.js";
 import xiboProxyRoutes from "./routes/xiboProxyRoutes.js";
 import { perfMiddleware } from "./middleware/perfMiddleware.js";
+import { validateEnv } from "./utils/validateEnv.js";
 
 dotenv.config();
+
+// Fail fast in production on insecure config (missing/weak JWT_SECRET, TLS
+// verification disabled, missing Xibo creds); warns in development.
+validateEnv();
 
 const app = express();
 
