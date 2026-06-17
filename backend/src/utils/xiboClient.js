@@ -165,38 +165,72 @@ async function verifyXiboPassword(username, password) {
 // 3. Verify user exists and get their info
 // Note: This approach uses the application token, so all API calls will be made with app permissions
 export async function authenticateUser(username, password) {
+  // 1. PASSWORD VERIFICATION IS THE AUTH GATE (fail closed).
+  // Xibo's API has no password grant, so we verify against the Xibo web login
+  // (verifyXiboPassword). This does NOT depend on the app token's user-search
+  // permission. A login is accepted ONLY if the password explicitly verifies —
+  // any error or unverified state rejects it. (Previously this could fail OPEN:
+  // a user-search 401/timeout would accept the login without checking the
+  // password. That is fixed here.)
+  let isPasswordValid = false;
   try {
-    // Get application access token
-    const appToken = await getAccessToken();
+    isPasswordValid = await verifyXiboPassword(username, password);
+  } catch (err) {
+    console.error(
+      `[authenticateUser] Password verification error for "${username}":`,
+      err.message
+    );
+    return {
+      success: false,
+      message: "Could not verify credentials. Please try again.",
+    };
+  }
 
-    // Search for user by username/email
-    // Xibo API: GET /user with filter parameters
-    // Try without params first, then with params
+  if (!isPasswordValid) {
+    console.warn(`[authenticateUser] ❌ Invalid credentials for "${username}"`);
+    return { success: false, message: "Invalid credentials" };
+  }
+
+  console.log(`[authenticateUser] ✅ Password verified for "${username}"`);
+
+  // 2. Password is valid. Get the app token (required to issue an authenticated
+  // session). If this fails, the auth service is down — fail closed.
+  let appToken;
+  try {
+    appToken = await getAccessToken();
+  } catch (tokenError) {
+    console.error(
+      `[authenticateUser] App token retrieval failed:`,
+      tokenError.message
+    );
+    return {
+      success: false,
+      message: `Authentication service unavailable: ${tokenError.message}`,
+    };
+  }
+
+  // 3. Fetch user metadata (userId / groups / email) — BEST EFFORT ONLY. This
+  // just enriches the session and must never gate the (already verified) login;
+  // if it fails we proceed with minimal info derived from the login identifier.
+  let user = {
+    userName: username,
+    email: username.includes("@") ? username : null,
+    userId: null,
+  };
+  try {
     let userSearchResponse;
     try {
-      // Try with userName parameter
       userSearchResponse = await axios.get(`${process.env.XIBO_API_URL}/user`, {
-        headers: {
-          Authorization: `Bearer ${appToken}`,
-        },
-        params: {
-          userName: username,
-        },
+        headers: { Authorization: `Bearer ${appToken}` },
+        params: { userName: username },
       });
-    } catch (error) {
-      // If that fails, try without parameters to get all users
-      console.warn(
-        "User search with params failed, trying without params:",
-        error.response?.status
-      );
+    } catch {
+      // Filter param unsupported — fall back to listing users.
       userSearchResponse = await axios.get(`${process.env.XIBO_API_URL}/user`, {
-        headers: {
-          Authorization: `Bearer ${appToken}`,
-        },
+        headers: { Authorization: `Bearer ${appToken}` },
       });
     }
 
-    // Handle different response formats
     let users = [];
     if (Array.isArray(userSearchResponse.data)) {
       users = userSearchResponse.data;
@@ -208,159 +242,33 @@ export async function authenticateUser(username, password) {
       users = [userSearchResponse.data];
     }
 
-    // Find matching user (case-insensitive)
-    const user = users.find(
+    const matched = users.find(
       (u) =>
         u.userName === username ||
         u.email === username ||
         u.userName?.toLowerCase() === username?.toLowerCase() ||
         u.email?.toLowerCase() === username?.toLowerCase()
     );
-
-    if (!user) {
-      return {
-        success: false,
-        message: "User not found",
-      };
-    }
-
-    // Note: Xibo API doesn't provide a direct way to verify password via API
-    // We utilize a proxy authentication method by verifying credentials 
-    // against the Xibo Web Interface directly.
-
-    // 4. Verify password via Web Proxy
-    const isPasswordValid = await verifyXiboPassword(username, password);
-    
-    if (!isPasswordValid) {
-       console.warn(`[authenticateUser] ❌ Password verification failed for user "${username}"`);
-       return {
-            success: false,
-            message: "Invalid credentials",
-            details: {
-                error: "Password verification failed"
-            }
-       };
-    }
-    
-    console.log(`[authenticateUser] ✅ Password verified for "${username}"!`);
-
-    return {
-      success: true,
-      access_token: appToken, // Use app token since we can't get user-specific token
-      user: user,
-      note: "Authenticated via Web Proxy verification + API User Existence Check",
-    };
-  } catch (error) {
-    console.error("Xibo authentication error:", {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      code: error.code,
-      url: error.config?.url,
-    });
-
-    // Handle network/DNS errors - these are critical and should fail login
-    if (
-      error.code === "ENOTFOUND" ||
-      error.code === "ECONNREFUSED" ||
-      error.code === "ETIMEDOUT"
-    ) {
-      return {
-        success: false,
-        message: `Cannot connect to Xibo API server. ${error.message}`,
-        details: {
-          error: "Network connection failed",
-          apiUrl: process.env.XIBO_API_URL,
-          suggestion:
-            "Please check your network connection and XIBO_API_URL configuration.",
-        },
-      };
-    }
-
-    // If getAccessToken failed with a clear error, return that
-    if (error.message && error.message.includes("XIBO_API_URL")) {
-      return {
-        success: false,
-        message: error.message,
-        details: {
-          error: "Configuration error",
-        },
-      };
-    }
-
-    // If user search fails due to permissions, we'll accept the login anyway
-    // since Xibo API doesn't support password verification
-    // This is a limitation we have to work with
-    if (error.response && error.response.status === 401) {
+    if (matched) {
+      user = matched;
+    } else {
       console.warn(
-        "⚠️  Cannot verify user via Xibo API (insufficient permissions). Accepting login without verification."
+        `[authenticateUser] Password verified but no matching user record for "${username}"; continuing with minimal info.`
       );
-      // Try to get access token, but handle errors
-      try {
-        const appToken = await getAccessToken();
-        return {
-          success: true,
-          access_token: appToken,
-          user: {
-            userName: username,
-            email: username.includes("@") ? username : null,
-            userId: null,
-          },
-          note: "User verification skipped - API permissions insufficient. Login accepted without Xibo user verification.",
-          warning:
-            "The application token does not have permission to search users in Xibo. Please check your Xibo API application permissions.",
-        };
-      } catch (tokenError) {
-        return {
-          success: false,
-          message: `Failed to get access token: ${tokenError.message}`,
-          details: {
-            error: "Token retrieval failed",
-          },
-        };
-      }
     }
-
-    if (error.response && error.response.status === 404) {
-      return {
-        success: false,
-        message: "User not found or endpoint not available",
-        details: error.response.data,
-      };
-    }
-
-    // For other errors, check if we can still get a token
-    // If token retrieval fails, fail the login
-    try {
-      const appToken = await getAccessToken();
-      console.warn(
-        "⚠️  Error during user verification, proceeding with login:",
-        error.message
-      );
-      return {
-        success: true,
-        access_token: appToken,
-        user: {
-          userName: username,
-          email: username.includes("@") ? username : null,
-          userId: null,
-        },
-        note: "User verification failed but login accepted",
-        warning: error.message,
-      };
-    } catch (tokenError) {
-      // If we can't get a token, fail the login
-      return {
-        success: false,
-        message: `Authentication failed: ${tokenError.message}`,
-        details: {
-          error: "Token retrieval failed",
-          originalError: error.message,
-        },
-      };
-    }
+  } catch (metaError) {
+    console.warn(
+      `[authenticateUser] Could not fetch user metadata (continuing):`,
+      metaError.response?.status || metaError.message
+    );
   }
+
+  return {
+    success: true,
+    access_token: appToken,
+    user,
+    note: "Authenticated via web-login password verification",
+  };
 }
 
 // Get user info using access token
