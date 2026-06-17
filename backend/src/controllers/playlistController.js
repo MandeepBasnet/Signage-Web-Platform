@@ -4,6 +4,7 @@ import {
   getUserContext,
 } from "../utils/xiboDataHelpers.js";
 import { xiboRequest } from "../utils/xiboClient.js";
+import { withSignedMediaUrls } from "../utils/mediaUrlSigner.js";
 
 export const createPlaylist = async (req, res) => {
   try {
@@ -435,7 +436,7 @@ export const getPlaylistDetails = async (req, res) => {
 
     res.json({
       playlist,
-      media: mediaItems,
+      media: withSignedMediaUrls(mediaItems),
       total: mediaItems.length,
     });
   } catch (err) {

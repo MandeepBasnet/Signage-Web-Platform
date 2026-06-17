@@ -71,17 +71,13 @@ export default function PlaylistContent() {
   );
   const mediaUrls = useMemo(() => {
     const map = new Map();
-    const token = localStorage.getItem("auth_token");
     for (const item of playlistMedia) {
       const mediaId = getMediaId(item);
-      if (!mediaId) continue;
+      if (!mediaId || !item.thumbnailUrl) continue;
       const mediaType =
         item.mediaType || item.type || item.widgetType || item.moduleName || "";
       if (isImage(mediaType) || isVideo(mediaType)) {
-        map.set(
-          mediaId,
-          `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`
-        );
+        map.set(mediaId, `${API_BASE_URL}${item.thumbnailUrl}`);
       }
     }
     return map;
@@ -89,9 +85,10 @@ export default function PlaylistContent() {
 
   // Helper functions
   const handlePreview = (item) => {
-    const mediaId = getMediaId(item);
-    const token = localStorage.getItem("auth_token");
-    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
+    // Backend-signed download URL (no token in the URL).
+    const previewUrl = item.downloadUrl
+      ? `${API_BASE_URL}${item.downloadUrl}`
+      : null;
 
     setPreviewMedia({
       ...item,
@@ -327,7 +324,7 @@ export default function PlaylistContent() {
     if (!mediaId) return null;
     return (
       mediaUrls.get(mediaId) ||
-      `${API_BASE_URL}/playlists/media/${mediaId}/preview`
+      (item.downloadUrl ? `${API_BASE_URL}${item.downloadUrl}` : null)
     );
   };
 
