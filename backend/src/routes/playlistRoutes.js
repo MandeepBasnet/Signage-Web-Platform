@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { verifyToken } from "../middleware/authMiddleware.js";
+import { mediaAuth } from "../middleware/mediaAuth.js";
 import { revalidateList } from "../middleware/cacheControl.js";
 import { cacheList, invalidate } from "../middleware/responseCache.js";
 import {
@@ -63,7 +64,7 @@ router.post(
   upload.single("media"),
   uploadMediaToPlaylist
 );
-router.get("/media/:mediaId/preview", verifyToken, getMediaPreview);
+router.get("/media/:mediaId/preview", mediaAuth, getMediaPreview);
 
 // Widget element updates (for canvas/global widgets)
 router.put("/widgets/:widgetId/elements", verifyToken, updateWidgetElements);
