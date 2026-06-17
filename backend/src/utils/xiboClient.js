@@ -321,10 +321,15 @@ export async function xiboRequest(
   // Xibo API requires form data for PUT requests
   const isPutRequest = method.toUpperCase() === "PUT";
 
+  // Bound read hangs only. Mutations (publish/checkout of a complex layout) can
+  // legitimately take much longer than a read, so they keep the prior
+  // no-timeout behaviour rather than being aborted.
+  const isGet = method.toUpperCase() === "GET";
+
   let requestConfig = {
     method,
     url: `${process.env.XIBO_API_URL}${endpoint}`,
-    timeout: XIBO_TIMEOUT_MS,
+    ...(isGet ? { timeout: XIBO_TIMEOUT_MS } : {}),
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...customHeaders,
