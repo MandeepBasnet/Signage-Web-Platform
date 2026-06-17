@@ -104,9 +104,10 @@ app.use((req, res, next) => {
   return formFields(req, res, next);
 });
 
-// Body parsing middleware with error handling
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+// Body parsing middleware. Limit JSON/urlencoded bodies (file uploads are
+// multipart and handled separately) to cap memory use from oversized payloads.
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: true, limit: "2mb" }));
 
 // Debug middleware AFTER body parsing (opt-in; secret fields redacted)
 if (debugHttp) {
