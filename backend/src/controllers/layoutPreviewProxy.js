@@ -471,7 +471,7 @@ export const getLayoutLivePreview = async (req, res) => {
 // this proxy to reach admin/data pages (privilege escalation). Matched against
 // the first path segment; preview assets (layout/library/region/dist/theme/
 // modules/fonts + static files) are unaffected.
-const BLOCKED_PROXY_PATH =
+export const BLOCKED_PROXY_PATH =
   /^(?:user|usergroup|group|admin|application|settings?|command|auditlog|report|fault|maintenance|display|displaygroup|displayprofile|daypart|schedule|campaign|dataset|notification|resolution|template|tag|statusdashboard|log)(?:\/|$|\?)/i;
 
 // Catch-all: ANY /api/xibo-web/:sid/<path> — streams the Xibo web resource
