@@ -461,6 +461,14 @@ export const getLayoutLivePreview = async (req, res) => {
   }
 };
 
+// Sensitive Xibo web routes the live preview never needs. The shared web
+// session is an admin service account, so a SID holder must not be able to use
+// this proxy to reach admin/data pages (privilege escalation). Matched against
+// the first path segment; preview assets (layout/library/region/dist/theme/
+// modules/fonts + static files) are unaffected.
+const BLOCKED_PROXY_PATH =
+  /^(?:user|usergroup|group|admin|application|settings?|command|auditlog|report|fault|maintenance|display|displaygroup|displayprofile|daypart|schedule|campaign|dataset|notification|resolution|template|tag|statusdashboard|log)(?:\/|$|\?)/i;
+
 // Catch-all: ANY /api/xibo-web/:sid/<path> — streams the Xibo web resource
 // through the shared session. No JWT here; the sid in the path is the capability.
 export const proxyWebResource = async (req, res) => {
@@ -475,6 +483,11 @@ export const proxyWebResource = async (req, res) => {
     const rest = Array.isArray(req.params.splat)
       ? req.params.splat.join("/")
       : req.params.splat || req.params[0] || "";
+
+    if (BLOCKED_PROXY_PATH.test(rest)) {
+      console.warn(`[xibo-web] blocked sensitive proxy path: /${rest}`);
+      return res.status(403).send("Forbidden");
+    }
 
     const qIndex = req.originalUrl.indexOf("?");
     const queryString = qIndex >= 0 ? req.originalUrl.slice(qIndex + 1) : "";
