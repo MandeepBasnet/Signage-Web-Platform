@@ -16,6 +16,7 @@ import widgetRoutes from "./routes/widgetRoutes.js";
 import xiboProxyRoutes from "./routes/xiboProxyRoutes.js";
 import { perfMiddleware } from "./middleware/perfMiddleware.js";
 import { validateEnv } from "./utils/validateEnv.js";
+import { globalLimiter } from "./middleware/rateLimit.js";
 
 dotenv.config();
 
@@ -24,6 +25,10 @@ dotenv.config();
 validateEnv();
 
 const app = express();
+
+// Trust the first proxy hop so req.ip (used by rate limiting) reflects the real
+// client behind a reverse proxy/load balancer in production.
+app.set("trust proxy", 1);
 
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -118,6 +123,9 @@ app.post("/test-body", (req, res) => {
 app.get("/", (req, res) => {
   res.send("✅ Signage Backend is running successfully!");
 });
+
+// Global rate-limit backstop for all API routes.
+app.use("/api", globalLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/layouts", layoutRoutes);

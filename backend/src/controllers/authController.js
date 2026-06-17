@@ -38,6 +38,9 @@ export const login = async (req, res) => {
     const authResult = await authenticateUser(loginIdentifier, password);
 
     if (!authResult.success) {
+      console.warn(
+        `[auth] login FAILED for "${loginIdentifier}" from ${req.ip}`
+      );
       return res.status(401).json({
         message: authResult.message || "Invalid credentials",
         details: authResult.details || null,
@@ -82,6 +85,7 @@ export const login = async (req, res) => {
       }
     );
 
+    console.log(`[auth] login OK for "${loginIdentifier}" from ${req.ip}`);
     res.json({
       token,
       user: {
