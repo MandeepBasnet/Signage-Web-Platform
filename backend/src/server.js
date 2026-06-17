@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import helmet from "helmet";
 import compression from "compression";
 import multer from "multer";  // ✅ Added for FormData parsing
 import authRoutes from "./routes/authRoutes.js";
@@ -44,7 +45,40 @@ if (isDev) {
 }
 
 // Middleware - order matters!
-app.use(cors());
+
+// Security headers. CSP is intentionally left off here (it needs app-specific
+// tuning and is a later task); CORP is relaxed so the separate frontend origin
+// can load media/thumbnails cross-origin.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
+// CORS restricted to an allowlist (ALLOWED_ORIGINS, comma-separated). Defaults
+// to the local dev origins; production MUST set ALLOWED_ORIGINS. Requests with
+// no Origin header (curl, same-origin, <img>) are allowed.
+const allowedOrigins = (
+  process.env.ALLOWED_ORIGINS || "http://localhost:5173,http://localhost:3000"
+)
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+const isLocalhostOrigin = (origin) =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+app.use(
+  cors({
+    origin(origin, cb) {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      // In development, allow any localhost/127.0.0.1 origin (any dev port) so a
+      // local frontend can't be accidentally blocked. Production stays strict.
+      if (isDev && isLocalhostOrigin(origin)) return cb(null, true);
+      return cb(new Error(`Origin ${origin} not allowed by CORS`));
+    },
+  })
+);
 
 // Gzip-compress responses (large library/dataset JSON payloads)
 app.use(compression());
