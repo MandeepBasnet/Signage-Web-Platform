@@ -173,8 +173,10 @@ export default function MediaPickerModal({
                 const isVideoType = isVideo(mediaType);
                 const isSelected = selectedMediaId === mediaId;
                 const isCurrent = currentMediaId === mediaId;
-                const token = localStorage.getItem("auth_token");
-                const thumbnailUrl = `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=300&height=200&token=${token}`;
+                // Backend-signed thumbnail URL (no token in the URL).
+                const thumbnailUrl = item.thumbnailUrl
+                  ? `${API_BASE_URL}${item.thumbnailUrl}`
+                  : null;
 
                 return (
                   <div
