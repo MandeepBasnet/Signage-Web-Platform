@@ -263,20 +263,27 @@ function handleControllerError(res, err, fallbackMessage) {
     return res.status(err.status).json({ message: err.message });
   }
 
-  console.error(fallbackMessage, err.message);
+  // Always log the full detail server-side for debugging.
+  console.error(fallbackMessage, {
+    message: err?.message,
+    status: err?.response?.status,
+    data: err?.response?.data,
+  });
 
-  if (err?.response) {
-    const status = err.response.status || 500;
-    return res.status(status).json({
-      message: err.response.data?.message || fallbackMessage,
-      error: err.message,
-      details: err.response.data ?? undefined,
-    });
+  const isProd = process.env.NODE_ENV === "production";
+  const status = err?.response?.status || 500;
+  const message = err?.response?.data?.message || fallbackMessage;
+
+  // In production, return only a safe message — never the raw error string
+  // (can contain internal hosts/IPs) or the upstream response body (schemas,
+  // internal URLs). In development, include them to aid debugging.
+  if (isProd) {
+    return res.status(status).json({ message });
   }
-
-  return res.status(500).json({
-    message: fallbackMessage,
-    error: err.message,
+  return res.status(status).json({
+    message,
+    error: err?.message,
+    details: err?.response?.data ?? undefined,
   });
 }
 
