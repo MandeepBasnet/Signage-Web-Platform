@@ -70,18 +70,19 @@ export default function AddMediaPlaylistButton({
   const getMediaUrl = (item) => {
     const mediaId = item.mediaId || item.id;
     if (!mediaId) return null;
-    // Use blob URL if available, otherwise use direct download URL (via proxy)
+    // Signed thumbnail if cached, else the backend-signed download URL.
     return (
       mediaUrls.get(mediaId) ||
-      `${API_BASE_URL}/playlists/media/${mediaId}/preview`
+      (item.downloadUrl ? `${API_BASE_URL}${item.downloadUrl}` : null)
     );
   };
 
   const handlePreview = (item) => {
-    const mediaId = item.mediaId || item.id;
-    const token = localStorage.getItem("auth_token");
-    const previewUrl = `${API_BASE_URL}/library/${mediaId}/download?preview=1&token=${token}`;
-    
+    // Backend-signed download URL (no token in the URL).
+    const previewUrl = item.downloadUrl
+      ? `${API_BASE_URL}${item.downloadUrl}`
+      : null;
+
     setPreviewMedia({
       ...item,
       previewUrl
@@ -98,12 +99,11 @@ export default function AddMediaPlaylistButton({
 
     for (const item of items) {
       const mediaId = item.mediaId || item.id;
-      if (mediaId && !urlMap.has(mediaId)) {
+      if (mediaId && !urlMap.has(mediaId) && item.thumbnailUrl) {
         const mediaType = item.mediaType || item.type || "";
         if (isImage(mediaType) || isVideo(mediaType)) {
-          // Use thumbnail endpoint with query param token
-          const token = localStorage.getItem("auth_token");
-          urlMap.set(mediaId, `${API_BASE_URL}/library/${mediaId}/thumbnail?preview=1&width=200&height=150&token=${token}`);
+          // Use the backend-signed thumbnail URL (no token).
+          urlMap.set(mediaId, `${API_BASE_URL}${item.thumbnailUrl}`);
         }
       }
     }
