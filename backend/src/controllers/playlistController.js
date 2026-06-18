@@ -1,5 +1,7 @@
 import {
-  fetchUserScopedCollection,
+  fetchLibraryCollection,
+  filterOwnedOrShared,
+  resolveUserIdentity,
   handleControllerError,
   getUserContext,
 } from "../utils/xiboDataHelpers.js";
@@ -153,11 +155,23 @@ export const createPlaylist = async (req, res) => {
 
 export const getPlaylists = async (req, res) => {
   try {
-    const playlists = await fetchUserScopedCollection({
-      req,
-      endpoint: "/playlist",
-      idKeys: ["playlistId", "playlist_id", "id"],
-    });
+    // All Xibo calls use the shared super-admin app token, so /playlist returns
+    // every playlist in the CMS. Scope here to playlists the user OWNS *or* that
+    // are permission-shared with one of their groups (an owner-only filter hid
+    // shared-but-editable playlists). Mirrors the layouts fix.
+    const [identity, raw] = await Promise.all([
+      resolveUserIdentity(req),
+      fetchLibraryCollection({
+        req,
+        endpoint: "/playlist",
+        idKeys: ["playlistId", "playlist_id", "id"],
+        pageSize: 500,
+        maxPages: 20,
+        queryParams: { embed: "permissions,groupsWithPermissions" },
+      }),
+    ]);
+
+    const playlists = filterOwnedOrShared(raw, identity);
 
     res.json({ data: playlists, total: playlists.length });
   } catch (err) {
