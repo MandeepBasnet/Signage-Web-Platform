@@ -169,7 +169,10 @@ export const getPlaylists = async (req, res) => {
         idKeys: ["playlistId", "playlist_id", "id"],
         pageSize: 500,
         maxPages: 20,
-        queryParams: { embed: "permissions,groupsWithPermissions" },
+        // Embed widgets so we can recompute a real duration: Xibo's stored
+        // playlist.duration is often stale (0) even for playlists that have
+        // widgets with valid durations.
+        queryParams: { embed: "widgets,permissions,groupsWithPermissions" },
       }),
     ]);
 
@@ -184,6 +187,19 @@ export const getPlaylists = async (req, res) => {
           .includes(search)
       );
     }
+
+    // Recompute duration from the widgets (sum of each widget's calculated
+    // duration) when the stored value is 0/missing, then drop the widgets array
+    // to keep the list payload small (the list view only needs the total).
+    playlists = playlists.map((p) => {
+      const widgets = Array.isArray(p.widgets) ? p.widgets : [];
+      const computed = widgets.reduce(
+        (sum, w) => sum + (Number(w.calculatedDuration ?? w.duration) || 0),
+        0
+      );
+      const { widgets: _widgets, ...rest } = p;
+      return { ...rest, duration: Number(p.duration) || computed };
+    });
 
     // Opt-in pagination: only when the client sends `length` (the Playlists list
     // view). Other consumers (e.g. the schedule playlist dropdown) send no
