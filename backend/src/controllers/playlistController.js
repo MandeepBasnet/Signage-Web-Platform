@@ -275,6 +275,12 @@ export const getPlaylistDetails = async (req, res) => {
           return (
             obj.mediaId ||
             obj.media_id ||
+            // Media widgets (notably video) carry the id only in the plural
+            // `mediaIds` array — without this, the item gets no singular id, so
+            // withSignedMediaUrls attaches no thumbnailUrl and the UI shows an
+            // icon instead of the (Xibo-provided) poster.
+            (Array.isArray(obj.mediaIds) ? obj.mediaIds[0] : undefined) ||
+            (Array.isArray(obj.media_ids) ? obj.media_ids[0] : undefined) ||
             obj.media?.mediaId ||
             obj.media?.media_id ||
             obj.id // Sometimes the id in widget data is the mediaId

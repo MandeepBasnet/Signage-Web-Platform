@@ -10,11 +10,11 @@ import {
   isImage,
   isVideo,
   isAudio,
-  getMediaIcon,
   formatFileSize,
 } from "../utils/mediaTypes.js";
 import SearchBar from "./SearchBar.jsx";
 import MediaPreviewModal from "./MediaPreviewModal";
+import MediaThumbnail from "./MediaThumbnail.jsx";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import { useFolders } from "../hooks/queries/useFolders.js";
 import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
@@ -345,9 +345,6 @@ export default function MediaContent() {
                   const mediaId = getMediaId(item);
                   const mediaUrl = getMediaUrl(item);
                   const mediaType = item.mediaType || item.type || "";
-                  const isImageType = isImage(mediaType);
-                  const isVideoType = isVideo(mediaType);
-                  const isAudioType = isAudio(mediaType);
 
                   const isDeleteHovered = deleteHoveredMediaId === mediaId;
 
@@ -360,50 +357,15 @@ export default function MediaContent() {
                     >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div
-                          className="h-16 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100 cursor-pointer flex items-center justify-center"
+                          className="relative h-16 w-24 flex-shrink-0 overflow-hidden rounded-md border border-gray-200 bg-gray-100 cursor-pointer flex items-center justify-center"
                           onClick={() => handlePreview(item)}
                         >
-                          {mediaUrl ? (
-                            <>
-                              {isImageType && (
-                                <img
-                                  src={mediaUrl}
-                                  alt={item.name}
-                                  loading="lazy"
-                                  decoding="async"
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => {
-                                    e.target.style.display = "none";
-                                    e.target.nextSibling.style.display = "flex";
-                                  }}
-                                />
-                              )}
-                              {isVideoType && (
-                                <video
-                                  src={mediaUrl}
-                                  preload="none"
-                                  className="h-full w-full object-cover"
-                                  onError={(e) => {
-                                    e.target.style.display = "none";
-                                    e.target.nextSibling.style.display = "flex";
-                                  }}
-                                />
-                              )}
-                              {!isImageType && !isVideoType && (
-                                <div className="flex items-center justify-center h-full w-full text-gray-400 text-2xl">
-                                  {getMediaIcon(mediaType)}
-                                </div>
-                              )}
-                              {/* Fallback */}
-                              <div className="hidden items-center justify-center h-full w-full text-gray-400 text-2xl">
-                                {getMediaIcon(mediaType)}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex items-center justify-center h-full w-full text-gray-400 text-2xl">
-                              {getMediaIcon(mediaType)}
-                            </div>
-                          )}
+                          <MediaThumbnail
+                            url={mediaUrl}
+                            type={mediaType}
+                            name={item.name}
+                            iconClassName="text-2xl"
+                          />
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">

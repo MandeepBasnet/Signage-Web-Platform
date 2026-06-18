@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
+import MediaThumbnail from "./MediaThumbnail.jsx";
 
 import { API_BASE_URL } from "../config/api.js";
-import { isImage, isVideo, getMediaIcon } from "../utils/mediaTypes.js";
+import { isImage, isVideo } from "../utils/mediaTypes.js";
 import { flattenFolders } from "../utils/folderUtils.js";
 
 /**
@@ -444,8 +445,6 @@ export default function AddMediaPlaylistButton({
 
     const mediaUrl = getMediaUrl(item);
     const mediaType = item.mediaType || item.type || "";
-    const isImageType = isImage(mediaType);
-    const isVideoType = isVideo(mediaType);
 
     return (
       <div
@@ -457,49 +456,7 @@ export default function AddMediaPlaylistButton({
           className="relative w-full h-32 bg-gray-100 flex items-center justify-center overflow-hidden cursor-pointer group/preview"
           onClick={() => handlePreview(item)}
         >
-          {mediaUrl ? (
-            <>
-              {isImageType && (
-                <img
-                  src={mediaUrl}
-                  alt={name}
-                  className="w-full h-full object-cover"
-                  onError={(e) => {
-                    e.target.style.display = "none";
-                    e.target.nextSibling.style.display = "flex";
-                  }}
-                />
-              )}
-              {isVideoType && (
-                <div className="relative w-full h-full">
-                  <video
-                    src={mediaUrl}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.target.style.display = "none";
-                      e.target.parentElement.nextSibling.style.display = "flex";
-                    }}
-                  />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover/preview:bg-black/10 transition-colors">
-                    <span className="text-2xl">▶️</span>
-                  </div>
-                </div>
-              )}
-              {!isImageType && !isVideoType && (
-                <div className="flex flex-col items-center justify-center text-gray-400">
-                  <span className="text-3xl">{getMediaIcon(mediaType)}</span>
-                </div>
-              )}
-              {/* Fallback */}
-              <div className="hidden flex-col items-center justify-center text-gray-400">
-                <span className="text-3xl">{getMediaIcon(mediaType)}</span>
-              </div>
-            </>
-          ) : (
-            <div className="flex flex-col items-center justify-center text-gray-400">
-              <span className="text-3xl">{getMediaIcon(mediaType)}</span>
-            </div>
-          )}
+          <MediaThumbnail url={mediaUrl} type={mediaType} name={name} />
 
           {/* Overlay for Preview hint */}
           <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 hover:opacity-100">
