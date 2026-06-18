@@ -9,8 +9,6 @@ import {
 } from "../utils/xiboClient.js";
 import {
   fetchLibraryCollection,
-  filterOwnedOrShared,
-  resolveUserIdentity,
   getUserContext,
   handleControllerError,
   HttpError,
@@ -192,21 +190,144 @@ export const validateMediaName = async (req, res) => {
   }
 };
 
+// Per-user library access in this deployment is FOLDER-based: each user has a
+// home folder (user.homeFolderId) and their media lives in it (verified live:
+// the media is often owned by an admin and carries no per-item group
+// permissions, so owner/group filtering does NOT work). So we scope media and
+// the folder picker to the user's home folder and its descendants. With the
+// shared super-admin token /folders returns the whole CMS tree, so we slice the
+// subtree rooted at the user's home folder.
+const MEDIA_ID_KEYS = ["mediaId", "media_id", "id"];
+const accessibleFoldersCache = createTtlCache({
+  maxSize: 500,
+  ttlMs: 5 * 60 * 1000,
+});
+
+const findFolderNode = (nodes, targetId) => {
+  for (const n of nodes || []) {
+    const id = n.folderId ?? n.id;
+    if (String(id) === String(targetId)) return n;
+    const child = findFolderNode(n.children, targetId);
+    if (child) return child;
+  }
+  return null;
+};
+
+const collectFolderIds = (node, acc = []) => {
+  if (!node) return acc;
+  const id = node.folderId ?? node.id;
+  if (id != null) acc.push(String(id));
+  for (const c of node.children || []) collectFolderIds(c, acc);
+  return acc;
+};
+
+// Resolve { homeFolderId, subtree (nodes for the folder picker), folderIds (Set
+// of accessible folder ids) } for the requester. Cached per user (the home
+// folder + tree change rarely). When no home folder resolves (e.g. an admin),
+// falls back to the full tree.
+const resolveAccessibleFolders = async (req) => {
+  const rawId = req.user?.id ?? req.user?.userId;
+  const username = req.user?.username ?? req.user?.userName;
+  const idIsNumeric = rawId != null && !isNaN(Number(rawId));
+  const cacheKey = idIsNumeric ? `id:${rawId}` : `name:${username || rawId}`;
+
+  const hit = accessibleFoldersCache.get(cacheKey);
+  if (hit) return hit;
+
+  let homeFolderId = null;
+  try {
+    const q = idIsNumeric
+      ? `/user?userId=${rawId}`
+      : `/user?userName=${encodeURIComponent(username || "")}`;
+    const u = await xiboRequest(q, "GET");
+    const user = Array.isArray(u)
+      ? u[0]
+      : Array.isArray(u?.data)
+      ? u.data[0]
+      : u?.data || u;
+    if (user?.homeFolderId != null) homeFolderId = user.homeFolderId;
+  } catch (e) {
+    console.warn("[resolveAccessibleFolders] user lookup failed:", e.message);
+  }
+
+  const tree = await xiboRequest("/folders", "GET");
+  const roots = Array.isArray(tree) ? tree : tree?.data || [];
+
+  let subtree;
+  let folderIds;
+  if (homeFolderId != null) {
+    const node = findFolderNode(roots, homeFolderId);
+    if (node) {
+      subtree = [node];
+      folderIds = new Set(collectFolderIds(node));
+    } else {
+      // Home folder not present in the returned tree — scope to just that id.
+      subtree = [];
+      folderIds = new Set([String(homeFolderId)]);
+    }
+  } else {
+    // No home folder (e.g. admin) — fall back to the full tree.
+    subtree = roots;
+    folderIds = new Set(collectFolderIds({ children: roots }));
+  }
+
+  const result = { homeFolderId, subtree, folderIds };
+  accessibleFoldersCache.set(cacheKey, result);
+  return result;
+};
+
+// Fetch media across a set of folder ids (each folder is server-filtered by
+// Xibo), merged and de-duped by mediaId. `search` narrows by name via Xibo's
+// `media` LIKE param.
+const fetchMediaInFolders = async (req, folderIds, search) => {
+  const lists = await Promise.all(
+    folderIds.map((fid) =>
+      fetchLibraryCollection({
+        req,
+        endpoint: "/library",
+        idKeys: MEDIA_ID_KEYS,
+        queryParams: { folderId: fid, ...(search ? { media: search } : {}) },
+      })
+    )
+  );
+  const seen = new Set();
+  const merged = [];
+  for (const list of lists) {
+    for (const m of list) {
+      const id = String(m.mediaId ?? m.media_id ?? m.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      merged.push(m);
+    }
+  }
+  return merged;
+};
+
 export const getLibraryMedia = async (req, res) => {
   try {
     const { folderId } = req.query;
     const isFolderScoped = folderId && folderId !== "all";
-    const MEDIA_ID_KEYS = ["mediaId", "media_id", "id"];
+    const search = (req.query.search || "").trim();
+    const { folderIds } = await resolveAccessibleFolders(req);
 
-    // Opt-in server-side pagination: only when the client sends `length` (the
-    // Media list view). Other callers get the full collection as before.
+    // A requested folder must be one the user can access — prevents reading
+    // another user's media by passing its folder id.
+    if (isFolderScoped && !folderIds.has(String(folderId))) {
+      return req.query.length !== undefined
+        ? res.json({ data: [], total: 0, recordsTotal: 0, recordsFiltered: 0 })
+        : res.json({ data: [], total: 0 });
+    }
+
+    // Which folders to read: the requested one, or every folder the user can
+    // access (their home folder subtree).
+    const targetFolderIds = isFolderScoped ? [String(folderId)] : [...folderIds];
+
+    // Opt-in pagination: only when the client sends `length` (the Media list view).
     if (req.query.length !== undefined) {
       const start = Math.max(0, parseInt(req.query.start, 10) || 0);
       const length = Math.max(1, parseInt(req.query.length, 10) || 8);
-      const search = (req.query.search || "").trim();
 
-      // Folder-scoped view: show ALL media in the folder (no owner filter),
-      // server-paginated by Xibo as before.
+      // Single accessible folder: let Xibo paginate server-side (efficient).
       if (isFolderScoped) {
         const { token } = getUserContext(req);
         const params = new URLSearchParams({
@@ -216,7 +337,6 @@ export const getLibraryMedia = async (req, res) => {
           "order[0][dir]": "desc",
           folderId,
         });
-        // Xibo filters library items by name with the `media` param (LIKE match).
         if (search) params.append("media", search);
 
         const { data, total } = await xiboGetWithCount(
@@ -231,62 +351,19 @@ export const getLibraryMedia = async (req, res) => {
         });
       }
 
-      // "All media" view: with the shared super-admin app token Xibo returns the
-      // whole library, so scope to media the user OWNS *or* that is shared with
-      // one of their groups (an owner-only filter hid shared media). The
-      // owned-or-shared filter runs after Xibo returns rows, so fetch the
-      // (name-narrowed) list and paginate in memory. Mirrors the layouts fix.
-      const [identity, raw] = await Promise.all([
-        resolveUserIdentity(req),
-        fetchLibraryCollection({
-          req,
-          endpoint: "/library",
-          idKeys: MEDIA_ID_KEYS,
-          orderColumn: "modifiedDt",
-          orderDirection: "desc",
-          pageSize: 500,
-          maxPages: 20,
-          queryParams: {
-            embed: "permissions,groupsWithPermissions",
-            ...(search ? { media: search } : {}),
-          },
-        }),
-      ]);
-      const accessible = filterOwnedOrShared(raw, identity);
-      const page = accessible.slice(start, start + length);
-      const total = accessible.length;
+      // "All folders" across the user's accessible set: fetch + paginate in memory.
+      const all = await fetchMediaInFolders(req, targetFolderIds, search);
+      const page = all.slice(start, start + length);
       return res.json({
         data: withSignedMediaUrls(page),
-        total,
-        recordsTotal: total,
-        recordsFiltered: total,
+        total: all.length,
+        recordsTotal: all.length,
+        recordsFiltered: all.length,
       });
     }
 
-    // Folder-scoped view (per-user library / folder picker): show ALL media in
-    // the chosen folder (no owner filter).
-    if (isFolderScoped) {
-      const media = await fetchLibraryCollection({
-        req,
-        endpoint: "/library",
-        idKeys: MEDIA_ID_KEYS,
-        queryParams: { folderId },
-      });
-      return res.json({ data: withSignedMediaUrls(media), total: media.length });
-    }
-
-    // "All media" view (no folder): owned-or-shared, same as the paginated branch.
-    const [identity, raw] = await Promise.all([
-      resolveUserIdentity(req),
-      fetchLibraryCollection({
-        req,
-        endpoint: "/library",
-        idKeys: MEDIA_ID_KEYS,
-        queryParams: { embed: "permissions,groupsWithPermissions" },
-      }),
-    ]);
-    const media = filterOwnedOrShared(raw, identity);
-
+    // Non-paginated (e.g. the add-media picker): all media the user can access.
+    const media = await fetchMediaInFolders(req, targetFolderIds, search);
     res.json({ data: withSignedMediaUrls(media), total: media.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch library media");
@@ -295,11 +372,11 @@ export const getLibraryMedia = async (req, res) => {
 
 export const getAllLibraryMedia = async (req, res) => {
   try {
-    const media = await fetchLibraryCollection({
-      req,
-      endpoint: "/library",
-      idKeys: ["mediaId", "media_id", "id"],
-    });
+    // Backs the "All Library" scope of the add-media picker. Access here is
+    // folder-based, so "all" means all media in the folders the user can access
+    // (their home folder subtree) — NOT the whole CMS library.
+    const { folderIds } = await resolveAccessibleFolders(req);
+    const media = await fetchMediaInFolders(req, [...folderIds]);
 
     res.json({ data: withSignedMediaUrls(media), total: media.length });
   } catch (err) {
@@ -322,7 +399,7 @@ export const downloadMedia = async (req, res) => {
     const { preview } = req.query;
     const queryParams = new URLSearchParams();
     if (preview) queryParams.append("preview", preview);
-    
+
     const downloadUrl = `${xiboApiUrl}/library/download/${mediaId}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
 
     // Fetch the media file from Xibo
@@ -457,29 +534,14 @@ export const getMediaThumbnail = async (req, res) => {
 
 export const getLibraryFolders = async (req, res) => {
   try {
-    const folders = await xiboRequest("/folders", "GET");
-
-    // Resolve the logged-in user's home folder so the UI can default the
-    // library view to it (per-user library, no admin setup required).
-    let homeFolderId = null;
-    try {
-      const rawId = req.user?.id;
-      const q =
-        rawId != null && !isNaN(Number(rawId))
-          ? `/user?userId=${rawId}`
-          : `/user?userName=${encodeURIComponent(req.user?.username || "")}`;
-      const u = await xiboRequest(q, "GET");
-      const user = Array.isArray(u)
-        ? u[0]
-        : Array.isArray(u?.data)
-        ? u.data[0]
-        : u?.data || u;
-      if (user?.homeFolderId != null) homeFolderId = user.homeFolderId;
-    } catch (e) {
-      // leave homeFolderId null; UI falls back to "All folders"
-    }
-
-    res.json({ folders, homeFolderId });
+    // Scope the folder picker (Media view + upload modal) to the user's own
+    // folders: their home folder and its descendants. With the super-admin token
+    // /folders returns the whole CMS tree, so resolveAccessibleFolders slices the
+    // subtree rooted at the user's home folder (falls back to the full tree when
+    // no home folder resolves, e.g. an admin). The UI defaults the view to
+    // homeFolderId.
+    const { homeFolderId, subtree } = await resolveAccessibleFolders(req);
+    res.json({ folders: subtree, homeFolderId });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch folders");
   }
