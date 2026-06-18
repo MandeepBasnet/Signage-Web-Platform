@@ -276,31 +276,60 @@ const resolveAccessibleFolders = async (req) => {
   return result;
 };
 
-// Fetch media across a set of folder ids (each folder is server-filtered by
-// Xibo), merged and de-duped by mediaId. `search` narrows by name via Xibo's
-// `media` LIKE param.
-const fetchMediaInFolders = async (req, folderIds, search) => {
-  const lists = await Promise.all(
-    folderIds.map((fid) =>
-      fetchLibraryCollection({
-        req,
-        endpoint: "/library",
-        idKeys: MEDIA_ID_KEYS,
-        queryParams: { folderId: fid, ...(search ? { media: search } : {}) },
-      })
-    )
-  );
+const dedupeMedia = (items) => {
   const seen = new Set();
   const merged = [];
-  for (const list of lists) {
-    for (const m of list) {
-      const id = String(m.mediaId ?? m.media_id ?? m.id);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      merged.push(m);
-    }
+  for (const m of items) {
+    const id = String(m.mediaId ?? m.media_id ?? m.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    merged.push(m);
   }
   return merged;
+};
+
+// Above this many accessible folders, fetch the library in ONE bulk sweep and
+// filter in memory instead of one request per folder. An admin's home folder is
+// the CMS root, so the subtree is hundreds of folders — a per-folder fan-out
+// there meant hundreds of concurrent /library calls.
+const MAX_FOLDER_FANOUT = 25;
+
+// Fetch media across a set of folder ids. For a small set, query each folder
+// (Xibo server-filters by folderId) and merge — few round trips. For a large
+// set, do a single paginated sweep of the whole library and keep only items in
+// the accessible folders. Either way, de-duped by mediaId. `search` narrows by
+// name via Xibo's `media` LIKE param.
+const fetchMediaInFolders = async (req, folderIds, search) => {
+  if (folderIds.length === 0) return [];
+
+  if (folderIds.length <= MAX_FOLDER_FANOUT) {
+    const lists = await Promise.all(
+      folderIds.map((fid) =>
+        fetchLibraryCollection({
+          req,
+          endpoint: "/library",
+          idKeys: MEDIA_ID_KEYS,
+          queryParams: { folderId: fid, ...(search ? { media: search } : {}) },
+        })
+      )
+    );
+    return dedupeMedia(lists.flat());
+  }
+
+  // Large accessible set (e.g. admin → whole tree): one bulk sweep + in-memory
+  // folder filter beats hundreds of per-folder requests.
+  const allowed = new Set(folderIds.map(String));
+  const all = await fetchLibraryCollection({
+    req,
+    endpoint: "/library",
+    idKeys: MEDIA_ID_KEYS,
+    orderColumn: "modifiedDt",
+    orderDirection: "desc",
+    pageSize: 500,
+    maxPages: 40,
+    queryParams: { ...(search ? { media: search } : {}) },
+  });
+  return dedupeMedia(all.filter((m) => allowed.has(String(m.folderId))));
 };
 
 export const getLibraryMedia = async (req, res) => {
