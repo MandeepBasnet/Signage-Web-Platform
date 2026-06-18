@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import MediaPreviewModal from "./MediaPreviewModal";
@@ -15,7 +15,7 @@ import {
   getWidgetId,
   normalizeMediaItems,
 } from "../utils/playlistItems.js";
-import { usePlaylists } from "../hooks/queries/usePlaylists.js";
+import { usePlaylists, PAGE_SIZE } from "../hooks/queries/usePlaylists.js";
 import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
 
 const EMPTY_ARRAY = [];
@@ -40,13 +40,30 @@ export default function PlaylistContent() {
   const [deleteOnExpiry, setDeleteOnExpiry] = useState(false);
   const [updatingExpiry, setUpdatingExpiry] = useState(false);
 
-  // Cached playlists list.
+  // Server-paginated, searchable playlists. keepPreviousData holds the current
+  // page on screen while the next page/search loads.
+  const [page, setPage] = useState(0);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const {
-    data: playlists = EMPTY_ARRAY,
+    data: playlistsData,
     isLoading: loading,
     error,
     refetch: refetchPlaylists,
-  } = usePlaylists();
+  } = usePlaylists({ page, search: debouncedSearch });
+  const playlists = playlistsData?.playlists ?? EMPTY_ARRAY;
+  const total = playlistsData?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Debounce the search box; searching is done server-side.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // A new search starts back at the first page.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch]);
 
   // Detail (playlist + media) for the open playlist; enabled only when one is
   // selected, cached per id. isFetching drives the loading overlay/spinner.
@@ -695,7 +712,7 @@ export default function PlaylistContent() {
     );
   }
 
-  if (loading) {
+  if (loading && playlists.length === 0) {
     return (
       <section className="flex flex-col gap-5 relative p-4">
         <div className="rounded-lg border border-gray-200 p-6 bg-white shadow-sm">
@@ -732,13 +749,9 @@ export default function PlaylistContent() {
     );
   }
 
-  // Client-side search over the loaded playlists (filter by name).
-  const q = search.trim().toLowerCase();
-  const filteredPlaylists = q
-    ? playlists.filter((p) =>
-        String(p.name || p.playlistName || "").toLowerCase().includes(q)
-      )
-    : playlists;
+  // Searching + pagination are server-side: `playlists` is the current page and
+  // `total` is the server's (filtered) total.
+  const q = debouncedSearch;
 
   return (
     <section className="flex flex-col gap-5 relative p-4">
@@ -756,9 +769,8 @@ export default function PlaylistContent() {
           <div>
             <h2 className="text-2xl font-semibold text-gray-900">Playlists</h2>
             <p className="text-sm text-gray-500 mt-1">
-              {q
-                ? `${filteredPlaylists.length} of ${playlists.length} playlists`
-                : `${playlists.length}${playlists.length === 1 ? " playlist" : " playlists"} found`}
+              {total} {total === 1 ? "playlist" : "playlists"}
+              {q ? " found" : ""}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -784,7 +796,7 @@ export default function PlaylistContent() {
           </div>
         </div>
 
-        {filteredPlaylists.length === 0 ? (
+        {playlists.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-500 text-lg">
               {q ? "No playlists match your search" : "No playlists found"}
@@ -797,7 +809,7 @@ export default function PlaylistContent() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredPlaylists.map((playlist) => {
+            {playlists.map((playlist) => {
               const playlistId =
                 playlist.playlistId || playlist.playlist_id || playlist.id;
               const isDeleteHovered = deleteHoveredPlaylistId === playlistId;
@@ -882,6 +894,34 @@ export default function PlaylistContent() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {pageCount > 1 && (
+          <div className="flex items-center justify-between text-sm text-gray-600 mt-6 pt-4 border-t border-gray-100">
+            <span>
+              Showing {page * PAGE_SIZE + 1}–
+              {Math.min((page + 1) * PAGE_SIZE, total)} of {total}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <span className="px-2">
+                {page + 1} / {pageCount}
+              </span>
+              <button
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                disabled={page >= pageCount - 1}
+                className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
           </div>
         )}
       </div>

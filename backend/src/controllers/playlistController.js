@@ -159,6 +159,8 @@ export const getPlaylists = async (req, res) => {
     // every playlist in the CMS. Scope here to playlists the user OWNS *or* that
     // are permission-shared with one of their groups (an owner-only filter hid
     // shared-but-editable playlists). Mirrors the layouts fix.
+    const search = (req.query.search || "").trim().toLowerCase();
+
     const [identity, raw] = await Promise.all([
       resolveUserIdentity(req),
       fetchLibraryCollection({
@@ -171,7 +173,33 @@ export const getPlaylists = async (req, res) => {
       }),
     ]);
 
-    const playlists = filterOwnedOrShared(raw, identity);
+    let playlists = filterOwnedOrShared(raw, identity);
+
+    // Name search (substring) applied after scoping. Done in memory since the
+    // owned-or-shared filter already runs over the full fetched list.
+    if (search) {
+      playlists = playlists.filter((p) =>
+        String(p.name || p.playlistName || "")
+          .toLowerCase()
+          .includes(search)
+      );
+    }
+
+    // Opt-in pagination: only when the client sends `length` (the Playlists list
+    // view). Other consumers (e.g. the schedule playlist dropdown) send no
+    // `length` and get the full accessible list. Slice in-memory since scoping +
+    // search run after Xibo returns the rows. Mirrors getLayouts.
+    if (req.query.length !== undefined) {
+      const start = Math.max(0, parseInt(req.query.start, 10) || 0);
+      const length = Math.max(1, parseInt(req.query.length, 10) || 12);
+      const total = playlists.length;
+      return res.json({
+        data: playlists.slice(start, start + length),
+        total,
+        recordsTotal: total,
+        recordsFiltered: total,
+      });
+    }
 
     res.json({ data: playlists, total: playlists.length });
   } catch (err) {
