@@ -129,17 +129,29 @@ export const getDisplays = async (req, res) => {
             const scheduleKey = [...uniqueGroupIds].sort((a, b) => a - b).join(",");
             let events = scheduleCache.get(scheduleKey);
             if (!events) {
-                const scheduleParams = new URLSearchParams();
-                uniqueGroupIds.forEach(id => scheduleParams.append('displayGroupIds[]', id));
-                const scheduleResponse = await xiboRequest(`/schedule?${scheduleParams.toString()}`, 'GET');
-
-                if (Array.isArray(scheduleResponse)) {
-                    events = scheduleResponse;
-                } else if (scheduleResponse.data) {
-                    events = scheduleResponse.data;
-                } else {
-                    events = [];
+                // Xibo's /schedule grid loses recurrence-aware filtering (and the
+                // URL overflows) when given too many displayGroupIds at once — a
+                // super admin has hundreds, which made the query return nothing
+                // and every display showed "No scheduled layouts". Query in
+                // batches of 50 and merge by event id. Mirrors getSchedule.
+                const BATCH = 50;
+                const batches = [];
+                for (let i = 0; i < uniqueGroupIds.length; i += BATCH) {
+                    batches.push(uniqueGroupIds.slice(i, i + BATCH));
                 }
+                const responses = await Promise.all(
+                    batches.map((batch) => {
+                        const p = new URLSearchParams();
+                        batch.forEach((id) => p.append('displayGroupIds[]', id));
+                        return xiboRequest(`/schedule?${p.toString()}`, 'GET');
+                    })
+                );
+                const byId = new Map();
+                for (const resp of responses) {
+                    const list = Array.isArray(resp) ? resp : resp?.data || [];
+                    for (const e of list) byId.set(String(e.eventId ?? e.id), e);
+                }
+                events = [...byId.values()];
                 scheduleCache.set(scheduleKey, events);
             }
 
@@ -195,10 +207,24 @@ export const getDisplays = async (req, res) => {
         }
     }
 
-    // 5. Pagination & Normalization
+    // 5. This page shows displays that HAVE a scheduled layout (with that
+    // layout), so keep only those. A super admin has hundreds of displays, most
+    // unscheduled — without this, the first page is all unscheduled displays and
+    // the scheduled ones are unreachable (the UI doesn't paginate).
+    const scheduledGroupIds = new Set();
+    for (const e of scheduledLayouts) {
+      for (const g of e.displayGroups || []) scheduledGroupIds.add(g.displayGroupId);
+    }
+    const displaysWithSchedule = filteredDisplays.filter((d) =>
+      scheduledGroupIds.has(d.displayGroupId)
+    );
+
+    // 6. Pagination & Normalization (over the scheduled displays). The default
+    // page size is large because the frontend doesn't paginate this view and the
+    // scheduled set is small.
     const startIndex = parseInt(start) || 0;
-    const limit = parseInt(length) || 10;
-    const pagedDisplays = filteredDisplays.slice(startIndex, startIndex + limit);
+    const limit = parseInt(length) || 500;
+    const pagedDisplays = displaysWithSchedule.slice(startIndex, startIndex + limit);
 
     const normalizedDisplays = pagedDisplays.map((display) => {
         const layoutId = display.currentLayoutId || display.defaultLayoutId;
@@ -236,11 +262,11 @@ export const getDisplays = async (req, res) => {
         };
     });
 
-    res.json({ 
-      data: normalizedDisplays, 
-      total: filteredDisplays.length,
-      recordsTotal: filteredDisplays.length,
-      recordsFiltered: filteredDisplays.length
+    res.json({
+      data: normalizedDisplays,
+      total: displaysWithSchedule.length,
+      recordsTotal: displaysWithSchedule.length,
+      recordsFiltered: displaysWithSchedule.length
     });
 
   } catch (err) {
