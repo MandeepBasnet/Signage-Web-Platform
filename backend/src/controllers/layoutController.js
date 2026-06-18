@@ -1,5 +1,5 @@
 import axios from "axios";
-import { xiboRequest, xiboGetWithCount } from "../utils/xiboClient.js";
+import { xiboRequest } from "../utils/xiboClient.js";
 import {
   getWebClient,
   getWebBaseUrl,
@@ -7,7 +7,9 @@ import {
   WebSessionNotConfiguredError,
 } from "../utils/xiboWebSession.js";
 import {
-  fetchUserScopedCollection,
+  fetchLibraryCollection,
+  filterOwnedOrShared,
+  resolveUserIdentity,
   getUserContext,
   getOrCreateToken,
   handleControllerError,
@@ -50,56 +52,57 @@ const looksLikeLoginRedirect = (response) => {
 };
 
 const LAYOUT_EMBED_FIELDS =
-  "regions,playlists,widgets,widget_validity,tags,permissions,actions";
+  "regions,playlists,widgets,widget_validity,tags,permissions,actions,groupsWithPermissions";
 
 export const getLayouts = async (req, res) => {
   try {
-    // Opt-in server-side pagination: only when the client sends `length` (the
-    // Layouts list view). Other consumers (the schedule layout dropdown, the
-    // draft lookup) send no `length` and still get the full owner-scoped list,
-    // so their behavior is unchanged.
+    // The Xibo calls use the shared super-admin app token, so /layout returns
+    // EVERY layout in the CMS. We scope to the requester here, keeping layouts
+    // they OWN *or* that are permission-shared with one of their groups — an
+    // owner-only filter hid shared-but-editable layouts. Identity (groups) is
+    // cached; the list itself is response-cached per user by route middleware.
+    const search = (req.query.search || "").trim();
+
+    // Page through the full (unscoped) list and the user's identity concurrently;
+    // only the filtering step needs both. Xibo narrows by name server-side via
+    // the `layout` param (LIKE match), shrinking what we fetch when searching.
+    const [identity, raw] = await Promise.all([
+      resolveUserIdentity(req),
+      fetchLibraryCollection({
+        req,
+        endpoint: "/layout",
+        idKeys: ["layoutId", "layout_id", "id"],
+        orderColumn: "modifiedDt",
+        orderDirection: "desc",
+        pageSize: 500,
+        maxPages: 20,
+        queryParams: {
+          embed: LAYOUT_EMBED_FIELDS,
+          ...(search ? { layout: search } : {}),
+        },
+      }),
+    ]);
+
+    const accessible = filterOwnedOrShared(raw, identity);
+
+    // Opt-in pagination: only when the client sends `length` (the Layouts list
+    // view). Other consumers (the schedule layout dropdown, the draft lookup)
+    // send no `length` and get the full accessible list. Slice in-memory since
+    // the owned-or-shared filter runs after Xibo returns the rows.
     if (req.query.length !== undefined) {
-      const { token, userId } = getUserContext(req);
       const start = Math.max(0, parseInt(req.query.start, 10) || 0);
       const length = Math.max(1, parseInt(req.query.length, 10) || 20);
-      const search = (req.query.search || "").trim();
-
-      const params = new URLSearchParams({
-        start: String(start),
-        length: String(length),
-        "order[0][column]": "modifiedDt",
-        "order[0][dir]": "desc",
-        embed: LAYOUT_EMBED_FIELDS,
-      });
-      if (userId !== undefined && userId !== null) {
-        params.append("ownerId", String(userId));
-        params.append("userId", String(userId));
-      }
-      // Xibo filters layouts by name with the `layout` param (LIKE match).
-      if (search) params.append("layout", search);
-
-      const { data, total } = await xiboGetWithCount(
-        `/layout?${params.toString()}`,
-        token
-      );
+      const page = accessible.slice(start, start + length);
+      const total = accessible.length;
       return res.json({
-        data,
+        data: page,
         total,
         recordsTotal: total,
         recordsFiltered: total,
       });
     }
 
-    const layouts = await fetchUserScopedCollection({
-      req,
-      endpoint: "/layout",
-      idKeys: ["layoutId", "layout_id", "id"],
-      queryParams: {
-        embed: LAYOUT_EMBED_FIELDS,
-      },
-    });
-
-    res.json({ data: layouts, total: layouts.length });
+    res.json({ data: accessible, total: accessible.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch layouts");
   }

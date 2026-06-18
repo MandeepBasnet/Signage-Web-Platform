@@ -1,4 +1,5 @@
 import { xiboRequest, getAccessToken } from "./xiboClient.js";
+import { createTtlCache } from "./ttlCache.js";
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -111,6 +112,114 @@ function filterOwnedByUser(items, userId, username) {
       ) {
         return true;
       }
+    }
+
+    return false;
+  });
+}
+
+// User group membership changes rarely, so cache the resolved identity per
+// requester to skip the /user lookup on warm loads. Mirrors the cache in
+// displayController.
+const identityCache = createTtlCache({ maxSize: 500, ttlMs: 5 * 60 * 1000 });
+
+// Resolve the requester's CANONICAL numeric Xibo userId plus the names of the
+// groups they belong to. req.user.id may be a numeric userId OR (when the login
+// user lookup failed) the login identifier, so we re-resolve against Xibo.
+// Used by filterOwnedOrShared to scope collections fetched with the shared
+// super-admin app token. On failure returns best-effort values (never throws).
+async function resolveUserIdentity(req) {
+  const rawId = req.user?.id ?? req.user?.userId;
+  const username = req.user?.username ?? req.user?.userName;
+  const idIsNumeric =
+    rawId !== undefined && rawId !== null && !isNaN(Number(rawId));
+
+  const cacheKey = idIsNumeric ? `id:${rawId}` : `name:${username || rawId}`;
+  const hit = identityCache.get(cacheKey);
+  if (hit) return hit;
+
+  let canonicalUserId = idIsNumeric ? Number(rawId) : null;
+  let userGroups = [];
+  try {
+    const query = idIsNumeric
+      ? `/user?userId=${rawId}&embed=groups`
+      : `/user?userName=${encodeURIComponent(username || rawId)}&embed=groups`;
+    const details = await xiboRequest(query, "GET");
+
+    let user = null;
+    if (Array.isArray(details)) {
+      user = details[0];
+    } else if (details?.data) {
+      user = Array.isArray(details.data) ? details.data[0] : details.data;
+    } else {
+      user = details;
+    }
+
+    if (user) {
+      // Trust the userId Xibo returns over whatever was in the JWT.
+      if (user.userId !== undefined && user.userId !== null) {
+        canonicalUserId = Number(user.userId);
+      }
+      if (Array.isArray(user.groups)) {
+        userGroups = user.groups.map((g) => g.group).filter(Boolean);
+      }
+      if (user.group) userGroups.push(user.group);
+    }
+  } catch (err) {
+    console.error("[resolveUserIdentity] Failed to resolve user:", err.message);
+    return { canonicalUserId, userGroups }; // don't cache a failed lookup
+  }
+
+  const identity = { canonicalUserId, userGroups };
+  identityCache.set(cacheKey, identity);
+  return identity;
+}
+
+// Keep items the user OWNS or that are permission-shared with one of their
+// groups. With the shared super-admin app token Xibo returns every object, so
+// ownership/sharing has to be enforced here. Mirrors the display ownership +
+// groupsWithPermissions filter in displayController, with an extra fallback to
+// the explicit `permissions` embed. Requires items fetched with the
+// groupsWithPermissions and/or permissions embed.
+function filterOwnedOrShared(items, identity = {}) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const { canonicalUserId, userGroups = [] } = identity;
+  const groupSet = new Set((userGroups || []).map((g) => String(g)));
+  const ownerId =
+    canonicalUserId !== undefined && canonicalUserId !== null
+      ? Number(canonicalUserId)
+      : null;
+
+  return items.filter((item) => {
+    // Owned by the requester.
+    if (ownerId !== null && Number(item?.ownerId) === ownerId) {
+      return true;
+    }
+
+    // Shared: groupsWithPermissions is a comma-separated list of the group
+    // names Xibo grants access to (same field used for displays).
+    const gwp = item?.groupsWithPermissions;
+    if (gwp) {
+      const permitted = Array.isArray(gwp)
+        ? gwp
+        : String(gwp)
+            .split(",")
+            .map((s) => s.trim());
+      if (permitted.some((g) => groupSet.has(String(g)))) {
+        return true;
+      }
+    }
+
+    // Fallback: explicit permissions embed — any entry that grants view to one
+    // of the user's groups.
+    if (Array.isArray(item?.permissions)) {
+      const shared = item.permissions.some(
+        (p) => Number(p?.view) === 1 && groupSet.has(String(p?.group))
+      );
+      if (shared) return true;
     }
 
     return false;
@@ -293,6 +402,8 @@ export {
   fetchUserScopedCollection,
   fetchLibraryCollection,
   filterOwnedByUser,
+  filterOwnedOrShared,
+  resolveUserIdentity,
   getUserContext,
   getOrCreateToken,
   handleControllerError,
