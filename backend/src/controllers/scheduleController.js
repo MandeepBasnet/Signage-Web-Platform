@@ -249,6 +249,7 @@ export const createScheduleEvent = async (req, res) => {
       toDt,
       isAlways, // boolean
       isPriority, // boolean
+      name, // optional schedule name
     } = req.body || {};
 
     // Validate target display groups
@@ -286,6 +287,7 @@ export const createScheduleEvent = async (req, res) => {
     const form = new FormData();
     form.append("eventTypeId", "1"); // Layout
     form.append("campaignId", String(campaignId));
+    if (name && String(name).trim()) form.append("name", String(name).trim());
     groupIds.forEach((id) => form.append("displayGroupIds[]", String(id)));
     form.append("dayPartId", String(always ? alwaysId : customId));
     form.append("fromDt", from);
@@ -331,6 +333,15 @@ export const updateScheduleEvent = async (req, res) => {
       isAlways,
       isPriority,
       displayOrder,
+      // Fields the edit form doesn't change but Xibo's full-replace PUT would
+      // wipe if omitted — passed through from the existing event to preserve them.
+      name,
+      maxPlaysPerHour,
+      recurrenceType,
+      recurrenceDetail,
+      recurrenceRange,
+      recurrenceRepeatsOn,
+      recurrenceMonthlyRepeatsOn,
     } = req.body || {};
 
     const groupIds = Array.isArray(displayGroupIds)
@@ -371,6 +382,21 @@ export const updateScheduleEvent = async (req, res) => {
       syncTimezone: "0",
     };
     if (!always) payload.toDt = toDt;
+
+    // Preserve the event's name (Xibo clears it when the PUT omits it — the bug
+    // where editing an event dropped its name).
+    if (name !== undefined && name !== null) payload.name = String(name);
+    if (maxPlaysPerHour !== undefined && maxPlaysPerHour !== null) {
+      payload.maxPlaysPerHour = String(maxPlaysPerHour);
+    }
+    // Preserve recurrence so editing a recurring event doesn't make it one-off.
+    if (recurrenceType) {
+      payload.recurrenceType = String(recurrenceType);
+      payload.recurrenceDetail = String(recurrenceDetail ?? "");
+      payload.recurrenceRepeatsOn = String(recurrenceRepeatsOn ?? "");
+      payload.recurrenceMonthlyRepeatsOn = String(recurrenceMonthlyRepeatsOn ?? 0);
+      if (recurrenceRange) payload.recurrenceRange = String(recurrenceRange);
+    }
 
     // Xibo PUT requires application/x-www-form-urlencoded; arrays as key[].
     await axios.put(

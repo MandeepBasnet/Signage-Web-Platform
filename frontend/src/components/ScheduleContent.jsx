@@ -43,6 +43,7 @@ export default function ScheduleContent() {
   const [fromDt, setFromDt] = useState("");
   const [toDt, setToDt] = useState("");
   const [isPriority, setIsPriority] = useState(false);
+  const [eventName, setEventName] = useState("");
 
   // Date range for the events list (defaults: today → +30 days).
   const [rangeFrom, setRangeFrom] = useState(
@@ -72,12 +73,14 @@ export default function ScheduleContent() {
     // Start the content picker fresh ("" = pick for create / keep-current for edit).
     setContentType("playlist");
     setContentId("");
+    setEventName("");
 
     // Edit mode only when given a real schedule event (guards against a stray
     // click-event object being passed in as the argument).
     if (event && event.eventId) {
-      // Edit mode: prefill targeting / timing / priority from the event.
+      // Edit mode: prefill name / targeting / timing / priority from the event.
       setEditingEvent(event);
+      setEventName(event.name || "");
       const groupIds = (event.displayGroups || [])
         .map((dg) => dg.displayGroupId || dg.id)
         .filter(Boolean);
@@ -100,6 +103,7 @@ export default function ScheduleContent() {
     setShowAdd(false);
     setEditingEvent(null);
     setContentId("");
+    setEventName("");
     setSelectedGroupIds([]);
     setIsAlways(true);
     setFromDt("");
@@ -132,6 +136,7 @@ export default function ScheduleContent() {
     }
 
     const common = {
+      name: eventName.trim(),
       displayGroupIds: selectedGroupIds,
       isAlways,
       isPriority,
@@ -164,6 +169,19 @@ export default function ScheduleContent() {
       } else {
         // Keep the event's existing content.
         body.campaignId = editingEvent.campaignId;
+      }
+
+      // Preserve fields the form doesn't manage. Xibo's PUT is a full replace,
+      // so omitting these wipes them (e.g. recurrence on a recurring event). The
+      // name comes from the editable field above (`common.name`).
+      body.maxPlaysPerHour = editingEvent.maxPlaysPerHour ?? 0;
+      if (editingEvent.recurrenceType) {
+        body.recurrenceType = editingEvent.recurrenceType;
+        body.recurrenceDetail = editingEvent.recurrenceDetail ?? "";
+        body.recurrenceRange = editingEvent.recurrenceRange ?? "";
+        body.recurrenceRepeatsOn = editingEvent.recurrenceRepeatsOn ?? "";
+        body.recurrenceMonthlyRepeatsOn =
+          editingEvent.recurrenceMonthlyRepeatsOn ?? 0;
       }
     } else {
       // Create: resolve content (playlist auto-wraps server-side).
@@ -228,7 +246,12 @@ export default function ScheduleContent() {
     if (!value) return "—";
     const ms = typeof value === "number" ? value * 1000 : Date.parse(value);
     if (Number.isNaN(ms)) return String(value);
-    return new Date(ms).toLocaleString();
+    // Match Xibo's grid format (YYYY-MM-DD HH:mm) instead of the locale string.
+    const d = new Date(ms);
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(
+      d.getDate()
+    )} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   };
 
   if (loading) {
@@ -294,6 +317,7 @@ export default function ScheduleContent() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
+                  <th className="px-4 py-3 text-sm font-medium text-gray-700">Name</th>
                   <th className="px-4 py-3 text-sm font-medium text-gray-700">Event</th>
                   <th className="px-4 py-3 text-sm font-medium text-gray-700">Start</th>
                   <th className="px-4 py-3 text-sm font-medium text-gray-700">End</th>
@@ -307,14 +331,17 @@ export default function ScheduleContent() {
                     key={event.eventId}
                     className="border-b border-gray-100 hover:bg-gray-50"
                   >
-                    <td className="px-4 py-3 text-sm text-gray-900">
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      {event.name || <span className="text-gray-400">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
                       {event.campaign || event.name || "Untitled Event"}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {event.dayPartId === 1 ? "Always" : formatEpoch(event.fromDt)}
+                      {event.isAlways ? "Always" : formatEpoch(event.fromDt)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
-                      {event.dayPartId === 1 ? "—" : formatEpoch(event.toDt)}
+                      {event.isAlways ? "Always" : formatEpoch(event.toDt)}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600">
                       {event.displayGroups?.map((dg) => dg.displayGroup).join(", ") ||
@@ -360,6 +387,22 @@ export default function ScheduleContent() {
             </div>
 
             <form className="px-6 py-4 space-y-4" onSubmit={handleSubmit}>
+              {/* Schedule name (optional) — distinct from the layout/playlist. */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Schedule Name{" "}
+                  <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={(e) => setEventName(e.target.value)}
+                  placeholder="A label for this schedule, e.g. Femina Ramat Aviv Night"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  disabled={submitting}
+                />
+              </div>
+
               {/* Content */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
