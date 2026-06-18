@@ -113,12 +113,64 @@ export const getDisplayGroups = async (req, res) => {
   try {
     const { token } = await getOrCreateToken(req);
 
-    const response = await xiboRequest("/displaygroup", "GET", null, token);
-    const groups = Array.isArray(response)
-      ? response
-      : response?.data || [];
+    // With the shared super-admin app token /displaygroup returns every group in
+    // the CMS, which would let a user schedule onto displays they don't own — so
+    // we scope here. A display-specific group is NOT reliably returned by the
+    // /displaygroup grid (Xibo hides isDisplaySpecific=1 groups, and -1 didn't
+    // surface them on this CMS), nor owned by the user who can use that display.
+    // So we DON'T rely on /displaygroup for those: we build the display-specific
+    // entries straight from the displays the user can access (the same signal
+    // the schedule view uses — proven to yield the right group ids), then add
+    // any regular (collection) groups the user owns or that are shared with them.
+    const identity = await resolveUserIdentity(req);
 
-    res.json({ data: groups, total: groups.length });
+    const displayParams = new URLSearchParams({
+      start: "0",
+      length: "1000",
+      embed: "displayGroup,groupsWithPermissions",
+    });
+    const displayResp = await xiboRequest(
+      `/display?${displayParams.toString()}`,
+      "GET",
+      null,
+      token
+    );
+    const displays = Array.isArray(displayResp)
+      ? displayResp
+      : displayResp?.data || [];
+
+    // One schedulable target per accessible display (its display-specific group).
+    const displaySpecificGroups = filterOwnedOrShared(displays, identity)
+      .filter((d) => d.displayGroupId)
+      .map((d) => ({
+        displayGroupId: d.displayGroupId,
+        // The display-specific group is named after the display; `display` is the
+        // reliable name string (the schedule list shows the same value).
+        displayGroup: d.display || `Display ${d.displayId}`,
+        isDisplaySpecific: 1,
+      }));
+
+    // Regular (collection) display groups the user owns or that are shared with
+    // them — the /displaygroup grid default already excludes display-specific
+    // groups, which is exactly what we want for this second set.
+    const response = await xiboRequest(
+      "/displaygroup?embed=permissions,groupsWithPermissions",
+      "GET",
+      null,
+      token
+    );
+    const groups = Array.isArray(response) ? response : response?.data || [];
+    const regularGroups = filterOwnedOrShared(groups, identity);
+
+    // Combine, de-duping by displayGroupId (a collection group can't collide with
+    // a display-specific one, but guard anyway).
+    const byId = new Map();
+    for (const g of [...displaySpecificGroups, ...regularGroups]) {
+      byId.set(String(g.displayGroupId), g);
+    }
+    const accessible = [...byId.values()];
+
+    res.json({ data: accessible, total: accessible.length });
   } catch (err) {
     handleControllerError(res, err, "Failed to fetch display groups");
   }
