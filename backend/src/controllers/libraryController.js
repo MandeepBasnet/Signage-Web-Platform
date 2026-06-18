@@ -235,6 +235,7 @@ const resolveAccessibleFolders = async (req) => {
   if (hit) return hit;
 
   let homeFolderId = null;
+  let isSuperAdmin = false;
   try {
     const q = idIsNumeric
       ? `/user?userId=${rawId}`
@@ -246,6 +247,8 @@ const resolveAccessibleFolders = async (req) => {
       ? u.data[0]
       : u?.data || u;
     if (user?.homeFolderId != null) homeFolderId = user.homeFolderId;
+    // userTypeId 1 = Super Admin → can see all media regardless of home folder.
+    isSuperAdmin = Number(user?.userTypeId) === 1;
   } catch (e) {
     console.warn("[resolveAccessibleFolders] user lookup failed:", e.message);
   }
@@ -255,7 +258,11 @@ const resolveAccessibleFolders = async (req) => {
 
   let subtree;
   let folderIds;
-  if (homeFolderId != null) {
+  if (isSuperAdmin || homeFolderId == null) {
+    // Super Admin (or no home folder resolved) → the whole folder tree.
+    subtree = roots;
+    folderIds = new Set(collectFolderIds({ children: roots }));
+  } else {
     const node = findFolderNode(roots, homeFolderId);
     if (node) {
       subtree = [node];
@@ -265,10 +272,6 @@ const resolveAccessibleFolders = async (req) => {
       subtree = [];
       folderIds = new Set([String(homeFolderId)]);
     }
-  } else {
-    // No home folder (e.g. admin) — fall back to the full tree.
-    subtree = roots;
-    folderIds = new Set(collectFolderIds({ children: roots }));
   }
 
   const result = { homeFolderId, subtree, folderIds };

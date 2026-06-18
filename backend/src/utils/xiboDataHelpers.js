@@ -140,6 +140,7 @@ async function resolveUserIdentity(req) {
 
   let canonicalUserId = idIsNumeric ? Number(rawId) : null;
   let userGroups = [];
+  let isSuperAdmin = false;
   try {
     const query = idIsNumeric
       ? `/user?userId=${rawId}&embed=groups`
@@ -164,13 +165,17 @@ async function resolveUserIdentity(req) {
         userGroups = user.groups.map((g) => g.group).filter(Boolean);
       }
       if (user.group) userGroups.push(user.group);
+      // Xibo userTypeId 1 = Super Admin: sees everything in the CMS regardless of
+      // explicit ownership/permissions. We must honor that, otherwise an admin
+      // only sees the few items explicitly shared with their personal group.
+      isSuperAdmin = Number(user.userTypeId) === 1;
     }
   } catch (err) {
     console.error("[resolveUserIdentity] Failed to resolve user:", err.message);
-    return { canonicalUserId, userGroups }; // don't cache a failed lookup
+    return { canonicalUserId, userGroups, isSuperAdmin }; // don't cache a failed lookup
   }
 
-  const identity = { canonicalUserId, userGroups };
+  const identity = { canonicalUserId, userGroups, isSuperAdmin };
   identityCache.set(cacheKey, identity);
   return identity;
 }
@@ -184,6 +189,12 @@ async function resolveUserIdentity(req) {
 function filterOwnedOrShared(items, identity = {}) {
   if (!Array.isArray(items) || items.length === 0) {
     return [];
+  }
+
+  // Super Admins see everything (Xibo grants them implicit access to all
+  // objects, so most are not explicitly shared with their group).
+  if (identity.isSuperAdmin) {
+    return items;
   }
 
   const { canonicalUserId, userGroups = [] } = identity;

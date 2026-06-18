@@ -39,6 +39,7 @@ export const getDisplays = async (req, res) => {
       if (hit) return hit;
       let userGroups = [];
       let canonicalUserId = idIsNumeric ? Number(rawId) : null;
+      let isSuperAdmin = false;
       try {
         const userQuery = idIsNumeric
           ? `/user?userId=${rawId}&embed=groups`
@@ -65,12 +66,14 @@ export const getDisplays = async (req, res) => {
           if (user.group) {
             userGroups.push(user.group);
           }
+          // userTypeId 1 = Super Admin → sees every display.
+          isSuperAdmin = Number(user.userTypeId) === 1;
         }
       } catch (userError) {
         console.error(`[getDisplays] Failed to fetch user details:`, userError.message);
-        return { canonicalUserId, userGroups }; // don't cache a failed lookup
+        return { canonicalUserId, userGroups, isSuperAdmin: false }; // don't cache a failed lookup
       }
-      const ctx = { canonicalUserId, userGroups };
+      const ctx = { canonicalUserId, userGroups, isSuperAdmin };
       userContextCache.set(userKey, ctx);
       return ctx;
     };
@@ -81,7 +84,7 @@ export const getDisplays = async (req, res) => {
       length: 1000,
       embed: "status,currentLayout,displayGroup,groupsWithPermissions",
     });
-    const [{ canonicalUserId, userGroups }, response] = await Promise.all([
+    const [{ canonicalUserId, userGroups, isSuperAdmin }, response] = await Promise.all([
       resolveUserContext(),
       xiboRequest(`/display?${params.toString()}`, "GET"),
     ]);
@@ -95,7 +98,8 @@ export const getDisplays = async (req, res) => {
 
     // 3. Filter Displays — keep only those the logged-in user owns OR that are
     // permission-shared with one of their groups ("only my displays" scope).
-    const filteredDisplays = displays.filter(display => {
+    // Super Admins (userTypeId 1) see every display.
+    const filteredDisplays = isSuperAdmin ? displays : displays.filter(display => {
       // Compare as numbers so a valid owner match doesn't fail on type
       // (canonicalUserId is numeric; display.ownerId is numeric in Xibo).
       if (

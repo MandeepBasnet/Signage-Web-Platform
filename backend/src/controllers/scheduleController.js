@@ -44,18 +44,24 @@ const resolveDayPartIds = async (token) => {
   return _dayPartIds;
 };
 
+// Xibo's /schedule grid only applies RECURRENCE-AWARE date filtering when it's
+// given a small set of displayGroupIds. Passing all of them at once (a super
+// admin's hundreds) overflows the query and Xibo treats it as unscoped, which
+// drops recurring events whose base dates are outside the window. So we query in
+// batches and merge — verified to surface recurring events the all-at-once query
+// missed. Kept comfortably under the URL-length threshold.
+const SCHEDULE_DG_BATCH = 50;
+
 export const getSchedule = async (req, res) => {
   try {
     const { fromDt, toDt } = req.query;
     const { token } = await getOrCreateToken(req);
 
-    // With the shared super-admin app token, an unscoped /schedule returns EVERY
-    // tenant's events. Scope the schedule to the displays the user can act on:
-    // resolve the displays they OWN or that are permission-shared with one of
-    // their groups, then ask Xibo only for events targeting those display groups
-    // (`displayGroupIds[]`). This mirrors how /displays is scoped and how the
-    // dashboard resolves schedules — a user sees the events on their displays
-    // (which includes events they scheduled themselves), not everyone's.
+    // Scope the schedule to the displays the user can act on: resolve the
+    // displays they OWN or that are permission-shared with their group (a Super
+    // Admin gets every display via filterOwnedOrShared), then ask Xibo only for
+    // events targeting those display groups. A user sees the events on their
+    // displays (including ones they scheduled), not everyone's.
     const identity = await resolveUserIdentity(req);
 
     const displayParams = new URLSearchParams({
@@ -85,21 +91,32 @@ export const getSchedule = async (req, res) => {
       return res.json({ data: [], total: 0 });
     }
 
-    const params = new URLSearchParams();
-    if (fromDt) params.append("fromDt", fromDt); // required by Xibo
-    if (toDt) params.append("toDt", toDt); // required by Xibo
-    params.append("embed", "displayGroups,campaign");
-    displayGroupIds.forEach((id) =>
-      params.append("displayGroupIds[]", String(id))
+    // Build one request per batch of display groups (concurrently), then merge
+    // and de-dupe events by id.
+    const batches = [];
+    for (let i = 0; i < displayGroupIds.length; i += SCHEDULE_DG_BATCH) {
+      batches.push(displayGroupIds.slice(i, i + SCHEDULE_DG_BATCH));
+    }
+
+    const responses = await Promise.all(
+      batches.map((batch) => {
+        const params = new URLSearchParams();
+        if (fromDt) params.append("fromDt", fromDt); // required by Xibo
+        if (toDt) params.append("toDt", toDt); // required by Xibo
+        params.append("embed", "displayGroups,campaign");
+        batch.forEach((id) => params.append("displayGroupIds[]", String(id)));
+        return xiboRequest(`/schedule?${params.toString()}`, "GET", null, token);
+      })
     );
 
-    const response = await xiboRequest(
-      `/schedule?${params.toString()}`,
-      "GET",
-      null,
-      token
-    );
-    const events = Array.isArray(response) ? response : response?.data || [];
+    const byId = new Map();
+    for (const response of responses) {
+      const events = Array.isArray(response) ? response : response?.data || [];
+      for (const e of events) {
+        byId.set(String(e.eventId ?? e.id), e);
+      }
+    }
+    const events = [...byId.values()];
 
     res.json({ data: events, total: events.length });
   } catch (err) {
