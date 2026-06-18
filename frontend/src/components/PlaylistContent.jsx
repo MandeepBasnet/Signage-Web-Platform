@@ -6,6 +6,7 @@ import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import MediaPreviewModal from "./MediaPreviewModal";
 import MediaThumbnail from "./MediaThumbnail.jsx";
+import { AlertTriangle, ArrowLeft, ListVideo } from "lucide-react";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo, formatFileSize } from "../utils/mediaTypes.js";
@@ -350,9 +351,10 @@ export default function PlaylistContent() {
             <div className="flex items-center gap-4">
               <button
                 onClick={handleBackClick}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
               >
-                ← Back to Playlists
+                <ArrowLeft className="w-4 h-4" />
+                Back to Playlists
               </button>
               <div>
                 <h2 className="text-2xl font-semibold text-gray-900">
@@ -407,7 +409,7 @@ export default function PlaylistContent() {
           ) : playlistError ? (
             <div className="rounded-lg border border-red-200 p-6 bg-red-50">
               <div className="flex items-center gap-3">
-                <span className="text-2xl">⚠️</span>
+                <AlertTriangle className="w-6 h-6 text-red-600 shrink-0" />
                 <div>
                   <h3 className="font-semibold text-red-800 mb-1">Error</h3>
                   <p className="text-red-700">{playlistError?.message || "Failed to load playlist details"}</p>
@@ -504,7 +506,7 @@ export default function PlaylistContent() {
                                 item.mediaName ||
                                 "Media"
                               }
-                              iconClassName="text-2xl"
+                              iconClassName="w-6 h-6"
                             />
                           </div>
                         </td>
@@ -732,7 +734,7 @@ export default function PlaylistContent() {
       <section className="flex flex-col gap-5 relative p-4">
         <div className="rounded-lg border border-red-200 p-6 bg-red-50 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
+            <AlertTriangle className="w-6 h-6 text-red-600 shrink-0" />
             <div>
               <h3 className="font-semibold text-red-800 mb-1">Error</h3>
               <p className="text-red-700">{error?.message || "Failed to load playlists"}</p>
@@ -842,7 +844,7 @@ export default function PlaylistContent() {
                         "Unnamed Playlist"}
                     </h3>
                     <div className="flex items-center gap-2">
-                      <span className="text-2xl">📂</span>
+                      <ListVideo className="w-6 h-6 text-blue-500 shrink-0" />
                       {/* Delete Button */}
                       <button
                         onClick={(e) => {

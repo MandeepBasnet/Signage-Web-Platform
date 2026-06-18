@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Image as ImageIcon } from "lucide-react";
 
 import SearchBar from "./SearchBar.jsx";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
@@ -169,7 +170,7 @@ export default function LayoutContent() {
                           loading="lazy"
                         />
                       ) : (
-                        <span className="text-2xl text-gray-300">🖼️</span>
+                        <ImageIcon className="w-6 h-6 text-gray-300" />
                       )}
                     </div>
                   </td>

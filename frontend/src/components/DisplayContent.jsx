@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Check, X, FileText } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -64,9 +65,9 @@ export default function DisplayContent() {
 
   const YesNo = ({ value }) =>
     value ? (
-      <span className="text-green-600 font-semibold">✓</span>
+      <Check className="w-4 h-4 text-green-600 inline" />
     ) : (
-      <span className="text-red-500 font-semibold">✗</span>
+      <X className="w-4 h-4 text-red-500 inline" />
     );
 
   const formatDate = (dateString) => {
@@ -365,7 +366,7 @@ export default function DisplayContent() {
                                         />
                                       ) : (
                                         <div className="flex flex-col items-center justify-center p-8 text-gray-600 text-center">
-                                          <span className="text-5xl mb-3">📄</span>
+                                          <FileText className="w-12 h-12 mb-3 text-gray-400" />
                                           <p className="font-semibold text-base mb-1">{layoutName}</p>
                                         </div>
                                       )}

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { getAuthHeaders } from "../utils/auth.js";
 import MediaPreviewModal from "./MediaPreviewModal";
 import MediaThumbnail from "./MediaThumbnail.jsx";
+import { X } from "lucide-react";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo } from "../utils/mediaTypes.js";
@@ -535,9 +536,10 @@ export default function AddMediaPlaylistButton({
               </div>
               <button
                 onClick={closeModal}
-                className="text-gray-500 hover:text-gray-700 text-2xl leading-none"
+                className="text-gray-500 hover:text-gray-700"
+                aria-label="Close"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 

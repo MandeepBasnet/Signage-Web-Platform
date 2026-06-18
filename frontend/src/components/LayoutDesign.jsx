@@ -15,6 +15,8 @@ import CanvasControls from "./CanvasControls.jsx";
 import PublishButton from "./PublishButton.jsx";
 import CheckoutButton from "./CheckoutButton.jsx";
 import LayoutElement from "./LayoutElement.jsx";
+import MediaTypeIcon from "./MediaTypeIcon.jsx";
+import { BarChart3, ListVideo, FileText } from "lucide-react";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -1232,7 +1234,7 @@ export default function LayoutDesign() {
       setEditingTextWidgetId(null);
       setEditingElementId(null);
       setEditingTextValue("");
-      alert("✓ Text updated successfully!");
+      alert("Text updated successfully!");
     } catch (err) {
       console.error("[handleTextSave] ✗ Error updating text:", err);
       console.error("[handleTextSave] Error details:", {
@@ -1242,7 +1244,7 @@ export default function LayoutDesign() {
       });
 
       // Show error message to user
-      alert(`❌ Failed to update text: ${err.message}`);
+      alert(`Failed to update text: ${err.message}`);
     } finally {
       setSavingText(false);
     }
@@ -1879,12 +1881,12 @@ export default function LayoutDesign() {
                                     {moduleName === "text" ? (
                                       <span className="text-2xl">T</span>
                                     ) : moduleName === "dataset" ? (
-                                      <span className="text-2xl">📊</span>
+                                      <BarChart3 className="w-6 h-6" />
                                     ) : moduleName === "playlist" ||
                                       moduleName === "subplaylist" ? (
-                                      <span className="text-2xl">📑</span>
+                                      <ListVideo className="w-6 h-6" />
                                     ) : (
-                                      <span className="text-2xl">📄</span>
+                                      <FileText className="w-6 h-6" />
                                     )}
                                   </div>
                                 </div>
@@ -2377,9 +2379,10 @@ export default function LayoutDesign() {
                                                               : "flex"
                                                           }`}
                                                         >
-                                                          {isVideo(mediaType)
-                                                            ? "🎬"
-                                                            : "📄"}
+                                                          <MediaTypeIcon
+                                                            type={mediaType}
+                                                            className="w-6 h-6"
+                                                          />
                                                         </div>
                                                       </div>
 
@@ -2813,10 +2816,10 @@ export default function LayoutDesign() {
                                                               : "flex"
                                                           }`}
                                                         >
-                                                          {mediaEl.type ===
-                                                          "video"
-                                                            ? "🎬"
-                                                            : "🖼️"}
+                                                          <MediaTypeIcon
+                                                            type={mediaEl.type}
+                                                            className="w-6 h-6"
+                                                          />
                                                         </div>
                                                       </div>
                                                       {/* Media Details */}

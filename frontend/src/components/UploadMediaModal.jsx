@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -207,7 +208,7 @@ export default function UploadMediaModal({
             aria-label="Close upload modal"
             disabled={uploading}
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 

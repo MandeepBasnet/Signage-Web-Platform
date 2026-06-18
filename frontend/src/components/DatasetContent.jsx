@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import AddRowModal from "./AddRowModal";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -139,11 +140,12 @@ export default function DatasetContent() {
         <>
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-4">
-              <button 
+              <button
                 onClick={handleBack}
                 className="text-gray-600 hover:text-gray-900 flex items-center gap-1"
               >
-                ← Back
+                <ArrowLeft className="w-4 h-4" />
+                Back
               </button>
               <h1 className="text-2xl font-bold text-gray-800">{selectedDataset?.dataSet}</h1>
             </div>

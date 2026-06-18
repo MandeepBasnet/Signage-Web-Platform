@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { X } from "lucide-react";
 
 export default function AddRowModal({ isOpen, onClose, columns, onSave }) {
   const [formData, setFormData] = useState({});
@@ -40,8 +41,9 @@ export default function AddRowModal({ isOpen, onClose, columns, onSave }) {
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
+            aria-label="Close"
           >
-            ✕
+            <X className="w-5 h-5" />
           </button>
         </div>
 

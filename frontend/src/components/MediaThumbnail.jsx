@@ -1,4 +1,6 @@
-import { isVideo, getMediaIcon } from "../utils/mediaTypes.js";
+import { Play } from "lucide-react";
+import { isVideo } from "../utils/mediaTypes.js";
+import MediaTypeIcon from "./MediaTypeIcon.jsx";
 
 // Shared media thumbnail, used by the Library (Media) page and the Add-Media
 // picker so a media item is represented identically in both places.
@@ -11,7 +13,7 @@ import { isVideo, getMediaIcon } from "../utils/mediaTypes.js";
 //
 // The parent container must be `relative` (for the play badge), sized, and
 // `overflow-hidden`.
-export default function MediaThumbnail({ url, type, name, iconClassName = "text-3xl" }) {
+export default function MediaThumbnail({ url, type, name, iconClassName = "w-8 h-8" }) {
   const hasImage = !!url;
 
   return (
@@ -37,14 +39,14 @@ export default function MediaThumbnail({ url, type, name, iconClassName = "text-
       <div
         className={`${
           hasImage ? "hidden" : "flex"
-        } items-center justify-center w-full h-full text-gray-400 ${iconClassName}`}
+        } items-center justify-center w-full h-full text-gray-400`}
       >
-        {getMediaIcon(type)}
+        <MediaTypeIcon type={type} className={iconClassName} />
       </div>
 
       {hasImage && isVideo(type) && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-          <span className="text-2xl">▶️</span>
+          <Play className="w-6 h-6 text-white drop-shadow" fill="currentColor" />
         </div>
       )}
     </>

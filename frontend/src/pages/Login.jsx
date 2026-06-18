@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import { clearAuth, saveAuth } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -178,7 +179,7 @@ export default function Login() {
                   />
                   {error && (
                     <p className="text-[13px] text-red-600 -mt-0.5 flex items-center gap-1">
-                      <span>⚠️</span>
+                      <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                       {error}
                     </p>
                   )}

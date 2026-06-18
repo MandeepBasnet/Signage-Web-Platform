@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
+import { AlertTriangle } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo, formatFileSize } from "../utils/mediaTypes.js";
+import MediaTypeIcon from "./MediaTypeIcon.jsx";
 
 export default function MediaPickerModal({
   isOpen,
@@ -142,7 +144,9 @@ export default function MediaPickerModal({
           ) : error ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <p className="text-red-400 mb-4">⚠️ {error}</p>
+                <p className="text-red-400 mb-4 inline-flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 shrink-0" /> {error}
+                </p>
                 <button
                   onClick={fetchMedia}
                   className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
@@ -214,14 +218,14 @@ export default function MediaPickerModal({
                               e.target.nextSibling.style.display = "flex";
                             }}
                           />
-                          <div className="hidden w-full h-full flex items-center justify-center text-gray-500 text-4xl">
-                            🎬
+                          <div className="hidden w-full h-full flex items-center justify-center text-gray-500">
+                            <MediaTypeIcon type={mediaType} className="w-10 h-10" />
                           </div>
                         </div>
                       )}
                       {/* Fallback */}
-                      <div className="hidden w-full h-full flex items-center justify-center text-gray-500 text-4xl">
-                        {isVideoType ? "🎬" : "🖼️"}
+                      <div className="hidden w-full h-full flex items-center justify-center text-gray-500">
+                        <MediaTypeIcon type={mediaType} className="w-10 h-10" />
                       </div>
                     </div>
 

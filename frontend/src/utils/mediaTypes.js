@@ -37,15 +37,6 @@ export function isAudio(mediaType) {
   );
 }
 
-export function getMediaIcon(mediaType) {
-  const type = mediaType?.toLowerCase() || "";
-  if (type.includes("image")) return "🖼️";
-  if (type.includes("video")) return "🎬";
-  if (type.includes("audio")) return "🎵";
-  if (type.includes("pdf")) return "📄";
-  return "📹";
-}
-
 export function formatFileSize(bytes) {
   if (!bytes) return "Unknown size";
   const kb = bytes / 1024;

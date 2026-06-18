@@ -1,20 +1,29 @@
 "use client";
 
+import {
+  MonitorPlay,
+  Palette,
+  CalendarDays,
+  FolderOpen,
+  ListVideo,
+  Database,
+} from "lucide-react";
+
 const menuItems = [
   {
     section: "DESIGN",
     items: [
-        { id: "display", label: "Display", icon: "📺" },
-        { id: "layout", label: "Layouts", icon: "🎨" },
-        { id: "schedule", label: "Schedule", icon: "📅" },
+      { id: "display", label: "Display", icon: MonitorPlay },
+      { id: "layout", label: "Layouts", icon: Palette },
+      { id: "schedule", label: "Schedule", icon: CalendarDays },
     ],
   },
   {
     section: "LIBRARY",
     items: [
-      { id: "library", label: "Library", icon: "📁" },
-      { id: "playlist", label: "Playlists", icon: "📋" },
-      { id: "dataset", label: "Datasets", icon: "📊" },
+      { id: "library", label: "Library", icon: FolderOpen },
+      { id: "playlist", label: "Playlists", icon: ListVideo },
+      { id: "dataset", label: "Datasets", icon: Database },
     ],
   },
 ];
@@ -49,7 +58,7 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
                     }`}
                     onClick={() => setCurrentPage(item.id)}
                   >
-                    <span className="text-base">{item.icon}</span>
+                    <item.icon className="w-5 h-5 shrink-0" aria-hidden="true" />
                     <span className="flex-1 text-left md:block sm:hidden">
                       {item.label}
                     </span>

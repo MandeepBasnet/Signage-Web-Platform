@@ -15,6 +15,7 @@ import {
 import SearchBar from "./SearchBar.jsx";
 import MediaPreviewModal from "./MediaPreviewModal";
 import MediaThumbnail from "./MediaThumbnail.jsx";
+import { AlertTriangle } from "lucide-react";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import { useFolders } from "../hooks/queries/useFolders.js";
 import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
@@ -217,7 +218,7 @@ export default function MediaContent() {
       <section className="flex flex-col gap-5 relative p-4">
         <div className="rounded-lg border border-red-200 p-6 bg-red-50 shadow-sm">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⚠️</span>
+            <AlertTriangle className="w-6 h-6 text-red-600 shrink-0" />
             <div>
               <h3 className="font-semibold text-red-800 mb-1">Error</h3>
               <p className="text-red-700">{error?.message || "Failed to load media"}</p>
@@ -364,7 +365,7 @@ export default function MediaContent() {
                             url={mediaUrl}
                             type={mediaType}
                             name={item.name}
-                            iconClassName="text-2xl"
+                            iconClassName="w-6 h-6"
                           />
                         </div>
                       </td>

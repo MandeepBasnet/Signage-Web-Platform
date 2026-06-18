@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Music } from "lucide-react";
 
 export default function MediaPreviewModal({
   isOpen,
@@ -108,7 +109,7 @@ export default function MediaPreviewModal({
         {isAudio(mediaType) && (
           <div className="ekko-lightbox-item fade in show w-full h-full flex flex-col items-center justify-center text-white">
             <div className="mb-8 p-8 bg-gray-800 rounded-full">
-              <span className="text-6xl">🎵</span>
+              <Music className="w-16 h-16 text-white" />
             </div>
             <h3 className="text-xl mb-4 font-semibold">{mediaName}</h3>
             <audio
