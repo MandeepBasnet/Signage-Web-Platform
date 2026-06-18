@@ -8,8 +8,9 @@ import {
   xiboGetWithCount,
 } from "../utils/xiboClient.js";
 import {
-  fetchUserScopedCollection,
   fetchLibraryCollection,
+  filterOwnedOrShared,
+  resolveUserIdentity,
   getUserContext,
   handleControllerError,
   HttpError,
@@ -194,38 +195,68 @@ export const validateMediaName = async (req, res) => {
 export const getLibraryMedia = async (req, res) => {
   try {
     const { folderId } = req.query;
+    const isFolderScoped = folderId && folderId !== "all";
+    const MEDIA_ID_KEYS = ["mediaId", "media_id", "id"];
 
     // Opt-in server-side pagination: only when the client sends `length` (the
     // Media list view). Other callers get the full collection as before.
     if (req.query.length !== undefined) {
-      const { token, userId } = getUserContext(req);
       const start = Math.max(0, parseInt(req.query.start, 10) || 0);
       const length = Math.max(1, parseInt(req.query.length, 10) || 8);
       const search = (req.query.search || "").trim();
 
-      const params = new URLSearchParams({
-        start: String(start),
-        length: String(length),
-        "order[0][column]": "modifiedDt",
-        "order[0][dir]": "desc",
-      });
-      // Mirror the scoping of the non-paginated branches: a folder-scoped view
-      // shows all media in the folder; otherwise scope to the user.
-      if (folderId && folderId !== "all") {
-        params.append("folderId", folderId);
-      } else if (userId !== undefined && userId !== null) {
-        params.append("ownerId", String(userId));
-        params.append("userId", String(userId));
-      }
-      // Xibo filters library items by name with the `media` param (LIKE match).
-      if (search) params.append("media", search);
+      // Folder-scoped view: show ALL media in the folder (no owner filter),
+      // server-paginated by Xibo as before.
+      if (isFolderScoped) {
+        const { token } = getUserContext(req);
+        const params = new URLSearchParams({
+          start: String(start),
+          length: String(length),
+          "order[0][column]": "modifiedDt",
+          "order[0][dir]": "desc",
+          folderId,
+        });
+        // Xibo filters library items by name with the `media` param (LIKE match).
+        if (search) params.append("media", search);
 
-      const { data, total } = await xiboGetWithCount(
-        `/library?${params.toString()}`,
-        token
-      );
+        const { data, total } = await xiboGetWithCount(
+          `/library?${params.toString()}`,
+          token
+        );
+        return res.json({
+          data: withSignedMediaUrls(data),
+          total,
+          recordsTotal: total,
+          recordsFiltered: total,
+        });
+      }
+
+      // "All media" view: with the shared super-admin app token Xibo returns the
+      // whole library, so scope to media the user OWNS *or* that is shared with
+      // one of their groups (an owner-only filter hid shared media). The
+      // owned-or-shared filter runs after Xibo returns rows, so fetch the
+      // (name-narrowed) list and paginate in memory. Mirrors the layouts fix.
+      const [identity, raw] = await Promise.all([
+        resolveUserIdentity(req),
+        fetchLibraryCollection({
+          req,
+          endpoint: "/library",
+          idKeys: MEDIA_ID_KEYS,
+          orderColumn: "modifiedDt",
+          orderDirection: "desc",
+          pageSize: 500,
+          maxPages: 20,
+          queryParams: {
+            embed: "permissions,groupsWithPermissions",
+            ...(search ? { media: search } : {}),
+          },
+        }),
+      ]);
+      const accessible = filterOwnedOrShared(raw, identity);
+      const page = accessible.slice(start, start + length);
+      const total = accessible.length;
       return res.json({
-        data: withSignedMediaUrls(data),
+        data: withSignedMediaUrls(page),
         total,
         recordsTotal: total,
         recordsFiltered: total,
@@ -233,21 +264,28 @@ export const getLibraryMedia = async (req, res) => {
     }
 
     // Folder-scoped view (per-user library / folder picker): show ALL media in
-    // the chosen folder (no owner filter). Without a folderId (or "all"), fall
-    // back to the user-scoped collection.
-    const media =
-      folderId && folderId !== "all"
-        ? await fetchLibraryCollection({
-            req,
-            endpoint: "/library",
-            idKeys: ["mediaId", "media_id", "id"],
-            queryParams: { folderId },
-          })
-        : await fetchUserScopedCollection({
-            req,
-            endpoint: "/library",
-            idKeys: ["mediaId", "media_id", "id"],
-          });
+    // the chosen folder (no owner filter).
+    if (isFolderScoped) {
+      const media = await fetchLibraryCollection({
+        req,
+        endpoint: "/library",
+        idKeys: MEDIA_ID_KEYS,
+        queryParams: { folderId },
+      });
+      return res.json({ data: withSignedMediaUrls(media), total: media.length });
+    }
+
+    // "All media" view (no folder): owned-or-shared, same as the paginated branch.
+    const [identity, raw] = await Promise.all([
+      resolveUserIdentity(req),
+      fetchLibraryCollection({
+        req,
+        endpoint: "/library",
+        idKeys: MEDIA_ID_KEYS,
+        queryParams: { embed: "permissions,groupsWithPermissions" },
+      }),
+    ]);
+    const media = filterOwnedOrShared(raw, identity);
 
     res.json({ data: withSignedMediaUrls(media), total: media.length });
   } catch (err) {
