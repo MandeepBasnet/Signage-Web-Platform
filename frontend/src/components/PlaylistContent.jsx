@@ -20,6 +20,7 @@ import { usePlaylists, PAGE_SIZE } from "../hooks/queries/usePlaylists.js";
 import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
 
 const EMPTY_ARRAY = [];
+const MEDIA_PAGE_SIZE = 10;
 
 export default function PlaylistContent() {
   const [search, setSearch] = useState("");
@@ -95,6 +96,23 @@ export default function PlaylistContent() {
     }
     return map;
   }, [playlistMedia]);
+
+  // Client-side pagination of the media within the open playlist (the detail
+  // endpoint returns the full list). Reset to the first page when a different
+  // playlist is opened or the item count shrinks below the current page.
+  const [mediaPage, setMediaPage] = useState(0);
+  useEffect(() => {
+    setMediaPage(0);
+  }, [selectedPlaylistId]);
+  const mediaPageCount = Math.max(
+    1,
+    Math.ceil(playlistMedia.length / MEDIA_PAGE_SIZE)
+  );
+  const safeMediaPage = Math.min(mediaPage, mediaPageCount - 1);
+  const pagedMedia = playlistMedia.slice(
+    safeMediaPage * MEDIA_PAGE_SIZE,
+    (safeMediaPage + 1) * MEDIA_PAGE_SIZE
+  );
 
   // Helper functions
   const handlePreview = (item) => {
@@ -473,7 +491,7 @@ export default function PlaylistContent() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {playlistMedia.map((item) => {
+                  {pagedMedia.map((item) => {
                     const mediaId = getMediaId(item);
                     const widgetId = getWidgetId(item);
                     const mediaUrl = getMediaUrl(item);
@@ -596,6 +614,42 @@ export default function PlaylistContent() {
                   })}
                 </tbody>
               </table>
+
+              {mediaPageCount > 1 && (
+                <div className="flex items-center justify-between text-sm text-gray-600 px-4 py-3 border-t border-gray-200">
+                  <span>
+                    Showing {safeMediaPage * MEDIA_PAGE_SIZE + 1}–
+                    {Math.min(
+                      (safeMediaPage + 1) * MEDIA_PAGE_SIZE,
+                      playlistMedia.length
+                    )}{" "}
+                    of {playlistMedia.length}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMediaPage((p) => Math.max(0, p - 1))}
+                      disabled={safeMediaPage === 0}
+                      className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2">
+                      {safeMediaPage + 1} / {mediaPageCount}
+                    </span>
+                    <button
+                      onClick={() =>
+                        setMediaPage((p) =>
+                          Math.min(mediaPageCount - 1, p + 1)
+                        )
+                      }
+                      disabled={safeMediaPage >= mediaPageCount - 1}
+                      className="px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
