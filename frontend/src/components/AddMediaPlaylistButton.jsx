@@ -58,7 +58,10 @@ export default function AddMediaPlaylistButton({
   // Upload state
   const [uploadFile, setUploadFile] = useState(null);
   const [uploadName, setUploadName] = useState("");
-  const [uploadFolder, setUploadFolder] = useState("1");
+  // Empty until folders load, so fetchFolders defaults it to the user's first
+  // accessible folder (their home folder) — not "1" (Root), which scoped users
+  // can't upload to and which isn't in their folder list.
+  const [uploadFolder, setUploadFolder] = useState("");
   const [uploadDuration, setUploadDuration] = useState(10);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState(null);
@@ -224,7 +227,7 @@ export default function AddMediaPlaylistButton({
     setUploadFile(null);
     setUploadName("");
     setUploadDuration(10);
-    setUploadFolder("1");
+    setUploadFolder("");
     setUploadError(null);
     setUploadProgress(null);
     setUploadNameSuggestion(null);
