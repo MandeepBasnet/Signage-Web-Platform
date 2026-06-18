@@ -384,47 +384,107 @@ export const getAllLibraryMedia = async (req, res) => {
   }
 };
 
-// Download/serve media file from Xibo
+// Map a file extension to a real MIME type. Xibo's download endpoint serves
+// media as application/octet-stream, which <video>/<audio> elements may refuse
+// to play — so we relabel based on the file's extension.
+const EXT_MIME = {
+  mp4: "video/mp4",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  mov: "video/quicktime",
+  avi: "video/x-msvideo",
+  mkv: "video/x-matroska",
+  m4v: "video/x-m4v",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  svg: "image/svg+xml",
+  bmp: "image/bmp",
+  pdf: "application/pdf",
+};
+
+const filenameFromDisposition = (cd) => {
+  if (!cd) return null;
+  const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return m[1];
+  }
+};
+
+// Download/serve the real media file from Xibo, streaming with HTTP Range
+// support so <video>/<audio> elements can play and seek.
 export const downloadMedia = async (req, res) => {
   try {
     const { mediaId } = req.params;
-    const token = await getAccessToken();
-
     if (!mediaId) {
       return res.status(400).json({ message: "Media ID is required" });
     }
-
-    // Get media download URL from Xibo API
+    const token = await getAccessToken();
     const xiboApiUrl = process.env.XIBO_API_URL;
-    const { preview } = req.query;
-    const queryParams = new URLSearchParams();
-    if (preview) queryParams.append("preview", preview);
 
-    const downloadUrl = `${xiboApiUrl}/library/download/${mediaId}${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+    // CRITICAL: do NOT forward Xibo's `preview=1` for the file stream — for a
+    // video Xibo returns a PNG cover image (verified), which breaks <video>
+    // playback. We always stream the actual library file; our own `preview`
+    // flag only selects inline (play in place) vs attachment (download) below.
+    const wantsInline = req.query.preview != null && req.query.preview !== "0";
+    const url = `${xiboApiUrl}/library/download/${mediaId}`;
 
-    // Fetch the media file from Xibo
-    const response = await axios.get(downloadUrl, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    // Forward the client's Range header so the browser can stream/seek video;
+    // without it the proxy always returned the whole file as 200 and Chrome
+    // refused to play it.
+    const fwdHeaders = { Authorization: `Bearer ${token}` };
+    if (req.headers.range) fwdHeaders.Range = req.headers.range;
+
+    const response = await axios.get(url, {
+      headers: fwdHeaders,
       responseType: "stream",
+      decompress: false,
+      // Relay 206/4xx as-is rather than throwing.
+      validateStatus: (s) => s < 500,
     });
 
-    // Set appropriate headers
-    res.setHeader(
-      "Content-Type",
-      response.headers["content-type"] || "application/octet-stream"
-    );
+    const xb = response.headers;
+
+    // Relay status (206 Partial Content when ranged) and the streaming headers a
+    // media element needs.
+    res.status(response.status);
+    for (const h of ["content-length", "content-range", "last-modified", "etag"]) {
+      if (xb[h]) res.setHeader(h, xb[h]);
+    }
+    // Xibo honours Range but doesn't advertise it; make seeking explicit.
+    res.setHeader("Accept-Ranges", xb["accept-ranges"] || "bytes");
+
+    // Relabel octet-stream to a real MIME (by extension) so playback works.
+    const fname = filenameFromDisposition(xb["content-disposition"]) || `${mediaId}`;
+    const ext = (fname.split(".").pop() || "").toLowerCase();
+    const upstreamType = xb["content-type"];
+    const contentType =
+      EXT_MIME[ext] ||
+      (upstreamType && !upstreamType.includes("octet-stream")
+        ? upstreamType
+        : "application/octet-stream");
+    res.setHeader("Content-Type", contentType);
+
+    // Inline for in-app preview/playback; attachment only for an explicit
+    // (non-preview) download.
     res.setHeader(
       "Content-Disposition",
-      response.headers["content-disposition"] ||
-        `attachment; filename="media-${mediaId}"`
+      wantsInline ? "inline" : `attachment; filename="${fname}"`
     );
 
-    // Pipe the response to the client
     response.data.pipe(res);
   } catch (err) {
-    console.error("Error downloading media:", err);
+    console.error("Error downloading media:", err.message);
     handleControllerError(res, err, "Failed to download media file");
   }
 };
