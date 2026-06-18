@@ -2,9 +2,10 @@ import axios from "axios";
 import qs from "qs";
 import FormData from "form-data";
 import {
-  fetchUserScopedCollection,
   handleControllerError,
   getOrCreateToken,
+  resolveUserIdentity,
+  filterOwnedOrShared,
   HttpError,
 } from "../utils/xiboDataHelpers.js";
 import { xiboRequest } from "../utils/xiboClient.js";
@@ -46,17 +47,51 @@ const resolveDayPartIds = async (token) => {
 export const getSchedule = async (req, res) => {
   try {
     const { fromDt, toDt } = req.query;
-
-    // Fetch the events in the window directly. We do NOT run these through the
-    // generic owner filter: schedule events store their owner as `userId` (no
-    // `ownerId`), so that filter would drop every event. A schedule view should
-    // show the events affecting the displays in the window regardless of owner.
     const { token } = await getOrCreateToken(req);
+
+    // With the shared super-admin app token, an unscoped /schedule returns EVERY
+    // tenant's events. Scope the schedule to the displays the user can act on:
+    // resolve the displays they OWN or that are permission-shared with one of
+    // their groups, then ask Xibo only for events targeting those display groups
+    // (`displayGroupIds[]`). This mirrors how /displays is scoped and how the
+    // dashboard resolves schedules — a user sees the events on their displays
+    // (which includes events they scheduled themselves), not everyone's.
+    const identity = await resolveUserIdentity(req);
+
+    const displayParams = new URLSearchParams({
+      start: "0",
+      length: "1000",
+      embed: "displayGroup,groupsWithPermissions",
+    });
+    const displayResp = await xiboRequest(
+      `/display?${displayParams.toString()}`,
+      "GET",
+      null,
+      token
+    );
+    const displays = Array.isArray(displayResp)
+      ? displayResp
+      : displayResp?.data || [];
+    const accessibleDisplays = filterOwnedOrShared(displays, identity);
+    const displayGroupIds = [
+      ...new Set(
+        accessibleDisplays.map((d) => d.displayGroupId).filter(Boolean)
+      ),
+    ];
+
+    // No accessible displays → no schedule to show (don't fall back to the full
+    // unscoped list, which would leak every tenant's events).
+    if (displayGroupIds.length === 0) {
+      return res.json({ data: [], total: 0 });
+    }
 
     const params = new URLSearchParams();
     if (fromDt) params.append("fromDt", fromDt); // required by Xibo
     if (toDt) params.append("toDt", toDt); // required by Xibo
     params.append("embed", "displayGroups,campaign");
+    displayGroupIds.forEach((id) =>
+      params.append("displayGroupIds[]", String(id))
+    );
 
     const response = await xiboRequest(
       `/schedule?${params.toString()}`,
