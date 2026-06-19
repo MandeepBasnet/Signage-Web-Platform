@@ -6,7 +6,6 @@ import {
   CalendarDays,
   FolderOpen,
   ListVideo,
-  Database,
 } from "lucide-react";
 
 const menuItems = [
@@ -23,7 +22,6 @@ const menuItems = [
     items: [
       { id: "library", label: "Library", icon: FolderOpen },
       { id: "playlist", label: "Playlists", icon: ListVideo },
-      { id: "dataset", label: "Datasets", icon: Database },
     ],
   },
 ];
