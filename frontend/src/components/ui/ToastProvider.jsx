@@ -129,10 +129,7 @@ export default function ToastProvider({ children }) {
       {createPortal(
         // Portalled to body: the dashboard shell is overflow-hidden, which would
         // otherwise clip a fixed child.
-        <div
-          className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2"
-          aria-label="Notifications"
-        >
+        <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex flex-col-reverse gap-2">
           {toasts.map((toast) => (
             <Toast key={toast.id} toast={toast} onDismiss={dismiss} />
           ))}

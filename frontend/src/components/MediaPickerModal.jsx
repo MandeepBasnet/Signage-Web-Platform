@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo, formatFileSize } from "../utils/mediaTypes.js";
 import MediaTypeIcon from "./MediaTypeIcon.jsx";
+import { useFocusTrap } from "../hooks/useFocusTrap.js";
 
 export default function MediaPickerModal({
   isOpen,
@@ -18,6 +19,7 @@ export default function MediaPickerModal({
   const [error, setError] = useState(null);
   const [selectedMediaId, setSelectedMediaId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const panelRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -74,6 +76,8 @@ export default function MediaPickerModal({
     onClose();
   };
 
+  useFocusTrap(isOpen, panelRef, handleClose);
+
   const getMediaId = (item) => {
     return item.mediaId || item.media_id || item.id;
   };
@@ -89,11 +93,17 @@ export default function MediaPickerModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="w-full max-w-4xl max-h-[90vh] rounded-lg bg-gray-900 shadow-xl flex flex-col">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="media-picker-title"
+        className="w-full max-w-4xl max-h-[90vh] rounded-lg bg-gray-900 shadow-xl flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-700 px-6 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-white">
+            <h3 id="media-picker-title" className="text-lg font-semibold text-white">
               Select Media to Replace
             </h3>
             <p className="text-sm text-gray-400 mt-1">

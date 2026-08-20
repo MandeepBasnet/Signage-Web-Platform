@@ -120,7 +120,7 @@ export default function LayoutContent() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">Layouts</h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-600 mt-1">
             {total} {total === 1 ? "layout" : "layouts"}
           </p>
         </div>

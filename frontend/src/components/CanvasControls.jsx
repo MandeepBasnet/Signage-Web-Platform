@@ -19,6 +19,7 @@ export default function CanvasControls({
           onClick={onZoomOut}
           className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
           title="Zoom out"
+          aria-label="Zoom out"
         >
           −
         </button>
@@ -26,6 +27,7 @@ export default function CanvasControls({
           onClick={onZoomIn}
           className="w-7 h-7 flex items-center justify-center rounded-md text-base font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
           title="Zoom in"
+          aria-label="Zoom in"
         >
           +
         </button>
@@ -33,6 +35,7 @@ export default function CanvasControls({
           onClick={onZoomFit}
           className="px-2 h-7 flex items-center justify-center rounded-md text-xs font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
           title="Fit to screen"
+          aria-label="Fit layout to screen"
         >
           Fit
         </button>

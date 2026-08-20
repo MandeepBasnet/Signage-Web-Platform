@@ -575,7 +575,8 @@ export default function PlaylistContent() {
                                   handleOpenExpiryModal(item);
                                 }}
                                 className="text-gray-400 hover:text-blue-600 transition-colors mr-2"
-                                title="Schedule Expiration"
+                                title="Set play dates"
+                                aria-label="Set play dates for this item"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -605,6 +606,7 @@ export default function PlaylistContent() {
                                 }
                                 className="text-gray-400 hover:text-red-600 transition-colors"
                                 title="Remove from playlist"
+                                aria-label="Remove this item from the playlist"
                               >
                                 <svg
                                   xmlns="http://www.w3.org/2000/svg"
@@ -934,6 +936,7 @@ export default function PlaylistContent() {
                         onMouseLeave={() => setDeleteHoveredPlaylistId(null)}
                         className="p-1.5 rounded-full hover:bg-red-100 transition-colors flex-shrink-0 text-gray-400 hover:text-red-600"
                         title="Delete playlist"
+                        aria-label={`Delete playlist ${playlist.name || ""}`}
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"

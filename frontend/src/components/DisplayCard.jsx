@@ -39,7 +39,7 @@ export default function DisplayCard({
               loading="lazy"
             />
           ) : (
-            <div className="flex flex-col items-center gap-2 p-6 text-center text-gray-500">
+            <div className="flex flex-col items-center gap-2 p-6 text-center text-gray-400">
               <FileText className="h-8 w-8" aria-hidden="true" />
               <span className="text-xs">No preview</span>
             </div>
@@ -82,7 +82,7 @@ export default function DisplayCard({
             {scheduled.length === 1 ? "scheduled item" : "scheduled items"}
           </span>
           {!online && display.lastAccessed && (
-            <span className="text-gray-400">
+            <span className="text-gray-500">
               Last seen {formatDate(display.lastAccessed)}
             </span>
           )}

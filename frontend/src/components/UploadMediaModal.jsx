@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { X } from "lucide-react";
+import { useFocusTrap } from "../hooks/useFocusTrap.js";
 import { getAuthHeaders } from "../utils/auth.js";
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -38,6 +39,14 @@ export default function UploadMediaModal({
   const [uploadError, setUploadError] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(null);
   const [nameSuggestion, setNameSuggestion] = useState(null);
+  const panelRef = useRef(null);
+
+  // Escape must not abandon an upload that is already in flight — the close
+  // button is disabled for the same reason.
+  const requestClose = useCallback(() => {
+    if (!uploading) onClose?.();
+  }, [uploading, onClose]);
+  useFocusTrap(true, panelRef, requestClose);
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
@@ -194,10 +203,21 @@ export default function UploadMediaModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="upload-modal-title"
+        className="w-full max-w-lg rounded-lg bg-white shadow-xl"
+      >
         <div className="flex items-center justify-between border-b px-6 py-4">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900">Upload Media</h3>
+            <h3
+              id="upload-modal-title"
+              className="text-lg font-semibold text-gray-900"
+            >
+              Upload Media
+            </h3>
             <p className="text-sm text-gray-500">
               Select a file and destination folder
             </p>
@@ -214,11 +234,15 @@ export default function UploadMediaModal({
 
         <form className="px-6 py-4 space-y-4" onSubmit={handleUploadSubmit}>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="upload-file"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Media File *
             </label>
             <input
               type="file"
+              id="upload-file"
               accept="image/*,video/*,audio/*,application/pdf"
               onChange={handleFileChange}
               className="block w-full text-sm text-gray-700"
@@ -233,11 +257,15 @@ export default function UploadMediaModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="upload-name"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Display Name
             </label>
             <input
               type="text"
+              id="upload-name"
               value={uploadName}
               onChange={(e) => {
                 setUploadName(e.target.value);
@@ -251,10 +279,14 @@ export default function UploadMediaModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="upload-folder"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Folder
             </label>
             <select
+              id="upload-folder"
               value={uploadFolder}
               onChange={(e) => setUploadFolder(e.target.value)}
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -283,11 +315,15 @@ export default function UploadMediaModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label
+              htmlFor="upload-duration"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
               Duration (seconds)
             </label>
             <input
               type="number"
+              id="upload-duration"
               min="1"
               value={uploadDuration}
               onChange={(e) => setUploadDuration(e.target.value)}

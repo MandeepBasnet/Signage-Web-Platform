@@ -273,6 +273,7 @@ export default function MediaContent() {
               onChange={(e) => setLibraryFolder(e.target.value)}
               className="px-2 py-2 text-sm bg-white text-gray-900 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 max-w-[200px]"
               title="Filter library by folder"
+              aria-label="Filter library by folder"
             >
               <option value="all">All folders</option>
               {folderOptions.map((f) => (
@@ -430,6 +431,7 @@ export default function MediaContent() {
                             onMouseLeave={() => setDeleteHoveredMediaId(null)}
                             className="text-gray-400 hover:text-red-600 transition-colors"
                             title="Delete media"
+                            aria-label={`Delete ${item.name || "media"}`}
                           >
                             <svg
                               xmlns="http://www.w3.org/2000/svg"

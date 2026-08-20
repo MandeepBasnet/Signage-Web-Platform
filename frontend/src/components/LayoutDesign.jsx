@@ -2343,6 +2343,7 @@ export default function LayoutDesign() {
                                                 }}
                                                 className="p-1 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition-colors"
                                                 title="Add Media to Playlist"
+                                                aria-label="Add media to this playlist"
                                               >
                                                 <svg
                                                   xmlns="http://www.w3.org/2000/svg"
@@ -2570,6 +2571,7 @@ export default function LayoutDesign() {
                                                 }}
                                                 className="p-1 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition-colors"
                                                 title="Add Row"
+                                                aria-label="Add a row to this data source"
                                               >
                                                 <svg
                                                   xmlns="http://www.w3.org/2000/svg"
@@ -2660,6 +2662,7 @@ export default function LayoutDesign() {
                                                                 : "text-gray-500 hover:text-red-400 hover:bg-red-500/10"
                                                             }`}
                                                             title="Delete Row"
+                                                            aria-label="Delete this row"
                                                           >
                                                             {deletingRowId ===
                                                             row.id ? (

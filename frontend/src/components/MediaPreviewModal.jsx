@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect } from "react";
+import { useRef } from "react";
 import { Music } from "lucide-react";
+import { useFocusTrap } from "../hooks/useFocusTrap.js";
 
 export default function MediaPreviewModal({
   isOpen,
@@ -10,6 +11,11 @@ export default function MediaPreviewModal({
   mediaType,
   mediaName,
 }) {
+  const panelRef = useRef(null);
+  // Called before the early return below: hooks must run in the same order
+  // on every render, and this one previously sat underneath it.
+  useFocusTrap(isOpen, panelRef, onClose);
+
   if (!isOpen) return null;
 
   const isImage = (type) => {
@@ -48,17 +54,14 @@ export default function MediaPreviewModal({
     );
   };
 
-  // Close on escape key
-  useEffect(() => {
-    const handleEsc = (e) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleEsc);
-    return () => window.removeEventListener("keydown", handleEsc);
-  }, [onClose]);
-
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4">
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={mediaName ? `Preview: ${mediaName}` : "Media preview"}
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4"
+    >
       <button
         onClick={onClose}
         className="absolute top-4 right-4 text-white hover:text-gray-300 z-[110]"

@@ -52,22 +52,19 @@ h1 {
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #f9f9f9;
   cursor: pointer;
-  transition: border-color 0.25s;
+  font-family: inherit;
 }
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+
+/* One keyboard-focus style for the whole app. Components that draw their own
+   ring pair `focus:outline-none` with `focus-visible:ring-*`, and a class +
+   pseudo-class selector outranks this bare pseudo-class, so they keep theirs.
+   Everything else — 90-odd buttons that previously had no visible focus state
+   at all — inherits this one. :focus-visible (not :focus) so a mouse click
+   doesn't leave a ring behind. */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 /* Layout Designer Canvas Styles */

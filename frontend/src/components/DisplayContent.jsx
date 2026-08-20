@@ -9,6 +9,7 @@ import {
   MonitorPlay,
   LayoutGrid,
   Rows3,
+  ChevronRight,
 } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
@@ -140,12 +141,19 @@ export default function DisplayContent() {
     }
   };
 
-  const YesNo = ({ value }) =>
-    value ? (
-      <Check className="w-4 h-4 text-green-600 inline" />
-    ) : (
-      <X className="w-4 h-4 text-red-500 inline" />
-    );
+  // Colour alone can't carry meaning: these cells were a bare green tick or
+  // red cross, silent to a screen reader and identical to anyone with
+  // red/green colour blindness. The glyph stays; the name comes with it.
+  const YesNo = ({ value, label }) => (
+    <span title={value ? "Yes" : "No"}>
+      {value ? (
+        <Check className="w-4 h-4 text-green-600 inline" aria-hidden="true" />
+      ) : (
+        <X className="w-4 h-4 text-red-500 inline" aria-hidden="true" />
+      )}
+      <span className="sr-only">{`${label}: ${value ? "Yes" : "No"}`}</span>
+    </span>
+  );
 
   const formatDate = (dateString) => {
     if (!dateString) return "Unknown";
@@ -339,7 +347,7 @@ export default function DisplayContent() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-gray-900">Screens</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-gray-600">
             What each screen is showing right now
           </p>
         </div>
@@ -454,9 +462,21 @@ export default function DisplayContent() {
                       onClick={() => toggleExpand(display)}
                     >
                       <td className="px-2 py-3 text-center text-gray-400">
-                        <span className={`inline-block transition-transform ${isExpanded ? "rotate-90" : ""}`}>
-                          ▶
-                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleExpand(display);
+                          }}
+                          aria-expanded={isExpanded}
+                          aria-label={`${isExpanded ? "Hide" : "Show"} details for ${display.name}`}
+                          className="rounded border-0 bg-transparent p-1 text-gray-400 transition-colors hover:text-gray-600"
+                        >
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                            aria-hidden="true"
+                          />
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-gray-500">{display.displayId}</td>
                       <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
@@ -470,8 +490,12 @@ export default function DisplayContent() {
                           {statusStyle.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center"><YesNo value={display.authorised} /></td>
-                      <td className="px-4 py-3 text-center"><YesNo value={display.loggedIn} /></td>
+                      <td className="px-4 py-3 text-center">
+                        <YesNo value={display.authorised} label="Approved" />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <YesNo value={display.loggedIn} label="Logged in" />
+                      </td>
                       <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
                         {formatDate(display.lastAccessed)}
                       </td>
