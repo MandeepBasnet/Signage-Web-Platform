@@ -10,6 +10,11 @@ const WEAK_SECRETS = new Set([
   "supersecret",
 ]);
 
+// Matches the localhost check in server.js — kept in sync deliberately: an
+// allowlist that only ever names these is useless to a deployed frontend.
+const isLocalhostOrigin = (origin) =>
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+
 export function validateEnv() {
   const isProd = process.env.NODE_ENV === "production";
   const problems = [];
@@ -30,6 +35,57 @@ export function validateEnv() {
     problems.push(
       "JWT_SECRET is weak — use a random value of at least 32 characters " +
         '(generate: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'hex\'))")'
+    );
+  }
+
+  // Browser origins permitted by CORS. An unset (or localhost-only) allowlist in
+  // production is the worst kind of misconfiguration: the server boots and
+  // reports healthy, but every browser request dies at the preflight with no
+  // Access-Control-Allow-Origin header, so the failure only shows up in the
+  // frontend console. Fail here instead.
+  const originList = (process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+
+  if (isProd && originList.length === 0) {
+    problems.push(
+      "ALLOWED_ORIGINS is not set — CORS falls back to the localhost defaults, " +
+        "which blocks the deployed frontend (set it to the frontend origin, " +
+        "e.g. https://app.example.com)"
+    );
+  }
+
+  for (const origin of originList) {
+    let parsed;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      problems.push(
+        `ALLOWED_ORIGINS entry "${origin}" is not a valid origin ` +
+          "(expected e.g. https://app.example.com)"
+      );
+      continue;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      problems.push(
+        `ALLOWED_ORIGINS entry "${origin}" must use http:// or https://`
+      );
+    } else if (parsed.origin !== origin) {
+      // The Origin header a browser sends is exactly scheme://host[:port], and
+      // the allowlist is compared with a strict string match — so a trailing
+      // slash or a path silently never matches.
+      problems.push(
+        `ALLOWED_ORIGINS entry "${origin}" must be exactly "${parsed.origin}" ` +
+          "(no trailing slash, path or query)"
+      );
+    }
+  }
+
+  if (isProd && originList.length > 0 && originList.every(isLocalhostOrigin)) {
+    problems.push(
+      "ALLOWED_ORIGINS contains only localhost origins — the deployed frontend " +
+        "will be blocked by CORS"
     );
   }
 
