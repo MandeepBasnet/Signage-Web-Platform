@@ -20,6 +20,7 @@ import { BarChart3, ListVideo, FileText } from "lucide-react";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
 import InfoHint from "./ui/InfoHint.jsx";
+import { useLayoutCheckout } from "../hooks/useLayoutCheckout.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -76,30 +77,21 @@ export default function LayoutDesign() {
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
   const [deletingMediaId, setDeletingMediaId] = useState(null);
 
-  // Publish Layout State
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState(null);
-  const [publishSuccess, setPublishSuccess] = useState(false);
-
-  // Checkout Layout State
-  const [checkingOut, setCheckingOut] = useState(false);
-  const [checkoutError, setCheckoutError] = useState(null);
-  const [checkoutSuccess, setCheckoutSuccess] = useState(false);
-
-  // Xibo's own guidance is to wait for the publish confirmation before leaving
-  // the page — closing the tab mid-request can leave the layout in a broken
-  // half-published state. Warn while the request is in flight.
-  useEffect(() => {
-    if (!publishing) return undefined;
-    const warn = (event) => {
-      event.preventDefault();
-      // Browsers ignore the message and show their own, but returnValue must be
-      // set for the prompt to appear at all.
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [publishing]);
+  // Xibo's draft/live model lives in its own hook — see useLayoutCheckout.
+  // onRefetch is wrapped in an arrow because fetchLayoutDetails is declared
+  // further down; the arrow defers the lookup until it is actually called.
+  const {
+    publishing,
+    publishSuccess,
+    publishLayout,
+    checkingOut,
+    checkoutSuccess,
+    checkoutLayout,
+  } = useLayoutCheckout({
+    layoutId,
+    layout,
+    onRefetch: () => fetchLayoutDetails(),
+  });
 
   const [editingTextWidgetId, setEditingTextWidgetId] = useState(null);
   const [editingElementId, setEditingElementId] = useState(null);
@@ -948,148 +940,6 @@ export default function LayoutDesign() {
 
   // ===== END CANVAS RENDERING FUNCTIONS =====
 
-  const handlePublishLayout = async () => {
-    const ok = await confirmDialog({
-      title: "Push this layout live?",
-      body: "Every screen scheduled to show it will pick up your changes at its next check-in.",
-      confirmLabel: "Push live",
-    });
-    if (!ok) return;
-
-    try {
-      setPublishing(true);
-      setPublishError(null);
-      setPublishSuccess(false);
-
-      // Use Parent ID for publishing if it exists (Draft), otherwise use current ID
-      // Xibo requires the Parent ID to publish a draft
-      const publishId =
-        layout && layout.parentId && layout.parentId !== 0
-          ? layout.parentId
-          : layoutId;
-
-      console.log(
-        `[Publish] Publishing Layout. Current ID: ${layoutId}, Parent ID: ${layout?.parentId}, Target Publish ID: ${publishId}`,
-      );
-
-      const response = await fetch(
-        `${API_BASE_URL}/layouts/publish/${publishId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            publishNow: 1,
-          }),
-        },
-      );
-
-      if (response.status === 403) {
-        throw new Error(
-          "You don't have permission to push this layout live."
-        );
-      }
-
-      if (response.status === 404) {
-        throw new Error("Layout not found.");
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || "The layout could not be sent to your screens"
-        );
-      }
-
-      const _ = await response.json();
-      setPublishSuccess(true);
-
-      // The toast outlives this navigation — ToastProvider is mounted
-      // above the router in App.jsx.
-      toast.success(
-        "Pushed live",
-        "Screens will pick it up at their next check-in."
-      );
-      navigate("/dashboard", { replace: true });
-    } catch (err) {
-      console.error("Error publishing layout:", err);
-      setPublishError(err.message);
-
-      if (
-        err.message.includes("Failed to fetch") ||
-        err.message.includes("NetworkError")
-      ) {
-        toast.error(
-          "Network problem",
-          "Nothing was sent to your screens. Check your connection and try again."
-        );
-      } else {
-        toast.error("Couldn't push this layout live", err.message);
-      }
-    } finally {
-      setPublishing(false);
-    }
-  };
-
-  const handleCheckoutLayout = async () => {
-    try {
-      setCheckingOut(true);
-      setCheckoutError(null);
-      setCheckoutSuccess(false);
-
-      const response = await fetch(
-        `${API_BASE_URL}/layouts/checkout/${layoutId}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...getAuthHeaders(),
-          },
-        },
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || "An editable copy could not be created"
-        );
-      }
-
-      const data = await response.json();
-      setCheckoutSuccess(true);
-
-      // Extract new Draft Layout ID
-      // The controller returns the result of POST /layout/copy, which is the new layout object
-      const newLayoutId =
-        data.layoutId || data.id || (data.layout && data.layout.layoutId);
-
-      if (newLayoutId) {
-        console.log(`[Checkout] Redirecting to new draft: ${newLayoutId}`);
-        // Redirect to the new draft
-        navigate(`/layout/designer/${newLayoutId}`, { replace: true });
-      } else {
-        console.warn("[Checkout] No new layout ID found in response", data);
-        // Fallback: Refresh current layout (unlikely to work if ID changed, but safe fallback)
-        await fetchLayoutDetails();
-      }
-
-      toast.success("Ready to edit", "You're now working on an editable copy.");
-
-      // Clear success message after 3 seconds
-      setTimeout(() => {
-        setCheckoutSuccess(false);
-      }, 3000);
-    } catch (err) {
-      console.error("Error checking out layout:", err);
-      setCheckoutError(err.message);
-      toast.error("Couldn't open this layout for editing", err.message);
-    } finally {
-      setCheckingOut(false);
-    }
-  };
-
   const handleTextDoubleClick = (widget, currentText, elementId = null) => {
     // Enable direct text editing for all widgets
     setEditingTextWidgetId(String(widget.widgetId));
@@ -1598,7 +1448,7 @@ export default function LayoutDesign() {
           {/* Checkout Layout Button - Show if Published (status 1) */}
           {layout.publishedStatusId === 1 && (
             <CheckoutButton
-              onClick={handleCheckoutLayout}
+              onClick={checkoutLayout}
               checkingOut={checkingOut}
               checkoutSuccess={checkoutSuccess}
             />
@@ -1607,7 +1457,7 @@ export default function LayoutDesign() {
           {/* Publish Layout Button */}
           <div className="flex items-center">
             <PublishButton
-              onClick={handlePublishLayout}
+              onClick={publishLayout}
               publishing={publishing}
               publishSuccess={publishSuccess}
             />
@@ -3000,7 +2850,7 @@ export default function LayoutDesign() {
       {showCheckoutPrompt && (
         <CheckoutPrompt
           onGoBack={() => navigate("/dashboard")}
-          onCheckout={handleCheckoutLayout}
+          onCheckout={checkoutLayout}
           checkingOut={checkingOut}
         />
       )}
