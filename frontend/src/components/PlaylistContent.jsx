@@ -21,6 +21,7 @@ import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
 import EmptyState from "./ui/EmptyState.jsx";
+import InfoHint from "./ui/InfoHint.jsx";
 
 const EMPTY_ARRAY = [];
 const MEDIA_PAGE_SIZE = 10;
@@ -1136,7 +1137,11 @@ export default function PlaylistContent() {
                   <div className="sm:flex sm:items-start">
                     <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
                       <h3 className="text-lg leading-6 font-medium text-gray-900">
-                        Schedule Media Expiration
+                        When should this play?
+                        <InfoHint label="About play dates">
+                          Sets when this item starts and stops playing. It stays in
+                          the playlist either way, so you can reuse it later.
+                        </InfoHint>
                       </h3>
                       <div className="mt-2">
                         <p className="text-sm text-gray-500 mb-4">

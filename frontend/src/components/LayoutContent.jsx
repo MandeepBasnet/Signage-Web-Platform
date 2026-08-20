@@ -8,6 +8,7 @@ import SearchBar from "./SearchBar.jsx";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 import { useLayouts, PAGE_SIZE } from "../hooks/queries/useLayouts.js";
 import EmptyState from "./ui/EmptyState.jsx";
+import InfoHint from "./ui/InfoHint.jsx";
 
 const EMPTY_LAYOUTS = [];
 
@@ -79,9 +80,12 @@ export default function LayoutContent() {
         : s === "draft"
         ? "bg-yellow-100 text-yellow-800"
         : "bg-gray-100 text-gray-600";
+    // Xibo says "Published"; from the customer's side the layout is simply live
+    // on their screens. "Draft" is plain English and stays.
+    const label = s === "published" ? "Live" : l.publishedStatus || "—";
     return (
       <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${cls}`}>
-        {l.publishedStatus || "—"}
+        {label}
       </span>
     );
   };
@@ -147,6 +151,13 @@ export default function LayoutContent() {
                     className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 whitespace-nowrap"
                   >
                     {h}
+                    {h === "Status" && (
+                      <InfoHint label="About layout status">
+                        &ldquo;Live&rdquo; means screens are showing it now. Draft
+                        changes are private to you &mdash; screens keep playing the
+                        live version until you push your changes.
+                      </InfoHint>
+                    )}
                   </th>
                 )
               )}

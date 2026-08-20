@@ -22,6 +22,7 @@ import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
 import EmptyState from "./ui/EmptyState.jsx";
+import InfoHint from "./ui/InfoHint.jsx";
 
 const EMPTY_ARRAY = [];
 
@@ -263,6 +264,10 @@ export default function MediaContent() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <InfoHint label="About folders">
+              You only see media in folders you have access to. If something is
+              missing, ask an admin to share its folder with you.
+            </InfoHint>
             <select
               value={libraryFolder ?? "all"}
               onChange={(e) => setLibraryFolder(e.target.value)}

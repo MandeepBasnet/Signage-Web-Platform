@@ -19,6 +19,7 @@ import MediaTypeIcon from "./MediaTypeIcon.jsx";
 import { BarChart3, ListVideo, FileText } from "lucide-react";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
+import InfoHint from "./ui/InfoHint.jsx";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -949,9 +950,9 @@ export default function LayoutDesign() {
 
   const handlePublishLayout = async () => {
     const ok = await confirmDialog({
-      title: "Publish this layout?",
+      title: "Push this layout live?",
       body: "Every screen scheduled to show it will pick up your changes at its next check-in.",
-      confirmLabel: "Publish",
+      confirmLabel: "Push live",
     });
     if (!ok) return;
 
@@ -986,7 +987,9 @@ export default function LayoutDesign() {
       );
 
       if (response.status === 403) {
-        throw new Error("You don't have permission to publish this layout.");
+        throw new Error(
+          "You don't have permission to push this layout live."
+        );
       }
 
       if (response.status === 404) {
@@ -995,7 +998,9 @@ export default function LayoutDesign() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to publish layout");
+        throw new Error(
+          errorData.message || "The layout could not be sent to your screens"
+        );
       }
 
       const _ = await response.json();
@@ -1004,7 +1009,7 @@ export default function LayoutDesign() {
       // The toast outlives this navigation — ToastProvider is mounted
       // above the router in App.jsx.
       toast.success(
-        "Layout published",
+        "Pushed live",
         "Screens will pick it up at their next check-in."
       );
       navigate("/dashboard", { replace: true });
@@ -1018,10 +1023,10 @@ export default function LayoutDesign() {
       ) {
         toast.error(
           "Network problem",
-          "Nothing was published. Check your connection and try again."
+          "Nothing was sent to your screens. Check your connection and try again."
         );
       } else {
-        toast.error("Couldn't publish the layout", err.message);
+        toast.error("Couldn't push this layout live", err.message);
       }
     } finally {
       setPublishing(false);
@@ -1047,7 +1052,9 @@ export default function LayoutDesign() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || "Failed to checkout layout");
+        throw new Error(
+          errorData.message || "An editable copy could not be created"
+        );
       }
 
       const data = await response.json();
@@ -1584,7 +1591,7 @@ export default function LayoutDesign() {
                   d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
                 />
               </svg>
-              DRAFT
+              YOUR COPY
             </div>
           )}
 
@@ -1598,11 +1605,18 @@ export default function LayoutDesign() {
           )}
 
           {/* Publish Layout Button */}
-          <PublishButton
-            onClick={handlePublishLayout}
-            publishing={publishing}
-            publishSuccess={publishSuccess}
-          />
+          <div className="flex items-center">
+            <PublishButton
+              onClick={handlePublishLayout}
+              publishing={publishing}
+              publishSuccess={publishSuccess}
+            />
+            <InfoHint label="About pushing a layout live">
+              Sends this layout to every screen it&rsquo;s scheduled on. Screens
+              pick up the change the next time they check in &mdash; usually
+              within a minute.
+            </InfoHint>
+          </div>
         </div>
       </header>
 
@@ -2530,20 +2544,18 @@ export default function LayoutDesign() {
 
                                         if (isLoading)
                                           return (
-                                            <span>Loading dataset...</span>
+                                            <span>Loading data source…</span>
                                           );
                                         if (!dsData)
                                           return (
-                                            <span>
-                                              Dataset ID: {dsId || "N/A"}
-                                            </span>
+                                            <span>Data source unavailable</span>
                                           );
 
                                         return (
                                           <div className="mt-2 space-y-2">
                                             <div className="text-xs font-semibold text-gray-400 border-b border-gray-700 pb-1 flex justify-between items-center">
                                               <span>
-                                                Dataset: {dsData.columns.length}{" "}
+                                                Data source: {dsData.columns.length}{" "}
                                                 columns × {dsData.rows.length}{" "}
                                                 rows
                                               </span>
@@ -2993,8 +3005,8 @@ export default function LayoutDesign() {
       {/* Checkout Loading Overlay */}
       {checkingOut && (
         <LoadingOverlay
-          title="Checking out layout..."
-          subtitle="Creating draft copy for editing"
+          title="Preparing your copy…"
+          subtitle="Your screens keep playing the current version"
         />
       )}
 

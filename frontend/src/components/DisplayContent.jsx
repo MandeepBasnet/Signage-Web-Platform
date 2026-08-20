@@ -10,6 +10,28 @@ import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 import { useDisplays } from "../hooks/queries/useDisplays.js";
 import { useToast } from "../hooks/useToast.js";
 import EmptyState from "./ui/EmptyState.jsx";
+import InfoHint from "./ui/InfoHint.jsx";
+
+// Column labels for the displays table. Two carry a hint: both describe a
+// state the customer can see but not act on, where guessing wrong is costly.
+const COLUMNS = [
+  { label: "ID" },
+  { label: "Display" },
+  { label: "Type" },
+  {
+    label: "Status",
+    hint: "Whether the screen has finished downloading the content it is scheduled to play. \u201cOut of date\u201d normally clears itself at the next check-in.",
+  },
+  {
+    label: "Approved",
+    hint: "A new screen has to be approved before it will receive any content. Until then it shows a holding message.",
+  },
+  { label: "Logged In" },
+  { label: "Last Accessed" },
+  { label: "Version" },
+  { label: "IP Address" },
+  { label: "MAC Address" },
+];
 
 export default function DisplayContent() {
   const navigate = useNavigate();
@@ -292,13 +314,15 @@ export default function DisplayContent() {
             <thead className="bg-gray-50">
               <tr>
                 <th className="w-8 px-2 py-3"></th>
-                {["ID", "Display", "Type", "Status", "Authorised", "Logged In",
-                  "Last Accessed", "Version", "IP Address", "MAC Address"].map((h) => (
+                {COLUMNS.map((c) => (
                   <th
-                    key={h}
+                    key={c.label}
                     className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500 whitespace-nowrap"
                   >
-                    {h}
+                    {c.label}
+                    {c.hint && (
+                      <InfoHint label={`About ${c.label}`}>{c.hint}</InfoHint>
+                    )}
                   </th>
                 ))}
               </tr>

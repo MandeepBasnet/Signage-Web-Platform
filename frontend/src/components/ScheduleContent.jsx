@@ -12,6 +12,7 @@ import { useScheduleOptions } from "../hooks/queries/useScheduleOptions.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
 import EmptyState from "./ui/EmptyState.jsx";
+import InfoHint from "./ui/InfoHint.jsx";
 
 // datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
 const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");
@@ -132,7 +133,7 @@ export default function ScheduleContent() {
       return;
     }
     if (selectedGroupIds.length === 0) {
-      setFormError("Please select at least one display group.");
+      setFormError("Please select at least one screen group.");
       return;
     }
     if (!isAlways && (!fromDt || !toDt)) {
@@ -475,11 +476,11 @@ export default function ScheduleContent() {
               {/* Display groups */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Display Group(s)
+                  Screen group(s)
                 </label>
                 <div className="max-h-40 overflow-y-auto rounded-md border border-gray-300 p-2 space-y-1">
                   {displayGroups.length === 0 ? (
-                    <p className="text-sm text-gray-400">No display groups found.</p>
+                    <p className="text-sm text-gray-400">No screen groups found.</p>
                   ) : (
                     displayGroups.map((dg) => {
                       const id = dg.displayGroupId || dg.id;
@@ -512,7 +513,11 @@ export default function ScheduleContent() {
                     checked={isAlways}
                     onChange={(e) => setIsAlways(e.target.checked)}
                   />
-                  Always (run continuously)
+                  Always
+                  <InfoHint label="About Always">
+                    Plays whenever the screen is on, with no start or end date.
+                    Turn it off to set a specific window.
+                  </InfoHint>
                 </label>
                 {!isAlways && (
                   <div className="grid grid-cols-2 gap-3 mt-2">
@@ -545,12 +550,17 @@ export default function ScheduleContent() {
                   onChange={(e) => setIsPriority(e.target.checked)}
                 />
                 High priority
+                <InfoHint label="About High priority">
+                  A priority event replaces anything else scheduled at the same
+                  time. Use it for takeovers &mdash; a promotion, or an urgent
+                  notice.
+                </InfoHint>
               </label>
 
               {(formError || optionsError) && (
                 <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {formError ||
-                    "Failed to load playlists / layouts / display groups."}
+                    "Couldn’t load playlists, layouts or screen groups."}
                 </div>
               )}
 

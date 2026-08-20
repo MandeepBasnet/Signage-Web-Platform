@@ -1,6 +1,9 @@
-// Presentational prompt shown when a published (read-only) layout is opened in
-// the designer: offers to go back or check out an editable draft. All logic
-// (navigation, the checkout request) stays in the parent via callbacks.
+// Shown when a live (read-only) layout is opened in the designer: offers to go
+// back, or to take an editable copy. All logic (navigation, the request)
+// stays in the parent via callbacks.
+//
+// The copy deliberately avoids checkout/draft/publish — the user has no mental
+// model of version control, only of screens that are currently showing things.
 export default function CheckoutPrompt({ onGoBack, onCheckout, checkingOut }) {
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -22,12 +25,11 @@ export default function CheckoutPrompt({ onGoBack, onCheckout, checkingOut }) {
             </svg>
           </div>
           <h3 className="text-xl font-bold text-gray-900 mb-2">
-            Checkout Required
+            This layout is live on screens
           </h3>
           <p className="text-gray-500 text-sm">
-            This layout is currently <strong>published</strong> (Read-Only).
-            <br />
-            To make changes, you need to checkout a draft version.
+            We&rsquo;ll make you a private copy to edit. Your screens keep showing
+            the current version until you push your changes.
           </p>
         </div>
         <div className="flex gap-3">
@@ -63,10 +65,10 @@ export default function CheckoutPrompt({ onGoBack, onCheckout, checkingOut }) {
                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
                   />
                 </svg>
-                <span>Checkout...</span>
+                <span>Preparing…</span>
               </>
             ) : (
-              "Checkout & Edit"
+              "Edit a copy"
             )}
           </button>
         </div>
