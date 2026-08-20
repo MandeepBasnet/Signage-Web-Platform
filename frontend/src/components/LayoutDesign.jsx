@@ -11,9 +11,8 @@ import AddRowModal from "./AddRowModal";
 import MediaPickerModal from "./MediaPickerModal";
 import CheckoutPrompt from "./CheckoutPrompt.jsx";
 import LoadingOverlay from "./LoadingOverlay.jsx";
-import CanvasControls from "./CanvasControls.jsx";
-import PublishButton from "./PublishButton.jsx";
-import CheckoutButton from "./CheckoutButton.jsx";
+import LayoutToolbar from "./LayoutToolbar.jsx";
+import LayoutCanvas from "./LayoutCanvas.jsx";
 import LayoutElement from "./LayoutElement.jsx";
 import MediaTypeIcon from "./MediaTypeIcon.jsx";
 import { BarChart3, ListVideo, FileText } from "lucide-react";
@@ -1004,253 +1003,32 @@ export default function LayoutDesign() {
 
   return (
     <div className="h-screen flex flex-col bg-gray-950 text-white overflow-hidden">
-      {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between shadow-sm z-20 shrink-0">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="text-gray-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-medium group"
-          >
-            <div className="p-1 rounded-md group-hover:bg-gray-800 transition-colors">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10 19l-7-7m0 0l7-7m-7 7h18"
-                />
-              </svg>
-            </div>
-            Back
-          </button>
-          <div className="h-6 w-px bg-gray-800 mx-2"></div>
-          <div>
-            <h1 className="text-lg font-semibold text-white leading-tight flex items-center gap-2">
-              {layout.layout}
-              <span className="text-xs font-normal text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full border border-gray-700">
-                v{layout.version || 1}
-              </span>
-            </h1>
-            <div className="flex items-center gap-3 text-xs text-gray-400 mt-0.5">
-              <span className="flex items-center gap-1">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-3 w-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
-                  />
-                </svg>
-                {layout.width}x{layout.height}
-              </span>
-              <span className="w-1 h-1 bg-gray-600 rounded-full"></span>
-              <span className="flex items-center gap-1">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-3 w-3"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                {layout.duration}s
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="px-3 py-1.5 bg-indigo-500/10 text-indigo-400 rounded-full text-xs font-medium border border-indigo-500/20 flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-            </span>
-            Designer Mode
-          </div>
-
-          {/* Draft Badge - Show if layout is a draft (publishedStatusId === 2) */}
-          {layout.publishedStatusId === 2 && (
-            <div className="px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-full text-xs font-bold border border-yellow-500/20 flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-3 w-3"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-                />
-              </svg>
-              YOUR COPY
-            </div>
-          )}
-
-          {/* Checkout Layout Button - Show if Published (status 1) */}
-          {layout.publishedStatusId === 1 && (
-            <CheckoutButton
-              onClick={checkoutLayout}
-              checkingOut={checkingOut}
-              checkoutSuccess={checkoutSuccess}
-            />
-          )}
-
-          {/* Publish Layout Button */}
-          <div className="flex items-center">
-            <PublishButton
-              onClick={publishLayout}
-              publishing={publishing}
-              publishSuccess={publishSuccess}
-            />
-            <InfoHint label="About pushing a layout live">
-              Sends this layout to every screen it&rsquo;s scheduled on. Screens
-              pick up the change the next time they check in &mdash; usually
-              within a minute.
-            </InfoHint>
-          </div>
-        </div>
-      </header>
+      <LayoutToolbar
+        layout={layout}
+        onBack={() => navigate(-1)}
+        checkoutLayout={checkoutLayout}
+        checkingOut={checkingOut}
+        checkoutSuccess={checkoutSuccess}
+        publishLayout={publishLayout}
+        publishing={publishing}
+        publishSuccess={publishSuccess}
+      />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel: Visual Layout Canvas */}
-        <main
-          className="flex-1 bg-gray-950 relative overflow-auto"
-          ref={containerRef}
-        >
-          {/* Grid Background Pattern */}
-          <div
-            className="absolute inset-0 opacity-[0.03]"
-            style={{
-              backgroundImage: "radial-gradient(#fff 1px, transparent 1px)",
-              backgroundSize: "20px 20px",
-            }}
-          />
-
-          {/* Centering, scrollable area: centers the canvas when it fits, and
-              scrolls (vertical + horizontal) when zoomed beyond the viewport. */}
-          <div className="min-w-full min-h-full flex items-center justify-center p-8">
-            {/* Canvas Wrapper for Centering and Scaling */}
-            <div
-              className="relative"
-              style={{
-                background: "rgb(243, 248, 255)",
-                padding: "20px",
-                boxShadow: "0 0 50px rgba(0,0,0,0.5)",
-              }}
-            >
-            {/* Main layout container with scaled dimensions */}
-            <div
-              className="layout-player relative mx-auto bg-black shadow-2xl overflow-hidden"
-              style={{
-                width: `${layout.width * canvasScale}px`,
-                height: `${layout.height * canvasScale}px`,
-                background: layout.backgroundColor || "#000",
-                backgroundImage:
-                  !useLivePreview && bgImageUrl
-                    ? `url(${bgImageUrl})`
-                    : undefined,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }}
-            >
-              {useLivePreview ? (
-                /* Faithful preview: Xibo's own renderer at native resolution,
-                   scaled down to the canvas. Reverse-proxied via the backend so
-                   all sub-resources (media/JS/CSS) load through the web session. */
-                <iframe
-                  key={`live-${layoutId}`}
-                  title="Layout preview"
-                  src={`${API_BASE_URL}/layouts/${layoutId}/live-preview?token=${getStoredToken()}`}
-                  style={{
-                    width: `${layout.width}px`,
-                    height: `${layout.height}px`,
-                    border: "none",
-                    transform: `scale(${canvasScale})`,
-                    transformOrigin: "top left",
-                  }}
-                  sandbox="allow-scripts allow-same-origin"
-                />
-              ) : (
-                /* Structure view: our reconstruction (region/widget overlays). */
-                <div className="layout-live-preview relative w-full h-full">
-                  {/* Global elements layer (canvas region) */}
-                  {renderGlobalElements()}
-
-                  {/* Regular regions container */}
-                  <div className="regions-container relative w-full h-full">
-                    {layout.regions
-                      ?.filter(
-                        (region) =>
-                          !region.regionPlaylist?.widgets?.some(
-                            (w) => w.type === "canvas",
-                          ),
-                      )
-                      .map((region) => {
-                        const firstWidget = region.regionPlaylist?.widgets?.[0];
-
-                        // Determine region type and render accordingly
-                        if (!firstWidget) return null;
-
-                        // Dataset, embedded content, or specific widget types use iframes
-                        // Check both moduleName and type to be safe
-                        const moduleName = (
-                          firstWidget.moduleName || ""
-                        ).toLowerCase();
-                        const type = (firstWidget.type || "").toLowerCase();
-
-                        if (
-                          moduleName === "dataset" ||
-                          moduleName === "embedded" ||
-                          moduleName === "ticker" ||
-                          type === "dataset" ||
-                          type === "embedded" ||
-                          type === "ticker"
-                        ) {
-                          return renderWidgetRegion(region);
-                        }
-
-                        // Playlist regions (images, videos, etc.) use preview HTML
-                        return renderPlaylistRegion(region);
-                      })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Canvas info display */}
-            <CanvasControls
-              onZoomOut={() => zoomBy(0.8)}
-              onZoomIn={() => zoomBy(1.25)}
-              onZoomFit={zoomFit}
-              scale={canvasScale}
-              width={layout.width}
-              height={layout.height}
-              useLivePreview={useLivePreview}
-              onTogglePreview={() => setUseLivePreview((v) => !v)}
-            />
-            </div>
-          </div>
-        </main>
+        <LayoutCanvas
+          containerRef={containerRef}
+          layout={layout}
+          layoutId={layoutId}
+          canvasScale={canvasScale}
+          zoomBy={zoomBy}
+          zoomFit={zoomFit}
+          useLivePreview={useLivePreview}
+          setUseLivePreview={setUseLivePreview}
+          bgImageUrl={bgImageUrl}
+          renderGlobalElements={renderGlobalElements}
+          renderWidgetRegion={renderWidgetRegion}
+          renderPlaylistRegion={renderPlaylistRegion}
+        />
 
         {/* Right Panel: Layout Details Sidebar */}
         <aside className="w-96 bg-gray-900 border-l border-gray-800 overflow-y-auto flex flex-col shadow-xl z-10">
