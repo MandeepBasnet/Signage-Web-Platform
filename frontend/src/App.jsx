@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient.js";
 import { isTokenValid } from "./utils/auth.js";
+import ToastProvider from "./components/ui/ToastProvider.jsx";
+import ConfirmProvider from "./components/ui/ConfirmProvider.jsx";
 import "./App.css";
 
 // Route-level code splitting: each page loads on demand, so the heavy
@@ -27,31 +29,38 @@ function PageLoader() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <Dashboard />
-              </RequireAuth>
-            }
-          />
-          <Route
-            path="/layout/designer/:layoutId"
-            element={
-              <RequireAuth>
-                <LayoutDesign />
-              </RequireAuth>
-            }
-          />
-          <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </Suspense>
-      </BrowserRouter>
+      {/* Both providers sit OUTSIDE BrowserRouter deliberately: their state must
+          survive a route change, so a toast raised just before navigate() — the
+          publish flow does exactly this — is still on screen after the move. */}
+      <ToastProvider>
+        <ConfirmProvider>
+          <BrowserRouter>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="/login" element={<Login />} />
+                <Route
+                  path="/dashboard"
+                  element={
+                    <RequireAuth>
+                      <Dashboard />
+                    </RequireAuth>
+                  }
+                />
+                <Route
+                  path="/layout/designer/:layoutId"
+                  element={
+                    <RequireAuth>
+                      <LayoutDesign />
+                    </RequireAuth>
+                  }
+                />
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+            </Suspense>
+          </BrowserRouter>
+        </ConfirmProvider>
+      </ToastProvider>
     </QueryClientProvider>
   );
 }
