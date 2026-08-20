@@ -9,6 +9,8 @@ import DatePicker from "./DatePicker.jsx";
 import { API_BASE_URL } from "../config/api.js";
 import { useSchedule } from "../hooks/queries/useSchedule.js";
 import { useScheduleOptions } from "../hooks/queries/useScheduleOptions.js";
+import { useToast } from "../hooks/useToast.js";
+import { useConfirm } from "../hooks/useConfirm.js";
 
 // datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
 const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");
@@ -29,6 +31,8 @@ const EMPTY_ARRAY = [];
 
 export default function ScheduleContent() {
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const confirmDialog = useConfirm();
 
   // Add/edit modal state
   const [showAdd, setShowAdd] = useState(false);
@@ -223,7 +227,13 @@ export default function ScheduleContent() {
 
   const handleDelete = async (eventId) => {
     if (!eventId) return;
-    if (!window.confirm("Delete this scheduled event?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this scheduled event?",
+      body: "Screens will stop playing it from their next check-in. The layout or playlist itself is not deleted.",
+      confirmLabel: "Delete event",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/schedule/${eventId}`, {
@@ -238,7 +248,7 @@ export default function ScheduleContent() {
       );
     } catch (err) {
       console.error("Error deleting schedule event:", err);
-      alert(err.message || "Failed to delete event");
+      toast.error("Couldn't delete the event", err.message);
     }
   };
 

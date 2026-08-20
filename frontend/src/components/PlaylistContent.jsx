@@ -18,11 +18,15 @@ import {
 } from "../utils/playlistItems.js";
 import { usePlaylists, PAGE_SIZE } from "../hooks/queries/usePlaylists.js";
 import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
+import { useToast } from "../hooks/useToast.js";
+import { useConfirm } from "../hooks/useConfirm.js";
 
 const EMPTY_ARRAY = [];
 const MEDIA_PAGE_SIZE = 10;
 
 export default function PlaylistContent() {
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [search, setSearch] = useState("");
   const [selectedPlaylistId, setSelectedPlaylistId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -213,11 +217,13 @@ export default function PlaylistContent() {
   };
 
   const handleDeleteMedia = async (widgetId) => {
-    if (
-      !confirm("Are you sure you want to remove this media from the playlist?")
-    ) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "Remove this media from the playlist?",
+      body: "The file stays in your library — it just stops playing in this playlist.",
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const playlistId =
@@ -245,7 +251,7 @@ export default function PlaylistContent() {
       refetchDetails();
     } catch (err) {
       console.error("Error deleting media:", err);
-      alert("Failed to delete media");
+      toast.error("Couldn't remove the media", err.message);
     }
   };
 
@@ -305,19 +311,23 @@ export default function PlaylistContent() {
       setExpiryModalOpen(false);
       // Refresh playlist to show updated data (if we display it)
       refetchDetails();
-      alert("Expiration settings updated successfully");
+      toast.success("Expiry updated");
     } catch (err) {
       console.error("Error updating expiry:", err);
-      alert(`Failed to update expiry: ${err.message}`);
+      toast.error("Couldn't update the expiry", err.message);
     } finally {
       setUpdatingExpiry(false);
     }
   };
 
   const handleDeletePlaylist = async (playlistId) => {
-    if (!confirm("Are you sure you want to delete this playlist?")) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "Delete this playlist?",
+      body: "Any screen scheduled to play it will stop. The media inside stays in your library.",
+      confirmLabel: "Delete playlist",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
@@ -329,8 +339,11 @@ export default function PlaylistContent() {
 
       if (response.status === 409) {
         const data = await response.json();
-        alert(
-          `Cannot delete playlist:\n\n${data.message}\n\n${data.details || ""}`
+        // 409 means the playlist is still referenced — tell the user why
+        // rather than reporting a failure they can't act on.
+        toast.error(
+          data.message || "This playlist is still in use",
+          data.details || "It is currently used by a layout or a schedule."
         );
         return;
       }
@@ -346,7 +359,7 @@ export default function PlaylistContent() {
       refetchPlaylists();
     } catch (err) {
       console.error("Error deleting playlist:", err);
-      alert(`Failed to delete playlist: ${err.message}`);
+      toast.error("Couldn't delete the playlist", err.message);
     }
   };
 

@@ -8,9 +8,11 @@ import { getAuthHeaders } from "../utils/auth.js";
 import { API_BASE_URL } from "../config/api.js";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 import { useDisplays } from "../hooks/queries/useDisplays.js";
+import { useToast } from "../hooks/useToast.js";
 
 export default function DisplayContent() {
   const navigate = useNavigate();
+  const toast = useToast();
   // Displays come from the React Query cache, so switching tabs and returning
   // reuses the data instead of re-fetching. `fetchDisplays` (refetch) is still
   // wired to the Retry/Refresh buttons for an explicit reload. Thumbnails are
@@ -169,7 +171,7 @@ export default function DisplayContent() {
          return;
       }
       
-      alert(`Failed to checkout layout: ${err.message}`);
+      toast.error("Couldn't open this layout for editing", err.message);
     } finally {
       setCheckingOut(false);
     }
@@ -210,12 +212,18 @@ export default function DisplayContent() {
                return;
             } else {
                 console.warn("[Auto-Checkout] No draft found with parentId", parentId);
-                alert("Could not find the draft for this layout. Please try manually.");
+                toast.error(
+                  "Couldn't find the editable copy",
+                  "Open this layout from the Layouts page instead."
+                );
             }
           }
       } catch (searchErr) {
           console.error("[Auto-Checkout] Failed to find existing draft:", searchErr);
-          alert("Failed to find existing draft.");
+          toast.error(
+            "Couldn't find the editable copy",
+            searchErr.message || "Open this layout from the Layouts page instead."
+          );
       }
   };
 

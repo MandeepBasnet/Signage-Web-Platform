@@ -17,6 +17,8 @@ import CheckoutButton from "./CheckoutButton.jsx";
 import LayoutElement from "./LayoutElement.jsx";
 import MediaTypeIcon from "./MediaTypeIcon.jsx";
 import { BarChart3, ListVideo, FileText } from "lucide-react";
+import { useToast } from "../hooks/useToast.js";
+import { useConfirm } from "../hooks/useConfirm.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -29,6 +31,8 @@ import {
 } from "../utils/layoutWidgets.js";
 
 export default function LayoutDesign() {
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const { layoutId } = useParams();
   const navigate = useNavigate();
 
@@ -80,6 +84,21 @@ export default function LayoutDesign() {
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState(null);
   const [checkoutSuccess, setCheckoutSuccess] = useState(false);
+
+  // Xibo's own guidance is to wait for the publish confirmation before leaving
+  // the page — closing the tab mid-request can leave the layout in a broken
+  // half-published state. Warn while the request is in flight.
+  useEffect(() => {
+    if (!publishing) return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      // Browsers ignore the message and show their own, but returnValue must be
+      // set for the prompt to appear at all.
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [publishing]);
 
   const [editingTextWidgetId, setEditingTextWidgetId] = useState(null);
   const [editingElementId, setEditingElementId] = useState(null);
@@ -222,8 +241,6 @@ export default function LayoutDesign() {
         console.log(
           `[LayoutDesign] Found existing draft ${data.existingDraftId}. Redirecting...`,
         );
-        // Optional: Show a toast/notice
-        // alert("Redirecting to the editable draft version of this layout...");
         navigate(`/layout/designer/${data.existingDraftId}`, { replace: true });
         return; // Stop processing this read-only layout
       }
@@ -366,12 +383,16 @@ export default function LayoutDesign() {
       const plId = getPlaylistId(widget);
 
       if (!plId) {
-        alert(
-          `Playlist widget has no playlist ID.\n\nDebug Info:\nModule: ${
-            widget.moduleName
-          }\nType: ${widget.type}\nOptions: ${JSON.stringify(
-            widget.widgetOptions,
-          )}`,
+        // Keep the widget dump in the console where it's useful; the user
+        // gets the consequence and the fix instead.
+        console.error("[LayoutDesign] Playlist widget has no playlist ID", {
+          module: widget.moduleName,
+          type: widget.type,
+          options: widget.widgetOptions,
+        });
+        toast.error(
+          "This playlist widget isn't linked to a playlist",
+          "Remove it from the layout and add it again."
         );
         return;
       }
@@ -379,25 +400,19 @@ export default function LayoutDesign() {
       const plData = playlistData.get(String(plId));
 
       if (!plData) {
-        alert(`Loading playlist data for ID ${plId}...`);
+        toast.info("Loading playlist…");
         fetchPlaylistMedia(plId);
         return;
       }
 
-      // Show playlist with media items
-      const mediaList = plData.media
-        .map(
-          (m, idx) =>
-            `${idx + 1}. ${m.name || "Unnamed"} (${m.mediaType || "unknown"})`,
-        )
-        .join("\n");
-
-      alert(
-        `Playlist: ${
-          widget.name || plData.playlist.name
-        }\nID: ${plId}\n\nMedia Items (${plData.media.length}):\n${
-          mediaList || "No media items"
-        }\n\nNote: Thumbnails visible in sidebar`,
+      // The items themselves are already listed in the sidebar, so the
+      // toast only has to confirm which playlist was opened and its size.
+      const itemCount = plData.media.length;
+      toast.info(
+        widget.name || plData.playlist.name,
+        `${itemCount} item${
+          itemCount === 1 ? "" : "s"
+        } in this playlist — thumbnails are in the sidebar.`
       );
     }
     // Handle dataset widgets
@@ -405,12 +420,14 @@ export default function LayoutDesign() {
       const dsId = getDatasetId(widget);
 
       if (!dsId) {
-        alert(
-          `Dataset widget has no dataset ID.\n\nDebug Info:\nModule: ${
-            widget.moduleName
-          }\nType: ${widget.type}\nOptions: ${JSON.stringify(
-            widget.widgetOptions,
-          )}`,
+        console.error("[LayoutDesign] Dataset widget has no dataset ID", {
+          module: widget.moduleName,
+          type: widget.type,
+          options: widget.widgetOptions,
+        });
+        toast.error(
+          "This widget isn't linked to a data source",
+          "Remove it from the layout and add it again."
         );
         return;
       }
@@ -418,31 +435,16 @@ export default function LayoutDesign() {
       const dsData = datasetData.get(String(dsId));
 
       if (!dsData) {
-        alert(`Loading dataset data for ID ${dsId}...`);
+        toast.info("Loading data source…");
         fetchDatasetData(dsId);
         return;
       }
 
-      const columnList = dsData.columns.map((col) => col.heading).join(", ");
-      const rowPreview = dsData.rows
-        .slice(0, 3)
-        .map((row, idx) => {
-          const rowData = dsData.columns
-            .map(
-              (col) =>
-                row[col.heading] || row[`col_${col.dataSetColumnId}`] || "-",
-            )
-            .join(" | ");
-          return `Row ${idx + 1}: ${rowData}`;
-        })
-        .join("\n");
-
-      alert(
-        `Dataset Widget: ${widget.name}\nID: ${dsId}\n\nColumns (${
-          dsData.columns.length
-        }): ${columnList}\n\nRows: ${
-          dsData.rows.length
-        }\n\nPreview:\n${rowPreview}${dsData.rows.length > 3 ? "\n..." : ""}`,
+      const { columns, rows } = dsData;
+      toast.info(
+        widget.name || "Data source",
+        `${columns.length} column${columns.length === 1 ? "" : "s"}, ` +
+          `${rows.length} row${rows.length === 1 ? "" : "s"}.`
       );
     }
     // Handle other widgets
@@ -470,13 +472,13 @@ export default function LayoutDesign() {
   };
 
   const handleDeletePlaylistMedia = async (playlistId, widgetId, mediaName) => {
-    if (
-      !confirm(
-        `Are you sure you want to remove "${mediaName}" from the playlist?`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: `Remove "${mediaName}" from the playlist?`,
+      body: "The file stays in your library — it just stops playing here.",
+      confirmLabel: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       setDeletingMediaId(widgetId);
@@ -491,12 +493,18 @@ export default function LayoutDesign() {
       );
 
       if (response.status === 403) {
-        alert("You don't have permission to modify this playlist.");
+        toast.error(
+          "You don't have permission to change this playlist",
+          "Ask an admin to share it with you."
+        );
         return;
       }
 
       if (response.status === 404) {
-        alert("Media or playlist not found. It may have already been deleted.");
+        toast.error(
+          "That media is already gone",
+          "It may have been deleted by someone else."
+        );
         return;
       }
 
@@ -512,16 +520,19 @@ export default function LayoutDesign() {
       await fetchLayoutDetails();
 
       console.log(`Successfully removed media from playlist ${playlistId}`);
-      // alert("Media deleted successfully and layout updated."); // Optional: remove alert for smoother UX
+      toast.success("Media removed");
     } catch (err) {
       console.error("Error deleting media from playlist:", err);
       if (
         err.message.includes("Failed to fetch") ||
         err.message.includes("NetworkError")
       ) {
-        alert("Network error. Please check your connection and try again.");
+        toast.error(
+          "Network problem",
+          "Check your connection and try again."
+        );
       } else {
-        alert(`Failed to delete media: ${err.message}`);
+        toast.error("Couldn't remove the media", err.message);
       }
     } finally {
       setDeletingMediaId(null);
@@ -562,18 +573,24 @@ export default function LayoutDesign() {
       // Refresh layout
       await fetchLayoutDetails();
 
-      alert("Row added successfully!");
+      toast.success("Row added");
       setAddRowModalState((prev) => ({ ...prev, isOpen: false }));
     } catch (err) {
       console.error("Error adding row:", err);
-      alert(`Failed to add row: ${err.message}`);
+      toast.error("Couldn't add the row", err.message);
     } finally {
       setAddingRow(false);
     }
   };
 
   const handleDeleteRow = async (datasetId, rowId) => {
-    if (!confirm("Are you sure you want to delete this row?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this row?",
+      body: "The row is removed from the data source. This can't be undone.",
+      confirmLabel: "Delete row",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       setDeletingRowId(rowId);
@@ -598,7 +615,7 @@ export default function LayoutDesign() {
       );
     } catch (err) {
       console.error("Error deleting row:", err);
-      alert(`Failed to delete row: ${err.message}`);
+      toast.error("Couldn't delete the row", err.message);
     } finally {
       setDeletingRowId(null);
     }
@@ -727,10 +744,10 @@ export default function LayoutDesign() {
 
       // Refresh layout to show new media
       await fetchLayoutDetails();
-      alert("Media replaced successfully!");
+      toast.success("Media replaced");
     } catch (err) {
       console.error("Error replacing media:", err);
-      alert(`Failed to replace media: ${err.message}`);
+      toast.error("Couldn't replace the media", err.message);
     } finally {
       setReplacingWidget(null);
     }
@@ -931,13 +948,12 @@ export default function LayoutDesign() {
   // ===== END CANVAS RENDERING FUNCTIONS =====
 
   const handlePublishLayout = async () => {
-    if (
-      !confirm(
-        "Are you sure you want to publish this layout? This will make it live.",
-      )
-    ) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "Publish this layout?",
+      body: "Every screen scheduled to show it will pick up your changes at its next check-in.",
+      confirmLabel: "Publish",
+    });
+    if (!ok) return;
 
     try {
       setPublishing(true);
@@ -985,8 +1001,12 @@ export default function LayoutDesign() {
       const _ = await response.json();
       setPublishSuccess(true);
 
-      // Show success message and redirect
-      alert("Layout published successfully! Redirecting to dashboard...");
+      // The toast outlives this navigation — ToastProvider is mounted
+      // above the router in App.jsx.
+      toast.success(
+        "Layout published",
+        "Screens will pick it up at their next check-in."
+      );
       navigate("/dashboard", { replace: true });
     } catch (err) {
       console.error("Error publishing layout:", err);
@@ -996,9 +1016,12 @@ export default function LayoutDesign() {
         err.message.includes("Failed to fetch") ||
         err.message.includes("NetworkError")
       ) {
-        alert("Network error. Please check your connection and try again.");
+        toast.error(
+          "Network problem",
+          "Nothing was published. Check your connection and try again."
+        );
       } else {
-        alert(`Failed to publish layout: ${err.message}`);
+        toast.error("Couldn't publish the layout", err.message);
       }
     } finally {
       setPublishing(false);
@@ -1045,8 +1068,7 @@ export default function LayoutDesign() {
         await fetchLayoutDetails();
       }
 
-      // Show success message
-      alert("Layout checked out successfully! Redirecting to draft...");
+      toast.success("Ready to edit", "You're now working on an editable copy.");
 
       // Clear success message after 3 seconds
       setTimeout(() => {
@@ -1055,7 +1077,7 @@ export default function LayoutDesign() {
     } catch (err) {
       console.error("Error checking out layout:", err);
       setCheckoutError(err.message);
-      alert(`Failed to checkout layout: ${err.message}`);
+      toast.error("Couldn't open this layout for editing", err.message);
     } finally {
       setCheckingOut(false);
     }
@@ -1140,8 +1162,11 @@ export default function LayoutDesign() {
         layout?.publishedStatusId &&
         String(layout.publishedStatusId) !== "2"
       ) {
-        const msg = `This layout is NOT in Draft mode (Status: ${layout.publishedStatusId}). You cannot edit it directly. Please reload to redirect to the Draft version if it exists.`;
-        alert(msg);
+        const msg = `Layout ${layoutId} is not a draft (publishedStatusId=${layout.publishedStatusId}); refusing to edit.`;
+        toast.error(
+          "This layout is read-only",
+          "Reload the page to switch to the editable copy."
+        );
         throw new Error(msg);
       }
 
@@ -1234,7 +1259,7 @@ export default function LayoutDesign() {
       setEditingTextWidgetId(null);
       setEditingElementId(null);
       setEditingTextValue("");
-      alert("Text updated successfully!");
+      toast.success("Text updated");
     } catch (err) {
       console.error("[handleTextSave] ✗ Error updating text:", err);
       console.error("[handleTextSave] Error details:", {
@@ -1243,8 +1268,7 @@ export default function LayoutDesign() {
         stack: err.stack,
       });
 
-      // Show error message to user
-      alert(`Failed to update text: ${err.message}`);
+      toast.error("Couldn't save the text", err.message);
     } finally {
       setSavingText(false);
     }

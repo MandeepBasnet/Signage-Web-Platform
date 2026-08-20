@@ -19,11 +19,15 @@ import { AlertTriangle } from "lucide-react";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import { useFolders } from "../hooks/queries/useFolders.js";
 import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
+import { useToast } from "../hooks/useToast.js";
+import { useConfirm } from "../hooks/useConfirm.js";
 
 const EMPTY_ARRAY = [];
 
 export default function MediaContent() {
   const queryClient = useQueryClient();
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [nameChangeNotice, setNameChangeNotice] = useState(null);
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
@@ -148,9 +152,13 @@ export default function MediaContent() {
   const handleDeleteMedia = async (mediaId) => {
     if (!mediaId) return;
 
-    if (!confirm("Are you sure you want to delete this media?")) {
-      return;
-    }
+    const ok = await confirmDialog({
+      title: "Delete this media?",
+      body: "It will be removed from the library permanently. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const response = await fetch(`${API_BASE_URL}/library/${mediaId}`, {
@@ -162,10 +170,11 @@ export default function MediaContent() {
 
       if (response.status === 409) {
         const data = await response.json();
-        alert(
-          `Cannot delete media:\n\n${data.message}\n\nDetails: ${
-            data.details || "It is currently assigned to a playlist or layout."
-          }`
+        // 409 is not a failure — it's the server telling the user why this
+        // can't happen yet, which is the most useful thing on screen.
+        toast.error(
+          data.message || "This media is still in use",
+          data.details || "It is currently assigned to a playlist or layout."
         );
         return;
       }
@@ -181,7 +190,7 @@ export default function MediaContent() {
       reloadMedia();
     } catch (err) {
       console.error("Error deleting media:", err);
-      alert(`Failed to delete media: ${err.message}`);
+      toast.error("Couldn't delete the media", err.message);
     }
   };
 

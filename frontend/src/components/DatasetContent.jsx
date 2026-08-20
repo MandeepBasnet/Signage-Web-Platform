@@ -6,10 +6,14 @@ import { API_BASE_URL } from "../config/api.js";
 import { useDatasets } from "../hooks/queries/useDatasets.js";
 import { useDatasetColumns } from "../hooks/queries/useDatasetColumns.js";
 import { useDatasetRows } from "../hooks/queries/useDatasetRows.js";
+import { useToast } from "../hooks/useToast.js";
+import { useConfirm } from "../hooks/useConfirm.js";
 
 const EMPTY_ARRAY = [];
 
 export default function DatasetContent() {
+  const toast = useToast();
+  const confirmDialog = useConfirm();
   const [view, setView] = useState("list"); // 'list' or 'details'
   const [selectedDataset, setSelectedDataset] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -65,7 +69,13 @@ export default function DatasetContent() {
   };
 
   const handleDeleteRow = async (rowId) => {
-    if (!confirm("Are you sure you want to delete this row?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this row?",
+      body: "The row is removed from the data source. This can't be undone.",
+      confirmLabel: "Delete row",
+      destructive: true,
+    });
+    if (!ok) return;
 
     try {
       const token = localStorage.getItem("auth_token");
@@ -82,7 +92,7 @@ export default function DatasetContent() {
       // Refresh the rows
       await refetchRows();
     } catch (err) {
-      alert("Failed to delete row: " + err.message);
+      toast.error("Couldn't delete the row", err.message);
     }
   };
 

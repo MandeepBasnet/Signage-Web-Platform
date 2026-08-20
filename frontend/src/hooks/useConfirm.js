@@ -2,7 +2,7 @@ import { useContext } from "react";
 import { ConfirmContext } from "../lib/confirmContext.js";
 
 // Returns confirmDialog(options) -> Promise<boolean>, a drop-in replacement for
-// window.confirm() that resolves instead of blocking:
+// the native window.confirm dialog that resolves instead of blocking:
 //
 //   if (!(await confirmDialog({ title, body, destructive: true }))) return;
 //
