@@ -21,6 +21,8 @@ import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
 import InfoHint from "./ui/InfoHint.jsx";
 import { useLayoutCheckout } from "../hooks/useLayoutCheckout.js";
+import { useWidgetData } from "../hooks/useWidgetData.js";
+import { useCanvasZoom } from "../hooks/useCanvasZoom.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { formatFileSize } from "../utils/mediaTypes.js";
@@ -42,8 +44,6 @@ export default function LayoutDesign() {
   const [layout, setLayout] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [scale, setScale] = useState(1);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [bgImageUrl, setBgImageUrl] = useState(null);
   // Faithful live preview (iframe proxy of Xibo's own renderer) vs. our
   // structure reconstruction. Defaults on; toggle falls back if unavailable.
@@ -68,10 +68,14 @@ export default function LayoutDesign() {
   const [addingRow, setAddingRow] = useState(false);
   const [deletingRowId, setDeletingRowId] = useState(null);
 
-  // Playlist & Dataset Data State
-  const [playlistData, setPlaylistData] = useState(new Map());
-  const [datasetData, setDatasetData] = useState(new Map());
-  const [loadingWidgetData, setLoadingWidgetData] = useState(new Set());
+  // Playlist & dataset contents for the widgets on this layout.
+  const {
+    playlistData,
+    datasetData,
+    loadingWidgetData,
+    fetchPlaylistMedia,
+    fetchDatasetData,
+  } = useWidgetData();
 
   // Delete Media State
   const [deleteHoveredMediaId, setDeleteHoveredMediaId] = useState(null);
@@ -111,14 +115,14 @@ export default function LayoutDesign() {
   const [replacingWidget, setReplacingWidget] = useState(null);
 
   // Canvas Rendering State
-  const [canvasScale, setCanvasScale] = useState(0.1); // Scale factor for canvas preview
   // When true, the canvas auto-fits the viewport; manual zoom turns it off.
-  const [autoFit, setAutoFit] = useState(true);
   const [selectedRegionId, setSelectedRegionId] = useState(null); // Currently selected region
 
   // Refs
-  const containerRef = useRef(null);
   const sidebarRef = useRef(null); // Ref to sidebar for auto-scrolling
+
+  // Canvas sizing: auto-fits until the user zooms, then stays put.
+  const { containerRef, canvasScale, zoomBy, zoomFit } = useCanvasZoom(layout);
 
   useEffect(() => {
     // Show prompt if layout is published (Status ID 1)
@@ -134,23 +138,6 @@ export default function LayoutDesign() {
     fetchLayoutDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layoutId]);
-
-  // Dynamic Scaling
-  useEffect(() => {
-    if (!layout || !containerSize.width || !containerSize.height) return;
-
-    const padding = 60; // Padding around canvas
-    const targetRatio = 0.4; // Target 40% of screen size to ensure all regions visible
-
-    const availableWidth = containerSize.width - padding;
-    const availableHeight = containerSize.height - padding;
-
-    const scaleX = availableWidth / layout.width;
-    const scaleY = availableHeight / layout.height;
-
-    // Scale to fit, then apply target ratio
-    setScale(Math.min(scaleX, scaleY) * targetRatio);
-  }, [layout, containerSize]);
 
   // Fetch Background Image
   useEffect(() => {
@@ -191,26 +178,6 @@ export default function LayoutDesign() {
     datasetIds.forEach((id) => fetchDatasetData(id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [layout]);
-
-  // Resize Observer for Container
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        setContainerSize({
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        });
-      }
-    });
-
-    resizeObserver.observe(containerRef.current);
-
-    return () => {
-      resizeObserver.disconnect();
-    };
-  }, []);
 
   const fetchLayoutDetails = async () => {
     try {
@@ -268,90 +235,6 @@ export default function LayoutDesign() {
       }
     } catch (err) {
       console.error("Failed to fetch background image", err);
-    }
-  };
-
-  const fetchPlaylistMedia = async (playlistId, forceRefresh = false) => {
-    if (!playlistId || (!forceRefresh && playlistData.has(playlistId))) return;
-
-    setLoadingWidgetData((prev) => new Set(prev).add(`playlist-${playlistId}`));
-    console.log(`Fetching playlist media for ID: ${playlistId}`);
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/playlists/${playlistId}`, {
-        headers: getAuthHeaders(),
-      });
-
-      if (!response.ok)
-        throw new Error(`Failed to fetch playlist: ${response.statusText}`);
-
-      const data = await response.json();
-
-      setPlaylistData((prev) =>
-        new Map(prev).set(String(playlistId), {
-          playlist: data.playlist,
-          media: data.media || [],
-        }),
-      );
-
-      console.log(
-        `Fetched ${
-          data.media?.length || 0
-        } media items for playlist ${playlistId}`,
-      );
-    } catch (err) {
-      console.error(`Failed to fetch playlist ${playlistId}:`, err);
-    } finally {
-      setLoadingWidgetData((prev) => {
-        const next = new Set(prev);
-        next.delete(`playlist-${playlistId}`);
-        return next;
-      });
-    }
-  };
-
-  const fetchDatasetData = async (dataSetId, forceRefresh = false) => {
-    if (!dataSetId || (!forceRefresh && datasetData.has(dataSetId))) return;
-
-    setLoadingWidgetData((prev) => new Set(prev).add(`dataset-${dataSetId}`));
-    console.log(`Fetching dataset data for ID: ${dataSetId}`);
-
-    try {
-      const [colResponse, dataResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/datasets/${dataSetId}/column`, {
-          headers: getAuthHeaders(),
-        }),
-        fetch(`${API_BASE_URL}/datasets/data/${dataSetId}`, {
-          headers: getAuthHeaders(),
-        }),
-      ]);
-
-      if (!colResponse.ok || !dataResponse.ok)
-        throw new Error("Failed to fetch dataset");
-
-      const colData = await colResponse.json();
-      const rowData = await dataResponse.json();
-
-      setDatasetData((prev) =>
-        new Map(prev).set(String(dataSetId), {
-          columns: colData.data || [],
-          rows: rowData.data || [],
-        }),
-      );
-
-      console.log(
-        `Fetched dataset ${dataSetId}: ${colData.data?.length || 0} columns, ${
-          rowData.data?.length || 0
-        } rows`,
-      );
-    } catch (err) {
-      console.error(`Failed to fetch dataset ${dataSetId}:`, err);
-    } finally {
-      setLoadingWidgetData((prev) => {
-        const next = new Set(prev);
-        next.delete(`dataset-${dataSetId}`);
-        return next;
-      });
     }
   };
 
@@ -747,49 +630,6 @@ export default function LayoutDesign() {
   };
 
   // ===== CANVAS RENDERING FUNCTIONS =====
-
-  // Calculate appropriate canvas scale
-  const calculateCanvasScale = () => {
-    if (!layout?.width || !layout?.height) return 0.1;
-
-    const { width: cw, height: ch } = containerSize;
-    // Before the container is measured, fall back to a width-based estimate.
-    if (!cw || !ch) return Math.min(800 / layout.width, 0.5);
-
-    // Fit the layout inside the available area in BOTH dimensions so the canvas
-    // matches the layout's true aspect (portrait fits height, landscape fits
-    // width) instead of overflowing. Never upscale past 100%.
-    const padding = 48;
-    const availW = Math.max(cw - padding, 50);
-    const availH = Math.max(ch - padding, 50);
-    return Math.min(availW / layout.width, availH / layout.height, 1);
-  };
-
-  // Auto-fit the canvas to the viewport (unless the user has manually zoomed).
-  useEffect(() => {
-    if (layout && autoFit) {
-      setCanvasScale(calculateCanvasScale());
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, containerSize, autoFit]);
-
-  // A newly loaded layout should re-enable auto-fit.
-  useEffect(() => {
-    setAutoFit(true);
-  }, [layout?.layoutId]);
-
-  const ZOOM_MIN = 0.05;
-  const ZOOM_MAX = 4;
-  const zoomBy = (factor) => {
-    setAutoFit(false);
-    setCanvasScale((s) =>
-      Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, s * factor))
-    );
-  };
-  const zoomFit = () => {
-    setAutoFit(true);
-    setCanvasScale(calculateCanvasScale());
-  };
 
   // Render widget content directly (Client-Side Rendering)
   const renderWidgetContent = (widget, width, height) => {
