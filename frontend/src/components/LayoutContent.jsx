@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Palette, SearchX } from "lucide-react";
 
 import SearchBar from "./SearchBar.jsx";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 import { useLayouts, PAGE_SIZE } from "../hooks/queries/useLayouts.js";
+import EmptyState from "./ui/EmptyState.jsx";
 
 const EMPTY_LAYOUTS = [];
 
@@ -192,8 +193,28 @@ export default function LayoutContent() {
             })}
             {layouts.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
-                  No layouts found
+                <td colSpan={8}>
+                  {debouncedSearch ? (
+                    <EmptyState
+                      icon={SearchX}
+                      title={`No layouts match “${debouncedSearch}”`}
+                      body="Try a different name, or clear the search to see them all."
+                      action={{
+                        label: "Clear search",
+                        onClick: () => setSearch(""),
+                      }}
+                    />
+                  ) : (
+                    <EmptyState
+                      icon={Palette}
+                      title="No layouts yet"
+                      body="A layout is one screen design — images, video and text arranged how you want them. Layouts are created in the Xibo CMS and appear here once they belong to you or are shared with you."
+                      action={{
+                        label: "Check again",
+                        onClick: () => refetch(),
+                      }}
+                    />
+                  )}
                 </td>
               </tr>
             )}

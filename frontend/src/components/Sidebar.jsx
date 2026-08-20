@@ -49,10 +49,16 @@ export default function Sidebar({ currentPage, setCurrentPage }) {
               {section.items.map((item) => (
                 <li key={item.id}>
                   <button
-                    className={`flex items-center gap-3 md:gap-3 sm:gap-2 p-2.5 md:px-3 md:py-2.5 sm:p-2.5 bg-transparent border-none rounded-md cursor-pointer text-sm transition-all duration-200 w-full font-[inherit] ${
+                    // No bg-* in the base classes: `bg-transparent` and
+                    // `bg-blue-600` have equal specificity, so the winner is
+                    // decided by Tailwind's emission order, not by the order
+                    // written here — transparent won and the active state
+                    // never painted. White (not black) on blue-600 is 5.2:1;
+                    // black would be 4.1:1 and fail AA.
+                    className={`flex items-center gap-3 md:gap-3 sm:gap-2 p-2.5 md:px-3 md:py-2.5 sm:p-2.5 border-none rounded-md cursor-pointer text-sm transition-all duration-200 w-full font-[inherit] ${
                       currentPage === item.id
-                        ? "bg-blue-600 text-black font-semibold"
-                        : "text-gray-600 hover:bg-blue-50 hover:text-gray-800"
+                        ? "bg-blue-600 text-white font-semibold"
+                        : "bg-transparent text-gray-600 hover:bg-blue-50 hover:text-gray-800"
                     }`}
                     onClick={() => setCurrentPage(item.id)}
                   >

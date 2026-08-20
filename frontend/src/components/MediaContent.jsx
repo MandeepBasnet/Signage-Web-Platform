@@ -15,12 +15,13 @@ import {
 import SearchBar from "./SearchBar.jsx";
 import MediaPreviewModal from "./MediaPreviewModal";
 import MediaThumbnail from "./MediaThumbnail.jsx";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, FolderOpen, SearchX } from "lucide-react";
 import UploadMediaModal from "./UploadMediaModal.jsx";
 import { useFolders } from "../hooks/queries/useFolders.js";
 import { useMedia, ITEMS_PER_PAGE } from "../hooks/queries/useMedia.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
+import EmptyState from "./ui/EmptyState.jsx";
 
 const EMPTY_ARRAY = [];
 
@@ -298,18 +299,21 @@ export default function MediaContent() {
         </div>
 
         {media.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              {debouncedSearch
-                ? "No media matches your search"
-                : "No media files found"}
-            </p>
-            <p className="text-gray-400 text-sm mt-2">
-              {debouncedSearch
-                ? "Try a different name or clear the search."
-                : "Your media files will appear here once they are uploaded."}
-            </p>
-          </div>
+          debouncedSearch ? (
+            <EmptyState
+              icon={SearchX}
+              title={`No media matches “${debouncedSearch}”`}
+              body="Try a different name, or clear the search to see everything in this folder."
+              action={{ label: "Clear search", onClick: () => setSearch("") }}
+            />
+          ) : (
+            <EmptyState
+              icon={FolderOpen}
+              title="Nothing in this folder yet"
+              body="Upload images and video here, then add them to a playlist or drop them straight onto a layout."
+              action={{ label: "Add media", onClick: openUploadModal }}
+            />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">

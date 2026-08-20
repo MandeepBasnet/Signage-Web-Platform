@@ -2,13 +2,14 @@
 
 import { Fragment, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, X, FileText } from "lucide-react";
+import { Check, X, FileText, MonitorPlay } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
 import { useLayoutThumbnails } from "../hooks/useLayoutThumbnails.js";
 import { useDisplays } from "../hooks/queries/useDisplays.js";
 import { useToast } from "../hooks/useToast.js";
+import EmptyState from "./ui/EmptyState.jsx";
 
 export default function DisplayContent() {
   const navigate = useNavigate();
@@ -277,8 +278,13 @@ export default function DisplayContent() {
       </div>
 
       {displays.length === 0 ? (
-        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <p className="text-gray-500 text-lg">No displays found</p>
+        <div className="bg-white rounded-lg border border-gray-200">
+          <EmptyState
+            icon={MonitorPlay}
+            title="No screens connected yet"
+            body="Install the Xibo player on your screen and sign it in with your CMS code. It will appear here once it checks in — usually within a minute."
+            action={{ label: "Check again", onClick: fetchDisplays }}
+          />
         </div>
       ) : (
         <div className="overflow-x-auto scrollbar-hide rounded-lg border border-gray-200 bg-white">

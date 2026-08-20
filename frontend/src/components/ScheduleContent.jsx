@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { X, CalendarDays } from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 import DatePicker from "./DatePicker.jsx";
 
@@ -11,6 +11,7 @@ import { useSchedule } from "../hooks/queries/useSchedule.js";
 import { useScheduleOptions } from "../hooks/queries/useScheduleOptions.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
+import EmptyState from "./ui/EmptyState.jsx";
 
 // datetime-local gives "YYYY-MM-DDTHH:mm"; Xibo wants "YYYY-MM-DD HH:mm:ss".
 const toXiboDate = (local) => (local ? `${local.replace("T", " ")}:00` : "");
@@ -316,12 +317,12 @@ export default function ScheduleContent() {
             <p>{error?.message || "Failed to load schedule"}</p>
           </div>
         ) : events.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">No scheduled events found</p>
-            <p className="text-gray-400 text-sm mt-2">
-              Use “Add Event” to schedule a playlist or layout onto a display.
-            </p>
-          </div>
+          <EmptyState
+            icon={CalendarDays}
+            title="Nothing scheduled"
+            body="Your screens have nothing to play. Schedule a layout or playlist to decide what shows and when."
+            action={{ label: "Add event", onClick: () => openAddModal() }}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">

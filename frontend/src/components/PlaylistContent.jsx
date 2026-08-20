@@ -6,7 +6,7 @@ import { getAuthHeaders } from "../utils/auth.js";
 import AddMediaPlaylistButton from "./AddMediaPlaylistButton";
 import MediaPreviewModal from "./MediaPreviewModal";
 import MediaThumbnail from "./MediaThumbnail.jsx";
-import { AlertTriangle, ArrowLeft, ListVideo } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ListVideo, SearchX } from "lucide-react";
 
 import { API_BASE_URL } from "../config/api.js";
 import { isImage, isVideo, formatFileSize } from "../utils/mediaTypes.js";
@@ -20,6 +20,7 @@ import { usePlaylists, PAGE_SIZE } from "../hooks/queries/usePlaylists.js";
 import { usePlaylistDetails } from "../hooks/queries/usePlaylistDetails.js";
 import { useToast } from "../hooks/useToast.js";
 import { useConfirm } from "../hooks/useConfirm.js";
+import EmptyState from "./ui/EmptyState.jsx";
 
 const EMPTY_ARRAY = [];
 const MEDIA_PAGE_SIZE = 10;
@@ -866,16 +867,24 @@ export default function PlaylistContent() {
         </div>
 
         {playlists.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 text-lg">
-              {q ? "No playlists match your search" : "No playlists found"}
-            </p>
-            <p className="text-gray-400 text-sm mt-2">
-              {q
-                ? "Try a different name or clear the search."
-                : "Your playlists will appear here once they are created."}
-            </p>
-          </div>
+          q ? (
+            <EmptyState
+              icon={SearchX}
+              title={`No playlists match “${q}”`}
+              body="Try a different name, or clear the search to see them all."
+              action={{ label: "Clear search", onClick: () => setSearch("") }}
+            />
+          ) : (
+            <EmptyState
+              icon={ListVideo}
+              title="No playlists yet"
+              body="A playlist is a set of media that plays in order. Build one here, then schedule it onto a screen."
+              action={{
+                label: "Add playlist",
+                onClick: () => setShowCreateModal(true),
+              }}
+            />
+          )
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {playlists.map((playlist) => {
