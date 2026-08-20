@@ -1,8 +1,15 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, X, FileText, MonitorPlay } from "lucide-react";
+import {
+  Check,
+  X,
+  FileText,
+  MonitorPlay,
+  LayoutGrid,
+  Rows3,
+} from "lucide-react";
 import { getAuthHeaders } from "../utils/auth.js";
 
 import { API_BASE_URL } from "../config/api.js";
@@ -11,6 +18,16 @@ import { useDisplays } from "../hooks/queries/useDisplays.js";
 import { useToast } from "../hooks/useToast.js";
 import EmptyState from "./ui/EmptyState.jsx";
 import InfoHint from "./ui/InfoHint.jsx";
+import DisplayCard from "./DisplayCard.jsx";
+
+// Someone running 200 screens wants the dense table; someone running six
+// wants to see what is on them. Remember whichever they picked.
+const VIEW_KEY = "modus.displays.view";
+
+const VIEWS = [
+  { id: "grid", label: "Grid", icon: LayoutGrid },
+  { id: "table", label: "Table", icon: Rows3 },
+];
 
 // Column labels for the displays table. Two carry a hint: both describe a
 // state the customer can see but not act on, where guessing wrong is costly.
@@ -48,6 +65,41 @@ export default function DisplayContent() {
   } = useDisplays();
   const { thumbs: layoutThumbs, loadThumbnails } = useLayoutThumbnails();
   const [expandedId, setExpandedId] = useState(null);
+  const [view, setView] = useState(() => {
+    try {
+      return localStorage.getItem(VIEW_KEY) === "table" ? "table" : "grid";
+    } catch {
+      return "grid";
+    }
+  });
+
+  const chooseView = (next) => {
+    setView(next);
+    try {
+      localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* private mode — the choice just won't persist */
+    }
+  };
+
+  // The card grid leads with a preview of what each screen is playing, so
+  // those thumbnails are needed up front rather than on expand. Only
+  // scheduled displays reach this view, so the set is small.
+  useEffect(() => {
+    if (view !== "grid") return;
+    loadThumbnails(displays.map((d) => d.layoutId).filter(Boolean));
+  }, [view, displays, loadThumbnails]);
+
+  const health = useMemo(() => {
+    const online = displays.filter((d) => d.loggedIn).length;
+    return {
+      total: displays.length,
+      online,
+      offline: displays.length - online,
+      outOfDate: displays.filter((d) => Number(d.mediaInventoryStatus) === 3)
+        .length,
+    };
+  }, [displays]);
 
   // Checkout Layout State
   const [checkingOut, setCheckingOut] = useState(false);
@@ -284,20 +336,67 @@ export default function DisplayContent() {
           </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Displays</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            {displays.length} {displays.length === 1 ? "display" : "displays"} found
+          <h2 className="text-2xl font-semibold text-gray-900">Screens</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            What each screen is showing right now
           </p>
         </div>
-        <button
-          onClick={fetchDisplays}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
-        >
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-md border border-gray-300 bg-white p-0.5">
+            {VIEWS.map((v) => (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => chooseView(v.id)}
+                aria-pressed={view === v.id}
+                className={`flex items-center gap-1.5 rounded border-0 px-2.5 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                  view === v.id
+                    ? "bg-blue-600 text-white"
+                    : "bg-transparent text-gray-600 hover:bg-gray-100"
+                }`}
+              >
+                <v.icon className="h-4 w-4" aria-hidden="true" />
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={fetchDisplays}
+            className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-200"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
+
+      {/* Health first: the two facts someone opens this page to check. */}
+      {health.total > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="rounded-full bg-gray-100 px-3 py-1 font-medium text-gray-700">
+            {health.total} {health.total === 1 ? "screen" : "screens"}
+          </span>
+          <span className="rounded-full bg-green-100 px-3 py-1 font-medium text-green-800">
+            {health.online} online
+          </span>
+          {health.offline > 0 && (
+            <span className="rounded-full bg-red-100 px-3 py-1 font-medium text-red-800">
+              {health.offline} offline
+            </span>
+          )}
+          {health.outOfDate > 0 && (
+            <span className="flex items-center rounded-full bg-yellow-100 px-3 py-1 font-medium text-yellow-800">
+              {health.outOfDate} out of date
+              <InfoHint label="About out of date screens">
+                These screens have not finished downloading the content they are
+                scheduled to play. It normally clears itself at the next
+                check-in.
+              </InfoHint>
+            </span>
+          )}
+        </div>
+      )}
 
       {displays.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200">
@@ -307,6 +406,21 @@ export default function DisplayContent() {
             body="Install the Xibo player on your screen and sign it in with your CMS code. It will appear here once it checks in — usually within a minute."
             action={{ label: "Check again", onClick: fetchDisplays }}
           />
+        </div>
+      ) : view === "grid" ? (
+        <div className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {displays.map((display) => (
+            <DisplayCard
+              key={display.id}
+              display={display}
+              expanded={expandedId === display.id}
+              onToggle={() => toggleExpand(display)}
+              thumbUrl={getThumbnailUrl(display.layoutId)}
+              statusStyle={getStatusStyle(display)}
+              formatDate={formatDate}
+              onLayoutClick={handleLayoutClick}
+            />
+          ))}
         </div>
       ) : (
         <div className="overflow-x-auto scrollbar-hide rounded-lg border border-gray-200 bg-white">

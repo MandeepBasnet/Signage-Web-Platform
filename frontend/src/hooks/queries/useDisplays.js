@@ -9,5 +9,9 @@ export function useDisplays() {
   return useQuery({
     queryKey: ["displays"],
     queryFn: () => apiGet("/displays").then((d) => d?.data ?? []),
+    // Overrides the global default. This view exists to answer "is my screen
+    // alive", and a stale answer is worse than none; staleTime (60s) still
+    // bounds it to at most one refetch per minute of active use.
+    refetchOnWindowFocus: true,
   });
 }

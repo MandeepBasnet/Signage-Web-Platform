@@ -7,21 +7,22 @@ import {
   FolderOpen,
   ListVideo,
 } from "lucide-react";
+import { PAGE_LABELS } from "../config/nav.js";
 
 const menuItems = [
   {
     section: "DESIGN",
     items: [
-      { id: "display", label: "Display", icon: MonitorPlay },
-      { id: "layout", label: "Layouts", icon: Palette },
-      { id: "schedule", label: "Schedule", icon: CalendarDays },
+      { id: "display", label: PAGE_LABELS.display, icon: MonitorPlay },
+      { id: "layout", label: PAGE_LABELS.layout, icon: Palette },
+      { id: "schedule", label: PAGE_LABELS.schedule, icon: CalendarDays },
     ],
   },
   {
     section: "LIBRARY",
     items: [
-      { id: "library", label: "Library", icon: FolderOpen },
-      { id: "playlist", label: "Playlists", icon: ListVideo },
+      { id: "library", label: PAGE_LABELS.library, icon: FolderOpen },
+      { id: "playlist", label: PAGE_LABELS.playlist, icon: ListVideo },
     ],
   },
 ];

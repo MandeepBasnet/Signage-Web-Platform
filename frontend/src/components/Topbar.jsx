@@ -1,8 +1,10 @@
 import { getStoredUser } from "../utils/auth.js";
+import { PAGE_LABELS } from "../config/nav.js";
 
 export default function Topbar({ currentPage, onLogout }) {
   const user = getStoredUser();
-  const title = (currentPage || "dashboard").replace("-", " ");
+  const title =
+    PAGE_LABELS[currentPage] || (currentPage || "dashboard").replace("-", " ");
 
   return (
     <header className="w-full border-b border-gray-200 bg-white">
