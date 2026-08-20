@@ -90,7 +90,7 @@ function Toast({ toast, onDismiss }) {
           type="button"
           onClick={() => onDismiss(id)}
           aria-label="Dismiss notification"
-          className="-m-1 shrink-0 rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          className="-m-1 shrink-0 rounded border-0 bg-transparent p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>

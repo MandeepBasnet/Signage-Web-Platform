@@ -115,7 +115,7 @@ export default function ConfirmProvider({ children }) {
                   type="button"
                   ref={destructive ? null : initialFocusRef}
                   onClick={() => settle(true)}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
+                  className={`rounded-lg border-0 px-4 py-2 text-sm font-medium text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 ${
                     destructive
                       ? "bg-red-600 hover:bg-red-700 focus-visible:ring-red-500"
                       : "bg-blue-600 hover:bg-blue-700 focus-visible:ring-blue-500"

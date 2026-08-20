@@ -116,7 +116,7 @@ export default function InfoHint({ label, children }) {
         onMouseLeave={() => !pinned && setOpen(false)}
         onFocus={() => setOpen(true)}
         onBlur={() => !pinned && setOpen(false)}
-        className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full p-0.5 align-middle text-gray-400 transition-colors hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        className="ml-1 inline-flex shrink-0 items-center justify-center rounded-full border-0 bg-transparent p-0.5 align-middle text-gray-400 transition-colors hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
       >
         <Info className="h-3.5 w-3.5" aria-hidden="true" />
       </button>
